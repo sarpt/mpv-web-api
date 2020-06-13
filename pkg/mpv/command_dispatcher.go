@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"net"
+	"time"
 )
 
 const (
 	socketType = "unix"
-	readBuffer = 512
+	bufSize    = 512
 )
 
 // Command represents command payload sent to the mpv
@@ -31,11 +32,18 @@ type CommandDispatcher struct {
 }
 
 // NewCommandDispatcher returns dispatcher connected to the socket
-// Error returned when connection to the socket is not possible
+// Error is returned when connection to the socket failed
 func NewCommandDispatcher(socketPath string) (*CommandDispatcher, error) {
-	conn, err := net.Dial(socketType, socketPath)
-	if err != nil {
-		return nil, err
+	var conn net.Conn
+	var err error
+
+	for {
+		conn, err = net.Dial(socketType, socketPath)
+		if err == nil {
+			break
+		}
+
+		time.Sleep(1 * time.Second) // mpv takes a longer moment to start listening on the socket, repeat until connection succesful; TODO: add timeout
 	}
 
 	return &CommandDispatcher{
@@ -47,20 +55,13 @@ func NewCommandDispatcher(socketPath string) (*CommandDispatcher, error) {
 // Returns result sent back by mpv
 // TODO: implement async commands handlling
 // TODO: implement requestId check
-func (cd *CommandDispatcher) Dispatch(command []string) (Result, error) {
+func (cd *CommandDispatcher) Dispatch(commands []string) (Result, error) {
 	var result Result
 
-	cmd := Command{
-		Command:   command,
-		RequestID: cd.requestID,
-	}
-
-	payload, err := json.Marshal(cmd)
+	payload, err := prepareCommandPayload(commands, cd.requestID)
 	if err != nil {
 		return result, err
 	}
-
-	payload = append(payload, []byte("\n")...)
 
 	written, err := cd.conn.Write(payload)
 	if err != nil || len(payload) != written {
@@ -84,8 +85,25 @@ func (cd CommandDispatcher) Close() {
 	cd.conn.Close()
 }
 
+func prepareCommandPayload(commands []string, requestID int) ([]byte, error) {
+	var payload []byte
+	cmd := Command{
+		Command:   commands,
+		RequestID: requestID,
+	}
+
+	payload, err := json.Marshal(cmd)
+	if err != nil {
+		return payload, err
+	}
+
+	payload = append(payload, []byte("\n")...)
+
+	return payload, nil
+}
+
 func readUntilNewline(conn net.Conn) ([]byte, error) {
-	buf := make([]byte, readBuffer)
+	buf := make([]byte, bufSize)
 	var result []byte
 
 	for {

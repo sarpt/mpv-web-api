@@ -4,35 +4,63 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"os/exec"
+
+	"github.com/sarpt/mpv-web-api/pkg/mpv"
 )
 
-var handlers = map[string]http.HandlerFunc{
-	"/playback": playbackHandler,
+const (
+	address = "localhost:3001"
+)
+
+// Server is used to serve API and hold state accessible to the API
+type Server struct {
+	mpvSocketPath string
+	videosPaths   []string
+	cd            *mpv.CommandDispatcher
 }
 
-// Serve starts handling requests to the API endpoints
-// TODO: move starting of the command outside of the serve
-func Serve() error {
-	cmd := exec.Command("mpv", "--idle", "--input-ipc-server=/tmp/mpvsocket")
-	err := cmd.Start()
+// NewServer prepares and returns a server that can be used to handle API
+func NewServer(videosPaths []string, mpvSocketPath string) (Server, error) {
+	cd, err := mpv.NewCommandDispatcher(mpvSocketPath)
 	if err != nil {
-		return err
+		return Server{}, err
 	}
 
-	fmt.Fprintf(os.Stdout, "running server at localhost:3001\n")
-	s := http.Server{
-		Addr:    "localhost:3001",
-		Handler: mainHandler(),
-	}
-
-	return s.ListenAndServe()
+	return Server{
+		mpvSocketPath,
+		videosPaths,
+		cd,
+	}, nil
 }
 
-func mainHandler() *http.ServeMux {
+// Serve starts handling requests to the API endpoints. Blocks until canceled
+func (s Server) Serve() error {
+	fmt.Fprintf(os.Stdout, "running server at %s\n", address)
+	serv := http.Server{
+		Addr:    address,
+		Handler: s.mainHandler(),
+	}
+
+	return serv.ListenAndServe()
+}
+
+// Close closes underlying command dispatcher
+func (s Server) Close() {
+	s.cd.Close()
+}
+
+func (s Server) mainHandler() *http.ServeMux {
+	playbackHandlers := map[string]http.HandlerFunc{
+		postMethod: s.playbackHandler,
+	}
+
+	allHandlers := map[string]pathHandlers{
+		playbackPath: playbackHandlers,
+	}
+
 	mux := http.NewServeMux()
-	for path, handler := range handlers {
-		mux.HandleFunc(path, handler)
+	for path, pathHandlers := range allHandlers {
+		mux.HandleFunc(path, pathHandler(pathHandlers))
 	}
 
 	return mux
