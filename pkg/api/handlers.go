@@ -1,9 +1,11 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -21,6 +23,10 @@ const (
 )
 
 type pathHandlers map[string]http.HandlerFunc
+
+type videosResponse struct {
+	Videos []string `json:"videos"`
+}
 
 // TODO: Handlers should dispatch commands in form of already wrapped and typed commands, instead of raw commands with string arrays
 func (s Server) playbackHandler(res http.ResponseWriter, req *http.Request) {
@@ -44,6 +50,37 @@ func (s Server) playbackHandler(res http.ResponseWriter, req *http.Request) {
 	out := fmt.Sprintf("Playing of file %s ended with status %s\n", filePath, result.Err)
 	res.WriteHeader(200)
 	res.Write([]byte(out))
+}
+
+func (s Server) videosHandler(res http.ResponseWriter, req *http.Request) {
+	videosResponse := videosResponse{
+		Videos: []string{},
+	}
+
+	for _, videosPath := range s.videosPaths {
+		filepath.Walk(videosPath, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+
+			if !info.IsDir() {
+				videosResponse.Videos = append(videosResponse.Videos, path)
+			}
+
+			return nil
+		})
+	}
+
+	out, err := json.Marshal(&videosResponse)
+	if err != nil {
+		res.WriteHeader(400)
+		res.Write([]byte(fmt.Sprintf("could not prepare output: %s\n", err))) // good enough for poc
+
+		return
+	}
+
+	res.WriteHeader(200)
+	res.Write(out)
 }
 
 func optionsHandler(allowedMethods []string, res http.ResponseWriter, req *http.Request) {

@@ -22,7 +22,13 @@ func main() {
 		return
 	}
 
-	server, err := api.NewServer([]string{}, mpvSocketPath)
+	var videosPaths []string
+	wd, err := os.Getwd()
+	if err == nil {
+		videosPaths = append(videosPaths, fmt.Sprintf("%s/", wd))
+	}
+
+	server, err := api.NewServer(videosPaths, mpvSocketPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s\n", err)
 
