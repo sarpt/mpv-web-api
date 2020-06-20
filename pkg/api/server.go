@@ -6,29 +6,40 @@ import (
 	"os"
 
 	"github.com/sarpt/mpv-web-api/pkg/mpv"
+	"github.com/sarpt/mpv-web-api/pkg/probe"
 )
 
 const (
 	address = "localhost:3001"
 )
 
+// Movie specifies information about a movie file that can be played
+type Movie struct {
+	Path            string
+	VideoStreams    []probe.VideoStream
+	AudioStreams    []probe.AudioStream
+	SubtitleStreams []probe.SubtitleStream
+}
+
 // Server is used to serve API and hold state accessible to the API
 type Server struct {
 	mpvSocketPath string
-	videosPaths   []string
+	movies        []Movie
 	cd            *mpv.CommandDispatcher
 }
 
 // NewServer prepares and returns a server that can be used to handle API
-func NewServer(videosPaths []string, mpvSocketPath string) (Server, error) {
+func NewServer(moviesDirectories []string, mpvSocketPath string) (Server, error) {
 	cd, err := mpv.NewCommandDispatcher(mpvSocketPath)
 	if err != nil {
 		return Server{}, err
 	}
 
+	movies := moviesInDirectories(moviesDirectories)
+
 	return Server{
 		mpvSocketPath,
-		videosPaths,
+		movies,
 		cd,
 	}, nil
 }
@@ -60,7 +71,7 @@ func (s Server) mainHandler() *http.ServeMux {
 
 	allHandlers := map[string]pathHandlers{
 		playbackPath: playbackHandlers,
-		videosPath:   videosHandlers,
+		moviesPath:   videosHandlers,
 	}
 
 	mux := http.NewServeMux()
