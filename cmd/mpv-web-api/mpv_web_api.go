@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/sarpt/goutils/pkg/listflag"
+
 	"github.com/sarpt/mpv-web-api/pkg/api"
 )
 
@@ -20,11 +22,11 @@ const (
 )
 
 var (
-	dirFlag *string
+	dirFlag *listflag.StringList = &listflag.StringList{}
 )
 
 func init() {
-	dirFlag = flag.String("dir", "", "directory containing movies. when left empty, current working directory will be used")
+	flag.Var(dirFlag, "dir", "directory containing movies. when left empty, current working directory will be used")
 	flag.Parse()
 }
 
@@ -39,13 +41,15 @@ func main() {
 
 	var moviesDirectories []string
 
-	if *dirFlag == "" {
+	if len(dirFlag.Values()) == 0 {
 		wd, err := os.Getwd()
 		if err == nil {
 			moviesDirectories = append(moviesDirectories, fmt.Sprintf("%s/", wd))
 		}
 	} else {
-		moviesDirectories = append(moviesDirectories, fmt.Sprintf("%s/", *dirFlag)) // TODO: multiple dir arguments handling for multiple directories
+		for _, dir := range dirFlag.Values() {
+			moviesDirectories = append(moviesDirectories, fmt.Sprintf("%s/", dir))
+		}
 	}
 
 	fmt.Fprintf(os.Stdout, "Directories being watched for movie files:\n%s\n", strings.Join(moviesDirectories, "\n"))
