@@ -3,7 +3,10 @@ package mpv
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net"
+	"os"
 	"time"
 )
 
@@ -29,6 +32,7 @@ type Result struct {
 type CommandDispatcher struct {
 	conn      net.Conn
 	requestID int
+	requests  map[int]chan Result
 }
 
 // NewCommandDispatcher returns dispatcher connected to the socket
@@ -46,15 +50,18 @@ func NewCommandDispatcher(socketPath string) (*CommandDispatcher, error) {
 		time.Sleep(1 * time.Second) // mpv takes a longer moment to start listening on the socket, repeat until connection succesful; TODO: add timeout
 	}
 
-	return &CommandDispatcher{
-		conn: conn,
-	}, nil
+	cd := &CommandDispatcher{
+		conn:      conn,
+		requests:  make(map[int]chan Result),
+		requestID: 1,
+	}
+
+	cd.listenUnixSocket()
+	return cd, nil
 }
 
 // Dispatch sends a commmand to the mpv using socket in path provided during construction
 // Returns result sent back by mpv
-// TODO: implement async commands handlling
-// TODO: implement requestId check
 func (cd *CommandDispatcher) Dispatch(commands []string) (Result, error) {
 	var result Result
 
@@ -63,6 +70,9 @@ func (cd *CommandDispatcher) Dispatch(commands []string) (Result, error) {
 		return result, err
 	}
 
+	requestResult := make(chan Result)
+	cd.requests[cd.requestID] = requestResult
+
 	written, err := cd.conn.Write(payload)
 	if err != nil || len(payload) != written {
 		return result, err
@@ -70,19 +80,47 @@ func (cd *CommandDispatcher) Dispatch(commands []string) (Result, error) {
 
 	cd.requestID++
 
-	response, err := readUntilNewline(cd.conn)
-	if err != nil {
-		return result, err
-	}
-
-	err = json.Unmarshal(response, &result)
-
+	result = <-requestResult
 	return result, err
 }
 
 // Close makes connection by ipc to the mpv closed
 func (cd CommandDispatcher) Close() {
 	cd.conn.Close()
+}
+
+func (cd CommandDispatcher) listenUnixSocket() {
+	go func() {
+		for {
+			var result Result
+
+			payload, err := readUntilNewline(cd.conn)
+			if err != nil {
+				if err == io.EOF {
+					fmt.Fprintf(os.Stderr, "connection closed\n")
+				} else {
+					fmt.Fprintf(os.Stderr, "could not read the payload from the connection\n")
+				}
+
+				return
+			}
+
+			err = json.Unmarshal(payload, &result)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "could not parse the response\n")
+				continue
+			}
+
+			request, ok := cd.requests[result.RequestID]
+			if !ok {
+				fmt.Fprintf(os.Stderr, "result %d provided to not dispatched request\n", result.RequestID)
+				continue
+			}
+
+			request <- result
+			close(request)
+		}
+	}()
 }
 
 func prepareCommandPayload(commands []string, requestID int) ([]byte, error) {

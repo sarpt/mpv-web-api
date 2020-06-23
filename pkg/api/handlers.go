@@ -51,7 +51,7 @@ func (s Server) playbackHandler(res http.ResponseWriter, req *http.Request) {
 	res.Write([]byte(out))
 }
 
-func (s Server) videosHandler(res http.ResponseWriter, req *http.Request) {
+func (s Server) moviesHandler(res http.ResponseWriter, req *http.Request) {
 	moviesResponse := moviesRespone{
 		Movies: s.movies,
 	}

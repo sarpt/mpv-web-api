@@ -65,13 +65,13 @@ func (s Server) mainHandler() *http.ServeMux {
 		postMethod: s.playbackHandler,
 	}
 
-	videosHandlers := map[string]http.HandlerFunc{
-		getMethod: s.videosHandler,
+	moviesHandlers := map[string]http.HandlerFunc{
+		getMethod: s.moviesHandler,
 	}
 
 	allHandlers := map[string]pathHandlers{
 		playbackPath: playbackHandlers,
-		moviesPath:   videosHandlers,
+		moviesPath:   moviesHandlers,
 	}
 
 	mux := http.NewServeMux()
