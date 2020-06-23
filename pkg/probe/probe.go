@@ -5,6 +5,21 @@ import (
 	"os/exec"
 )
 
+const (
+	videoCodecType    = "video"
+	audioCodecType    = "audio"
+	subtitleCodecType = "subtitle"
+
+	ffprobeName    = "ffprobe"
+	hideBannerArg  = "-hide_banner"
+	logLevelArg    = "-loglevel"
+	quietLogLevel  = "quiet"
+	showErrorArg   = "-show_error"
+	showStreamsArg = "-show_streams"
+	outputArg      = "-of"
+	jsonOutput     = "json"
+)
+
 // SubtitleStream specifies information about subtitles inluded in the movie
 type SubtitleStream struct {
 	Language string

@@ -22,10 +22,11 @@ const (
 )
 
 var (
-	dirFlag *listflag.StringList = &listflag.StringList{}
+	dirFlag *listflag.StringList
 )
 
 func init() {
+	dirFlag = listflag.NewStringList([]string{})
 	flag.Var(dirFlag, "dir", "directory containing movies. when left empty, current working directory will be used")
 	flag.Parse()
 }

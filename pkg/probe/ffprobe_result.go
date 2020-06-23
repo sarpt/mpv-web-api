@@ -1,20 +1,5 @@
 package probe
 
-const (
-	videoCodecType    = "video"
-	audioCodecType    = "audio"
-	subtitleCodecType = "subtitle"
-
-	ffprobeName    = "ffprobe"
-	hideBannerArg  = "-hide_banner"
-	logLevelArg    = "-loglevel"
-	quietLogLevel  = "quiet"
-	showErrorArg   = "-show_error"
-	showStreamsArg = "-show_streams"
-	outputArg      = "-of"
-	jsonOutput     = "json"
-)
-
 type tags struct {
 	Language string `json:"language"`
 }
