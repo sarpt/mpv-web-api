@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
+
+	"github.com/sarpt/mpv-web-api/pkg/mpv"
 )
 
 const (
@@ -16,7 +19,8 @@ const (
 	moviesPath   = "/movies"
 	playbackPath = "/playback"
 
-	pathArg = "path"
+	pathArg       = "path"
+	fullscreenArg = "fullscreen"
 
 	methodsSeparator = ", "
 )
@@ -27,26 +31,44 @@ type moviesRespone struct {
 	Movies []Movie `json:"movies"`
 }
 
-// TODO: Handlers should dispatch commands in form of already wrapped and typed commands, instead of raw commands with string arrays
 func (s Server) playbackHandler(res http.ResponseWriter, req *http.Request) {
-	filePath := req.PostFormValue(pathArg)
-	if filePath == "" {
-		res.WriteHeader(400)
-		res.Write([]byte(fmt.Sprintf("empty path in form\n"))) // good enough for poc
+	var out string
 
-		return
-	}
-
-	fmt.Fprintf(os.Stdout, "playing the file '%s' on request from %s\n", filePath, req.RemoteAddr)
-	result, err := s.cd.Dispatch([]string{"loadfile", filePath})
+	fullscreen, err := strconv.ParseBool(req.PostFormValue(fullscreenArg))
 	if err != nil {
 		res.WriteHeader(400)
-		res.Write([]byte(fmt.Sprintf("could not successfully load the file: %s\n", err))) // good enough for poc
+		res.Write([]byte(fmt.Sprintf("invalid fullscreen argument: %s\n", err))) // good enough for poc
 
 		return
 	}
 
-	out := fmt.Sprintf("Playing of file %s ended with status %s\n", filePath, result.Err)
+	if fullscreen {
+		fmt.Fprintf(os.Stdout, "changing fullscreen to %t due to request from %s\n", fullscreen, req.RemoteAddr)
+		result, err := s.cd.Dispatch(mpv.NewFullscreen(fullscreen))
+		if err != nil || result.Err != "success" {
+			res.WriteHeader(400)
+			res.Write([]byte(fmt.Sprintf("could not successfully change fullscreen: %s\n", err))) // good enough for poc
+
+			return
+		}
+
+		out = fmt.Sprintf("%s\nchanged fullscreen to %t\n", out, fullscreen)
+	}
+
+	filePath := req.PostFormValue(pathArg)
+	if filePath != "" {
+		fmt.Fprintf(os.Stdout, "playing file '%s' due to request from %s\n", filePath, req.RemoteAddr)
+		result, err := s.cd.Dispatch(mpv.NewLoadFile(filePath))
+		if err != nil || result.Err != "success" {
+			res.WriteHeader(400)
+			res.Write([]byte(fmt.Sprintf("could not successfully load the file: %s\n", err))) // good enough for poc
+
+			return
+		}
+
+		out = fmt.Sprintf("%s\nplayback of file %s started\n", out, filePath)
+	}
+
 	res.WriteHeader(200)
 	res.Write([]byte(out))
 }

@@ -53,7 +53,7 @@ func main() {
 		}
 	}
 
-	fmt.Fprintf(os.Stdout, "Directories being watched for movie files:\n%s\n", strings.Join(moviesDirectories, "\n"))
+	fmt.Fprintf(os.Stdout, "directories being watched for movie files:\n%s\n", strings.Join(moviesDirectories, "\n"))
 
 	server, err := api.NewServer(moviesDirectories, mpvSocketPath)
 	if err != nil {

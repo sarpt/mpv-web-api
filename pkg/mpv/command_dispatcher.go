@@ -15,14 +15,14 @@ const (
 	bufSize    = 512
 )
 
-// Command represents command payload sent to the mpv
-type Command struct {
+// CommandPayload represents command payload sent to the mpv
+type CommandPayload struct {
 	Command   []string `json:"command"`
 	RequestID int      `json:"request_id"`
 }
 
-// Result holds data returned after command executon
-type Result struct {
+// ResultPayload holds data returned after command executon
+type ResultPayload struct {
 	Err       string      `json:"error"`
 	RequestID int         `json:"request_id"`
 	Data      interface{} `json:"data"`
@@ -32,7 +32,7 @@ type Result struct {
 type CommandDispatcher struct {
 	conn      net.Conn
 	requestID int
-	requests  map[int]chan Result
+	requests  map[int]chan ResultPayload
 }
 
 // NewCommandDispatcher returns dispatcher connected to the socket
@@ -52,7 +52,7 @@ func NewCommandDispatcher(socketPath string) (*CommandDispatcher, error) {
 
 	cd := &CommandDispatcher{
 		conn:      conn,
-		requests:  make(map[int]chan Result),
+		requests:  make(map[int]chan ResultPayload),
 		requestID: 1,
 	}
 
@@ -62,15 +62,15 @@ func NewCommandDispatcher(socketPath string) (*CommandDispatcher, error) {
 
 // Dispatch sends a commmand to the mpv using socket in path provided during construction
 // Returns result sent back by mpv
-func (cd *CommandDispatcher) Dispatch(commands []string) (Result, error) {
-	var result Result
+func (cd *CommandDispatcher) Dispatch(command Command) (ResultPayload, error) {
+	var result ResultPayload
 
-	payload, err := prepareCommandPayload(commands, cd.requestID)
+	payload, err := prepareCommandPayload(command, cd.requestID)
 	if err != nil {
 		return result, err
 	}
 
-	requestResult := make(chan Result)
+	requestResult := make(chan ResultPayload)
 	cd.requests[cd.requestID] = requestResult
 
 	written, err := cd.conn.Write(payload)
@@ -92,7 +92,7 @@ func (cd CommandDispatcher) Close() {
 func (cd CommandDispatcher) listenUnixSocket() {
 	go func() {
 		for {
-			var result Result
+			var result ResultPayload
 
 			payload, err := readUntilNewline(cd.conn)
 			if err != nil {
@@ -112,7 +112,7 @@ func (cd CommandDispatcher) listenUnixSocket() {
 			}
 
 			request, ok := cd.requests[result.RequestID]
-			if !ok {
+			if !ok && result.RequestID != 0 {
 				fmt.Fprintf(os.Stderr, "result %d provided to not dispatched request\n", result.RequestID)
 				continue
 			}
@@ -123,10 +123,10 @@ func (cd CommandDispatcher) listenUnixSocket() {
 	}()
 }
 
-func prepareCommandPayload(commands []string, requestID int) ([]byte, error) {
+func prepareCommandPayload(command Command, requestID int) ([]byte, error) {
 	var payload []byte
-	cmd := Command{
-		Command:   commands,
+	cmd := CommandPayload{
+		Command:   command.Get(),
 		RequestID: requestID,
 	}
 
