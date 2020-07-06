@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"sync"
 
 	"github.com/sarpt/mpv-web-api/pkg/mpv"
 	"github.com/sarpt/mpv-web-api/pkg/probe"
@@ -21,31 +22,43 @@ type Movie struct {
 	SubtitleStreams []probe.SubtitleStream
 }
 
+// Playback contains information about currently played movie file
+type Playback struct {
+	movie      Movie
+	fullscreen bool
+}
+
 // Server is used to serve API and hold state accessible to the API
 type Server struct {
 	mpvSocketPath string
 	movies        []Movie
 	cd            *mpv.CommandDispatcher
+	playback      *Playback
+	playbackLock  *sync.RWMutex
 }
 
 // NewServer prepares and returns a server that can be used to handle API
-func NewServer(moviesDirectories []string, mpvSocketPath string) (Server, error) {
+func NewServer(moviesDirectories []string, mpvSocketPath string) (*Server, error) {
 	cd, err := mpv.NewCommandDispatcher(mpvSocketPath)
 	if err != nil {
-		return Server{}, err
+		return &Server{}, err
 	}
 
 	movies := moviesInDirectories(moviesDirectories)
+	playback := &Playback{}
+	playbackLock := &sync.RWMutex{}
 
-	return Server{
+	return &Server{
 		mpvSocketPath,
 		movies,
 		cd,
+		playback,
+		playbackLock,
 	}, nil
 }
 
 // Serve starts handling requests to the API endpoints. Blocks until canceled
-func (s Server) Serve() error {
+func (s *Server) Serve() error {
 	fmt.Fprintf(os.Stdout, "running server at %s\n", address)
 	serv := http.Server{
 		Addr:    address,
@@ -60,13 +73,13 @@ func (s Server) Close() {
 	s.cd.Close()
 }
 
-func (s Server) mainHandler() *http.ServeMux {
+func (s *Server) mainHandler() *http.ServeMux {
 	playbackHandlers := map[string]http.HandlerFunc{
-		postMethod: s.playbackHandler,
+		postMethod: s.postPlaybackHandler,
 	}
 
 	moviesHandlers := map[string]http.HandlerFunc{
-		getMethod: s.moviesHandler,
+		getMethod: s.getMoviesHandler,
 	}
 
 	allHandlers := map[string]pathHandlers{

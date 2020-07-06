@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -25,41 +26,48 @@ const (
 	methodsSeparator = ", "
 )
 
+var (
+	errNoMovieAvailable = errors.New("Movie with specified path does not exist")
+)
+
 type pathHandlers map[string]http.HandlerFunc
 
 type moviesRespone struct {
 	Movies []Movie `json:"movies"`
 }
 
-func (s Server) playbackHandler(res http.ResponseWriter, req *http.Request) {
+func (s *Server) postPlaybackHandler(res http.ResponseWriter, req *http.Request) {
 	var out string
 
-	fullscreen, err := strconv.ParseBool(req.PostFormValue(fullscreenArg))
-	if err != nil {
-		res.WriteHeader(400)
-		res.Write([]byte(fmt.Sprintf("invalid fullscreen argument: %s\n", err))) // good enough for poc
-
-		return
-	}
-
-	if fullscreen {
-		fmt.Fprintf(os.Stdout, "changing fullscreen to %t due to request from %s\n", fullscreen, req.RemoteAddr)
-		result, err := s.cd.Dispatch(mpv.NewFullscreen(fullscreen))
-		if err != nil || result.Err != "success" {
+	if req.PostFormValue(fullscreenArg) != "" {
+		fullscreen, err := strconv.ParseBool(req.PostFormValue(fullscreenArg))
+		if err != nil {
 			res.WriteHeader(400)
-			res.Write([]byte(fmt.Sprintf("could not successfully change fullscreen: %s\n", err))) // good enough for poc
+			res.Write([]byte(fmt.Sprintf("invalid fullscreen argument: %s\n", err))) // good enough for poc
 
 			return
 		}
 
-		out = fmt.Sprintf("%s\nchanged fullscreen to %t\n", out, fullscreen)
+		if fullscreen {
+			fmt.Fprintf(os.Stdout, "changing fullscreen to %t due to request from %s\n", fullscreen, req.RemoteAddr)
+
+			err := s.changeFullscreen(fullscreen)
+			if err != nil {
+				res.WriteHeader(400)
+				res.Write([]byte(fmt.Sprintf("could not successfully change fullscreen: %s\n", err))) // good enough for poc
+
+				return
+			}
+
+			out = fmt.Sprintf("%s\nchanged fullscreen to %t\n", out, fullscreen)
+		}
 	}
 
 	filePath := req.PostFormValue(pathArg)
 	if filePath != "" {
 		fmt.Fprintf(os.Stdout, "playing file '%s' due to request from %s\n", filePath, req.RemoteAddr)
-		result, err := s.cd.Dispatch(mpv.NewLoadFile(filePath))
-		if err != nil || result.Err != "success" {
+		err := s.loadFile(filePath)
+		if err != nil {
 			res.WriteHeader(400)
 			res.Write([]byte(fmt.Sprintf("could not successfully load the file: %s\n", err))) // good enough for poc
 
@@ -73,7 +81,7 @@ func (s Server) playbackHandler(res http.ResponseWriter, req *http.Request) {
 	res.Write([]byte(out))
 }
 
-func (s Server) moviesHandler(res http.ResponseWriter, req *http.Request) {
+func (s *Server) getMoviesHandler(res http.ResponseWriter, req *http.Request) {
 	moviesResponse := moviesRespone{
 		Movies: s.movies,
 	}
@@ -127,4 +135,45 @@ func allowedMethods(handlers pathHandlers) []string {
 	}
 
 	return allowedMethods
+}
+
+func (s *Server) changeFullscreen(enabled bool) error {
+	result, err := s.cd.Dispatch(mpv.NewFullscreen(enabled))
+	if err != nil || !mpv.IsResultSuccess(result) {
+		return err
+	}
+
+	s.playbackLock.Lock()
+	defer s.playbackLock.Unlock()
+	s.playback.fullscreen = enabled
+
+	return nil
+}
+
+func (s *Server) loadFile(filePath string) error {
+	movie, err := s.movieByPath(filePath)
+	if err != nil {
+		return fmt.Errorf("could not load %s due to error: %w", filePath, err)
+	}
+
+	result, err := s.cd.Dispatch(mpv.NewLoadFile(filePath))
+	if err != nil || !mpv.IsResultSuccess(result) {
+		return err
+	}
+
+	s.playbackLock.Lock()
+	defer s.playbackLock.Unlock()
+	s.playback.movie = movie
+
+	return nil
+}
+
+func (s Server) movieByPath(path string) (Movie, error) {
+	for _, movie := range s.movies {
+		if movie.Path == path {
+			return movie, nil
+		}
+	}
+
+	return Movie{}, errNoMovieAvailable
 }

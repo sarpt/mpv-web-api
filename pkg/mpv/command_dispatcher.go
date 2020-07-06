@@ -13,6 +13,8 @@ import (
 const (
 	socketType = "unix"
 	bufSize    = 512
+
+	resultSuccess = "success"
 )
 
 // CommandPayload represents command payload sent to the mpv
@@ -79,7 +81,6 @@ func (cd *CommandDispatcher) Dispatch(command Command) (ResultPayload, error) {
 	}
 
 	cd.requestID++
-
 	result = <-requestResult
 	return result, err
 }
@@ -87,6 +88,11 @@ func (cd *CommandDispatcher) Dispatch(command Command) (ResultPayload, error) {
 // Close makes connection by ipc to the mpv closed
 func (cd CommandDispatcher) Close() {
 	cd.conn.Close()
+}
+
+// IsResultSuccess return whether returned result specifies successful command execution
+func IsResultSuccess(result ResultPayload) bool {
+	return result.Err == resultSuccess
 }
 
 func (cd CommandDispatcher) listenUnixSocket() {
@@ -111,8 +117,12 @@ func (cd CommandDispatcher) listenUnixSocket() {
 				continue
 			}
 
+			if result.RequestID == 0 {
+				continue
+			}
+
 			request, ok := cd.requests[result.RequestID]
-			if !ok && result.RequestID != 0 {
+			if !ok {
 				fmt.Fprintf(os.Stderr, "result %d provided to not dispatched request\n", result.RequestID)
 				continue
 			}
