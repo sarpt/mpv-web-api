@@ -36,6 +36,10 @@ type moviesRespone struct {
 	Movies []Movie `json:"movies"`
 }
 
+type playbackResponse struct {
+	Playback Playback `json:"playback"`
+}
+
 func (s *Server) postPlaybackHandler(res http.ResponseWriter, req *http.Request) {
 	var out string
 
@@ -81,12 +85,28 @@ func (s *Server) postPlaybackHandler(res http.ResponseWriter, req *http.Request)
 	res.Write([]byte(out))
 }
 
+func (s *Server) getPlaybackHandler(res http.ResponseWriter, req *http.Request) {
+	playbackResponse := playbackResponse{
+		Playback: *s.playback,
+	}
+
+	response, err := json.Marshal(&playbackResponse)
+	if err != nil {
+		res.WriteHeader(400)
+		res.Write([]byte(fmt.Sprintf("could not prepare output: %s\n", err))) // good enough for poc
+
+		return
+	}
+	res.WriteHeader(200)
+	res.Write(response)
+}
+
 func (s *Server) getMoviesHandler(res http.ResponseWriter, req *http.Request) {
 	moviesResponse := moviesRespone{
 		Movies: s.movies,
 	}
 
-	respone, err := json.Marshal(&moviesResponse)
+	response, err := json.Marshal(&moviesResponse)
 	if err != nil {
 		res.WriteHeader(400)
 		res.Write([]byte(fmt.Sprintf("could not prepare output: %s\n", err))) // good enough for poc
@@ -95,7 +115,7 @@ func (s *Server) getMoviesHandler(res http.ResponseWriter, req *http.Request) {
 	}
 
 	res.WriteHeader(200)
-	res.Write(respone)
+	res.Write(response)
 }
 
 func optionsHandler(allowedMethods []string, res http.ResponseWriter, req *http.Request) {
@@ -138,34 +158,13 @@ func allowedMethods(handlers pathHandlers) []string {
 }
 
 func (s *Server) changeFullscreen(enabled bool) error {
-	result, err := s.cd.Dispatch(mpv.NewFullscreen(enabled))
-	if err != nil || !mpv.IsResultSuccess(result) {
-		return err
-	}
-
-	s.playbackLock.Lock()
-	defer s.playbackLock.Unlock()
-	s.playback.fullscreen = enabled
-
-	return nil
+	_, err := s.cd.Request(mpv.NewFullscreen(enabled))
+	return err
 }
 
 func (s *Server) loadFile(filePath string) error {
-	movie, err := s.movieByPath(filePath)
-	if err != nil {
-		return fmt.Errorf("could not load %s due to error: %w", filePath, err)
-	}
-
-	result, err := s.cd.Dispatch(mpv.NewLoadFile(filePath))
-	if err != nil || !mpv.IsResultSuccess(result) {
-		return err
-	}
-
-	s.playbackLock.Lock()
-	defer s.playbackLock.Unlock()
-	s.playback.movie = movie
-
-	return nil
+	_, err := s.cd.Request(mpv.NewLoadFile(filePath))
+	return err
 }
 
 func (s Server) movieByPath(path string) (Movie, error) {
