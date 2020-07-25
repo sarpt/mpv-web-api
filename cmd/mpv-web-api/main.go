@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 
 	"github.com/sarpt/goutils/pkg/listflag"
@@ -13,49 +12,53 @@ import (
 )
 
 const (
-	address       = "localhost:3001"
-	mpvSocketPath = "/tmp/mpvsocket"
+	defaultAddress = "localhost:3001"
+	mpvSocketPath  = "/tmp/mpvsocket"
 
-	mpvName           = "mpv"
-	idleArg           = "--idle"
-	inputIpcServerArg = "--input-ipc-server"
+	dirFlag       = "dir"
+	allowCorsFlag = "allow-cors"
+	addrFlag      = "addr"
 )
 
 var (
-	dirFlag *listflag.StringList
+	dir       *listflag.StringList
+	allowCors *bool
+	address   *string
 )
 
 func init() {
-	dirFlag = listflag.NewStringList([]string{})
-	flag.Var(dirFlag, "dir", "directory containing movies. when left empty, current working directory will be used")
+	dir = listflag.NewStringList([]string{})
+
+	flag.Var(dir, dirFlag, "directory containing movies. when left empty, current working directory will be used")
+	allowCors = flag.Bool(allowCorsFlag, false, "when not provided, Cross Origin Site Requests will be rejected")
+	address = flag.String(addrFlag, defaultAddress, "address on which server should listen on. default is localhost:3001")
+
 	flag.Parse()
 }
 
 func main() {
-	cmd := exec.Command(mpvName, idleArg, fmt.Sprintf("%s=%s", inputIpcServerArg, mpvSocketPath))
-	err := cmd.Start()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s\n", err)
-
-		return
-	}
-
 	var moviesDirectories []string
 
-	if len(dirFlag.Values()) == 0 {
+	if len(dir.Values()) == 0 {
 		wd, err := os.Getwd()
 		if err == nil {
 			moviesDirectories = append(moviesDirectories, fmt.Sprintf("%s/", wd))
 		}
 	} else {
-		for _, dir := range dirFlag.Values() {
+		for _, dir := range dir.Values() {
 			moviesDirectories = append(moviesDirectories, fmt.Sprintf("%s/", dir))
 		}
 	}
 
 	fmt.Fprintf(os.Stdout, "directories being watched for movie files:\n%s\n", strings.Join(moviesDirectories, "\n"))
 
-	server, err := api.NewServer(moviesDirectories, mpvSocketPath)
+	cfg := api.Config{
+		MpvSocketPath:     mpvSocketPath,
+		MoviesDirectories: moviesDirectories,
+		Address:           *address,
+		AllowCors:         *allowCors,
+	}
+	server, err := api.NewServer(cfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s\n", err)
 

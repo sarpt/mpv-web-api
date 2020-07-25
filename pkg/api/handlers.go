@@ -126,8 +126,12 @@ func optionsHandler(allowedMethods []string, res http.ResponseWriter, req *http.
 	res.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, Method")
 }
 
-func pathHandler(handlers pathHandlers) http.HandlerFunc {
+func (s *Server) pathHandler(handlers pathHandlers) http.HandlerFunc {
 	return func(res http.ResponseWriter, req *http.Request) {
+		if s.allowCors {
+			res.Header().Set("Access-Control-Allow-Origin", "*")
+		}
+
 		method := req.Method
 		if method == optionsMethod {
 			optionsHandler(allowedMethods(handlers), res, req)
