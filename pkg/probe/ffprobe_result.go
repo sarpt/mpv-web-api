@@ -13,6 +13,12 @@ type stream struct {
 	Channels  int    `json:"channels"`
 }
 
+type format struct {
+	Name     string `json:"format_name"`
+	LongName string `json:"format_long_name"`
+	Duration string `json:"duration"`
+}
+
 type probeError struct {
 	Code    int    `json:"code"`
 	Message string `json:"string"`
@@ -21,4 +27,5 @@ type probeError struct {
 type ffprobeResult struct {
 	Streams    []stream   `json:"streams"`
 	ProbeError probeError `json:"error"`
+	Format     format     `json:"format"`
 }

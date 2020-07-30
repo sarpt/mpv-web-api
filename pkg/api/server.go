@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"net/http"
@@ -22,6 +23,7 @@ type observeHandler = func(res mpv.ObserveResponse) error
 // Movie specifies information about a movie file that can be played
 type Movie struct {
 	Path            string
+	Duration        int
 	VideoStreams    []probe.VideoStream
 	AudioStreams    []probe.AudioStream
 	SubtitleStreams []probe.SubtitleStream
@@ -29,18 +31,21 @@ type Movie struct {
 
 // Playback contains information about currently played movie file
 type Playback struct {
-	Movie      Movie
-	Fullscreen bool
+	Movie       Movie
+	Fullscreen  bool
+	CurrentTime int
 }
 
 // Server is used to serve API and hold state accessible to the API
 type Server struct {
-	mpvSocketPath string
-	movies        []Movie
-	cd            *mpv.CommandDispatcher
-	playback      *Playback
-	address       string
-	allowCors     bool
+	mpvSocketPath     string
+	movies            []Movie
+	cd                *mpv.CommandDispatcher
+	playback          *Playback
+	address           string
+	allowCors         bool
+	playbackChanges   chan Playback
+	playbackObservers []chan Playback
 }
 
 // Config controls behaviour of the api serve
@@ -74,6 +79,8 @@ func NewServer(cfg Config) (*Server, error) {
 		playback,
 		cfg.Address,
 		cfg.AllowCors,
+		make(chan Playback),
+		[]chan Playback{},
 	}, nil
 }
 
@@ -100,20 +107,31 @@ func (s Server) Close() {
 
 func (s *Server) initWatchers() error {
 	observeHandlers := map[string]observeHandler{
-		mpv.FullscreenProperty: s.handleFullscreenEvent,
-		mpv.PathProperty:       s.handlePathEvent,
+		mpv.FullscreenProperty:   s.handleFullscreenEvent,
+		mpv.PathProperty:         s.handlePathEvent,
+		mpv.PlaybackTimeProperty: s.handlePlaybackTimeEvent,
 	}
 
 	observeResponses := make(chan mpv.ObserveResponse)
-	_, err := s.cd.ObserveProperty(mpv.FullscreenProperty, observeResponses)
-	if err != nil {
-		return err
+	for _, propertyName := range mpv.ObservableProperties {
+		_, err := s.cd.ObserveProperty(propertyName, observeResponses)
+		if err != nil {
+			return fmt.Errorf("could not initialize watchers due to error when observing property: %w", err)
+		}
 	}
 
-	_, err = s.cd.ObserveProperty(mpv.PathProperty, observeResponses)
-	if err != nil {
-		return err
-	}
+	go func() {
+		for {
+			playback, ok := <-s.playbackChanges
+			if !ok {
+				return
+			}
+
+			for _, observer := range s.playbackObservers {
+				observer <- playback
+			}
+		}
+	}()
 
 	go func() {
 		for {
@@ -131,43 +149,17 @@ func (s *Server) initWatchers() error {
 			if err != nil {
 				fmt.Fprintf(os.Stdout, "could not handle property '%s' observer handling: %s\n", observeResponse.Property, err)
 			}
+			s.playbackChanges <- *s.playback
 		}
 	}()
 
 	return nil
 }
 
-func (s *Server) handleFullscreenEvent(res mpv.ObserveResponse) error {
-	enabled, ok := res.Data.(string)
-	if !ok {
-		return errors.New("could not decode data for fullscreen change event")
-	}
-
-	s.playback.Fullscreen = enabled == mpv.FullscreenEnabled
-	return nil
-}
-
-func (s *Server) handlePathEvent(res mpv.ObserveResponse) error {
-	if res.Data == nil {
-		s.playback.Movie = Movie{}
-		return nil
-	}
-
-	path, ok := res.Data.(string)
-	if !ok {
-		return errors.New("could not decode data for path change event")
-	}
-
-	movie, err := s.movieByPath(path)
-	if err != nil {
-		return fmt.Errorf("could not retrieve movie by path %s", path)
-	}
-
-	s.playback.Movie = movie
-	return nil
-}
-
 func (s *Server) mainHandler() *http.ServeMux {
+	ssePlaybackHandlers := map[string]http.HandlerFunc{
+		getMethod: s.getSsePlaybackHandler,
+	}
 	playbackHandlers := map[string]http.HandlerFunc{
 		postMethod: s.postPlaybackHandler,
 		getMethod:  s.getPlaybackHandler,
@@ -178,8 +170,9 @@ func (s *Server) mainHandler() *http.ServeMux {
 	}
 
 	allHandlers := map[string]pathHandlers{
-		playbackPath: playbackHandlers,
-		moviesPath:   moviesHandlers,
+		ssePlaybackPath: ssePlaybackHandlers,
+		playbackPath:    playbackHandlers,
+		moviesPath:      moviesHandlers,
 	}
 
 	mux := http.NewServeMux()
@@ -188,4 +181,18 @@ func (s *Server) mainHandler() *http.ServeMux {
 	}
 
 	return mux
+}
+
+func formatSseEvent(eventName string, data []byte) []byte {
+	var out []byte
+
+	out = append(out, []byte(fmt.Sprintf("event:%s\n", eventName))...)
+
+	dataEntries := bytes.Split(data, []byte("\n"))
+	for _, dataEntry := range dataEntries {
+		out = append(out, []byte(fmt.Sprintf("data:%s\n", dataEntry))...)
+	}
+
+	out = append(out, []byte("\n\n")...)
+	return out
 }

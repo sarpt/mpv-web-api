@@ -3,6 +3,7 @@ package probe
 import (
 	"encoding/json"
 	"os/exec"
+	"strconv"
 )
 
 const (
@@ -16,6 +17,7 @@ const (
 	quietLogLevel  = "quiet"
 	showErrorArg   = "-show_error"
 	showStreamsArg = "-show_streams"
+	showFormatArg  = "-show_format"
 	outputArg      = "-of"
 	jsonOutput     = "json"
 )
@@ -38,8 +40,16 @@ type VideoStream struct {
 	Height   int
 }
 
+// Format specifies general information about media container file
+type Format struct {
+	Name     string
+	LongName string
+	Duration float64
+}
+
 // Result contains information about the file
 type Result struct {
+	Format          Format
 	VideoStreams    []VideoStream
 	AudioStreams    []AudioStream
 	SubtitleStreams []SubtitleStream
@@ -54,6 +64,17 @@ func File(filepath string) (Result, error) {
 	ffprobeResult, err := probeWithFfprobe(filepath)
 	if err != nil {
 		return result, err
+	}
+
+	parsedDuration, err := strconv.ParseFloat(ffprobeResult.Format.Duration, 64)
+	if err != nil {
+		return result, err
+	}
+
+	result.Format = Format{
+		Name:     ffprobeResult.Format.Name,
+		LongName: ffprobeResult.Format.LongName,
+		Duration: parsedDuration,
 	}
 
 	for _, str := range ffprobeResult.Streams {
@@ -87,6 +108,7 @@ func probeWithFfprobe(filepath string) (ffprobeResult, error) {
 		logLevelArg, quietLogLevel,
 		showErrorArg,
 		showStreamsArg,
+		showFormatArg,
 		outputArg, jsonOutput,
 		filepath,
 	}

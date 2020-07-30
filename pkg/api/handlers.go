@@ -17,13 +17,16 @@ const (
 	postMethod    = "POST"
 	getMethod     = "GET"
 
-	moviesPath   = "/movies"
-	playbackPath = "/playback"
+	moviesPath      = "/movies"
+	playbackPath    = "/playback"
+	ssePlaybackPath = "/sse/playback"
 
 	pathArg       = "path"
 	fullscreenArg = "fullscreen"
 
 	methodsSeparator = ", "
+
+	playbackSseEvent = "playback"
 )
 
 var (
@@ -101,6 +104,43 @@ func (s *Server) getPlaybackHandler(res http.ResponseWriter, req *http.Request) 
 	res.Write(response)
 }
 
+func (s *Server) getSsePlaybackHandler(res http.ResponseWriter, req *http.Request) {
+	flusher, ok := res.(http.Flusher)
+	if !ok {
+		res.WriteHeader(400)
+		return
+	}
+	res.Header().Set("Connection", "keep-alive")
+	res.Header().Set("Content-Type", "text/event-stream")
+	res.Header().Set("Access-Control-Allow-Origin", "*")
+
+	playbackChanges := make(chan Playback)
+	s.playbackObservers = append(s.playbackObservers, playbackChanges)
+
+	for {
+		select {
+		case playback, ok := <-playbackChanges:
+			if !ok {
+				return
+			}
+
+			out, err := json.Marshal(playback)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "could not write to the client")
+			}
+
+			_, err = res.Write(formatSseEvent(playbackSseEvent, out))
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "could not write to the client")
+			}
+
+			flusher.Flush()
+		case <-req.Context().Done():
+			return
+		}
+	}
+}
+
 func (s *Server) getMoviesHandler(res http.ResponseWriter, req *http.Request) {
 	moviesResponse := moviesRespone{
 		Movies: s.movies,
@@ -121,7 +161,6 @@ func (s *Server) getMoviesHandler(res http.ResponseWriter, req *http.Request) {
 func optionsHandler(allowedMethods []string, res http.ResponseWriter, req *http.Request) {
 	allowedMethods = append(allowedMethods, optionsMethod)
 
-	res.Header().Set("Access-Control-Allow-Origin", "*")
 	res.Header().Set("Access-Control-Allow-Methods", strings.Join(allowedMethods, methodsSeparator))
 	res.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, Method")
 }

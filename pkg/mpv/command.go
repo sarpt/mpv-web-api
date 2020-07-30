@@ -16,6 +16,18 @@ const (
 
 	// PathProperty is used to inform about path to file currently being played by mpv
 	PathProperty = "path"
+
+	// PlaybackTimeProperty is used for reading and setting current time of playback in seconds
+	PlaybackTimeProperty = "playback-time"
+)
+
+var (
+	// ObservableProperties specifies collection of properties that can be observed by 'property-change' event
+	ObservableProperties = []string{
+		FullscreenProperty,
+		PathProperty,
+		PlaybackTimeProperty,
+	}
 )
 
 // Command holds the name and value of the command to be dispatched.
