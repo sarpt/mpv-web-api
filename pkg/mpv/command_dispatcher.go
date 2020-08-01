@@ -22,6 +22,8 @@ const (
 var (
 	// ErrCommandFailedResponse informs about mpv returning something other than "success" in an error field of a response
 	ErrCommandFailedResponse = errors.New("mpv response does not include success state")
+
+	newline = []byte("\n")
 )
 
 // CommandPayload represents command payload sent to the mpv
@@ -251,24 +253,34 @@ func IsResultSuccess(result ResponsePayload) bool {
 }
 
 func (cd CommandDispatcher) listenOnUnixSocket() {
+	payloads := make(chan []byte)
+
+	go func() {
+		err := readNewlineSeparatedJSONs(cd.conn, payloads)
+		if err == io.EOF {
+			fmt.Fprintf(os.Stderr, "connection closed\n")
+		} else {
+			fmt.Fprintf(os.Stderr, "could not read the payload from the connection\n")
+		}
+
+		close(payloads)
+	}()
+
 	go func() {
 		for {
-			var result ResponsePayload
-
-			payload, err := readUntilNewline(cd.conn)
-			if err != nil {
-				if err == io.EOF {
-					fmt.Fprintf(os.Stderr, "connection closed\n")
-				} else {
-					fmt.Fprintf(os.Stderr, "could not read the payload from the connection\n")
-				}
-
+			payload, more := <-payloads
+			if !more {
 				return
 			}
 
-			err = json.Unmarshal(payload, &result)
+			var result ResponsePayload
+			if len(payload) == 0 {
+				continue
+			}
+
+			err := json.Unmarshal(payload, &result)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "could not parse the response\n")
+				fmt.Fprintf(os.Stderr, "could not parse the response: %s\npayload: %s\n", err, payload)
 				continue
 			}
 
@@ -310,26 +322,37 @@ func prepareCommandPayload(command Command, requestID int) ([]byte, error) {
 		return payload, err
 	}
 
-	payload = append(payload, []byte("\n")...)
+	payload = append(payload, newline...)
 
 	return payload, nil
 }
 
-func readUntilNewline(conn net.Conn) ([]byte, error) {
+func readNewlineSeparatedJSONs(conn net.Conn, out chan<- []byte) error {
 	buf := make([]byte, bufSize)
-	var result []byte
+	var acc []byte
 
 	for {
 		nRead, err := conn.Read(buf)
 		if err != nil {
-			return result, err
+			return err
 		}
 
-		result = append(result, buf[:nRead]...)
+		acc = append(acc, buf[:nRead]...)
 
-		newlineIdx := bytes.Index(buf, []byte("\n"))
-		if newlineIdx != -1 {
-			return result, nil
+		newlineIdx := bytes.Index(buf, newline)
+		if newlineIdx == -1 {
+			continue
+		}
+
+		chunks := bytes.Split(acc, newline)
+		acc = []byte{}
+		for _, chunk := range chunks {
+			chunkValid := json.Valid(chunk)
+			if chunkValid {
+				out <- chunk
+			} else {
+				acc = append(acc, chunk...)
+			}
 		}
 	}
 }

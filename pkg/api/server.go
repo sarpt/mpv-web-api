@@ -40,7 +40,7 @@ type Playback struct {
 type Server struct {
 	mpvSocketPath     string
 	movies            []Movie
-	cd                *mpv.CommandDispatcher
+	mpvManager        mpv.Manager
 	playback          *Playback
 	address           string
 	allowCors         bool
@@ -58,13 +58,14 @@ type Config struct {
 
 // NewServer prepares and returns a server that can be used to handle API
 func NewServer(cfg Config) (*Server, error) {
+	// TODO: move this to mpv.Manager
 	cmd := exec.Command(mpvName, idleArg, fmt.Sprintf("%s=%s", inputIpcServerArg, cfg.MpvSocketPath))
 	err := cmd.Start()
 	if err != nil {
 		return &Server{}, fmt.Errorf("could not start mpv binary: %w", err)
 	}
 
-	cd, err := mpv.NewCommandDispatcher(cfg.MpvSocketPath)
+	mpvManager, err := mpv.NewManager(cfg.MpvSocketPath)
 	if err != nil {
 		return &Server{}, err
 	}
@@ -75,7 +76,7 @@ func NewServer(cfg Config) (*Server, error) {
 	return &Server{
 		cfg.MpvSocketPath,
 		movies,
-		cd,
+		mpvManager,
 		playback,
 		cfg.Address,
 		cfg.AllowCors,
@@ -86,7 +87,6 @@ func NewServer(cfg Config) (*Server, error) {
 
 // Serve starts handling requests to the API endpoints. Blocks until canceled
 func (s *Server) Serve() error {
-	fmt.Fprintf(os.Stdout, "running server at %s\n", s.address)
 	serv := http.Server{
 		Addr:    s.address,
 		Handler: s.mainHandler(),
@@ -97,27 +97,21 @@ func (s *Server) Serve() error {
 		return errors.New("could not start watching for properties")
 	}
 
+	fmt.Fprintf(os.Stdout, "running server at %s\n", s.address)
 	return serv.ListenAndServe()
 }
 
-// Close closes underlying command dispatcher
+// Close closes server, along with closing necessary helpers
 func (s Server) Close() {
-	s.cd.Close()
+	s.mpvManager.Close()
 }
 
 func (s *Server) initWatchers() error {
+	observeResponses := make(chan mpv.ObserveResponse)
 	observeHandlers := map[string]observeHandler{
 		mpv.FullscreenProperty:   s.handleFullscreenEvent,
 		mpv.PathProperty:         s.handlePathEvent,
 		mpv.PlaybackTimeProperty: s.handlePlaybackTimeEvent,
-	}
-
-	observeResponses := make(chan mpv.ObserveResponse)
-	for _, propertyName := range mpv.ObservableProperties {
-		_, err := s.cd.ObserveProperty(propertyName, observeResponses)
-		if err != nil {
-			return fmt.Errorf("could not initialize watchers due to error when observing property: %w", err)
-		}
 	}
 
 	go func() {
@@ -152,6 +146,13 @@ func (s *Server) initWatchers() error {
 			s.playbackChanges <- *s.playback
 		}
 	}()
+
+	for _, propertyName := range mpv.ObservableProperties {
+		_, err := s.mpvManager.ObserveProperty(propertyName, observeResponses)
+		if err != nil {
+			return fmt.Errorf("could not initialize watchers due to error when observing property: %w", err)
+		}
+	}
 
 	return nil
 }

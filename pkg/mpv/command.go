@@ -14,6 +14,12 @@ const (
 	// FullscreenDisabled is a value of fullscreen property indicating that mpv is not in full screen
 	FullscreenDisabled = "no"
 
+	// AudioID is an option used to change the audio track
+	AudioID = "aid"
+
+	// SubtitleID is an option used to change the subtitle track
+	SubtitleID = "sid"
+
 	// PathProperty is used to inform about path to file currently being played by mpv
 	PathProperty = "path"
 
@@ -67,6 +73,16 @@ func NewFullscreen(enabled bool) Command {
 	}
 
 	return NewSetProperty(FullscreenProperty, fullscreen)
+}
+
+// NewSetAudioID returns the command changing the audio track to the specidifed audio id
+func NewSetAudioID(aid string) Command {
+	return NewSetProperty(AudioID, aid)
+}
+
+// NewSetSubtitleID return the command changing the subtitle track to she specified subtitle id
+func NewSetSubtitleID(sid string) Command {
+	return NewSetProperty(SubtitleID, sid)
 }
 
 // NewObserveProperty returns the command that instructs mpv to report as event changes for the specific mpv state property

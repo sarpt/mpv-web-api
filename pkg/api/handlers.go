@@ -8,8 +8,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-
-	"github.com/sarpt/mpv-web-api/pkg/mpv"
 )
 
 const (
@@ -23,6 +21,8 @@ const (
 
 	pathArg       = "path"
 	fullscreenArg = "fullscreen"
+	subtitleIDArg = "subtitleID"
+	audioIDArg    = "audioID"
 
 	methodsSeparator = ", "
 
@@ -46,6 +46,33 @@ type playbackResponse struct {
 func (s *Server) postPlaybackHandler(res http.ResponseWriter, req *http.Request) {
 	var out string
 
+	// TODO: this code duplication is getting out of hand, need to refactor this
+	subtitleID := req.PostFormValue(subtitleIDArg)
+	if subtitleID != "" {
+		err := s.mpvManager.ChangeSubtitle(subtitleID)
+		if err != nil {
+			res.WriteHeader(400)
+			res.Write([]byte(fmt.Sprintf("could not successfully change subtitle: %s\n", err)))
+
+			return
+		}
+
+		out = fmt.Sprintf("%s\nchanged subtitle to %s\n", out, subtitleID)
+	}
+
+	audioID := req.PostFormValue(audioIDArg)
+	if audioID != "" {
+		err := s.mpvManager.ChangeAudio(audioID)
+		if err != nil {
+			res.WriteHeader(400)
+			res.Write([]byte(fmt.Sprintf("could not successfully change audio: %s\n", err)))
+
+			return
+		}
+
+		out = fmt.Sprintf("%s\nchanged audio to %s\n", out, audioID)
+	}
+
 	if req.PostFormValue(fullscreenArg) != "" {
 		fullscreen, err := strconv.ParseBool(req.PostFormValue(fullscreenArg))
 		if err != nil {
@@ -58,7 +85,7 @@ func (s *Server) postPlaybackHandler(res http.ResponseWriter, req *http.Request)
 		if fullscreen {
 			fmt.Fprintf(os.Stdout, "changing fullscreen to %t due to request from %s\n", fullscreen, req.RemoteAddr)
 
-			err := s.changeFullscreen(fullscreen)
+			err := s.mpvManager.ChangeFullscreen(fullscreen)
 			if err != nil {
 				res.WriteHeader(400)
 				res.Write([]byte(fmt.Sprintf("could not successfully change fullscreen: %s\n", err))) // good enough for poc
@@ -73,7 +100,7 @@ func (s *Server) postPlaybackHandler(res http.ResponseWriter, req *http.Request)
 	filePath := req.PostFormValue(pathArg)
 	if filePath != "" {
 		fmt.Fprintf(os.Stdout, "playing file '%s' due to request from %s\n", filePath, req.RemoteAddr)
-		err := s.loadFile(filePath)
+		err := s.mpvManager.LoadFile(filePath)
 		if err != nil {
 			res.WriteHeader(400)
 			res.Write([]byte(fmt.Sprintf("could not successfully load the file: %s\n", err))) // good enough for poc
@@ -190,26 +217,6 @@ func (s *Server) pathHandler(handlers pathHandlers) http.HandlerFunc {
 	}
 }
 
-func allowedMethods(handlers pathHandlers) []string {
-	var allowedMethods []string
-
-	for method := range handlers {
-		allowedMethods = append(allowedMethods, method)
-	}
-
-	return allowedMethods
-}
-
-func (s *Server) changeFullscreen(enabled bool) error {
-	_, err := s.cd.Request(mpv.NewFullscreen(enabled))
-	return err
-}
-
-func (s *Server) loadFile(filePath string) error {
-	_, err := s.cd.Request(mpv.NewLoadFile(filePath))
-	return err
-}
-
 func (s Server) movieByPath(path string) (Movie, error) {
 	for _, movie := range s.movies {
 		if movie.Path == path {
@@ -218,4 +225,14 @@ func (s Server) movieByPath(path string) (Movie, error) {
 	}
 
 	return Movie{}, errNoMovieAvailable
+}
+
+func allowedMethods(handlers pathHandlers) []string {
+	var allowedMethods []string
+
+	for method := range handlers {
+		allowedMethods = append(allowedMethods, method)
+	}
+
+	return allowedMethods
 }
