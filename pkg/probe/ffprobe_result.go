@@ -2,6 +2,7 @@ package probe
 
 type tags struct {
 	Language string `json:"language"`
+	Title    string `json:"title"`
 }
 
 type stream struct {

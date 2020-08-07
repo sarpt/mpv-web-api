@@ -3,7 +3,6 @@ package api
 import (
 	"errors"
 	"fmt"
-	"math"
 	"strconv"
 
 	"github.com/sarpt/mpv-web-api/pkg/mpv"
@@ -54,6 +53,6 @@ func (s *Server) handlePlaybackTimeEvent(res mpv.ObserveResponse) error {
 		return errors.New("the playback time could not be converted to number")
 	}
 
-	s.playback.CurrentTime = int(math.Floor(currentTimeNum))
+	s.playback.CurrentTime = currentTimeNum
 	return nil
 }

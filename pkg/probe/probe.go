@@ -11,25 +11,30 @@ const (
 	audioCodecType    = "audio"
 	subtitleCodecType = "subtitle"
 
-	ffprobeName    = "ffprobe"
-	hideBannerArg  = "-hide_banner"
-	logLevelArg    = "-loglevel"
-	quietLogLevel  = "quiet"
-	showErrorArg   = "-show_error"
-	showStreamsArg = "-show_streams"
-	showFormatArg  = "-show_format"
-	outputArg      = "-of"
-	jsonOutput     = "json"
+	ffprobeName     = "ffprobe"
+	hideBannerArg   = "-hide_banner"
+	logLevelArg     = "-loglevel"
+	quietLogLevel   = "quiet"
+	showErrorArg    = "-show_error"
+	showStreamsArg  = "-show_streams"
+	showFormatArg   = "-show_format"
+	showChaptersArg = "-show_chapters"
+	outputArg       = "-of"
+	jsonOutput      = "json"
 )
 
 // SubtitleStream specifies information about subtitles inluded in the movie
 type SubtitleStream struct {
-	Language string
+	SubtitleID int
+	Language   string
+	Title      string
 }
 
 // AudioStream specifies information about audio the movie includes
 type AudioStream struct {
+	AudioID  int
 	Language string
+	Title    string
 	Channels int
 }
 
@@ -87,12 +92,15 @@ func File(filepath string) (Result, error) {
 			})
 		case audioCodecType:
 			result.AudioStreams = append(result.AudioStreams, AudioStream{
+				AudioID:  len(result.AudioStreams) + 1,
 				Language: str.Tags.Language,
 				Channels: str.Channels,
 			})
 		case subtitleCodecType:
 			result.SubtitleStreams = append(result.SubtitleStreams, SubtitleStream{
-				Language: str.Tags.Language,
+				SubtitleID: len(result.SubtitleStreams) + 1,
+				Language:   str.Tags.Language,
+				Title:      str.Tags.Title,
 			})
 		}
 	}
@@ -108,6 +116,7 @@ func probeWithFfprobe(filepath string) (ffprobeResult, error) {
 		logLevelArg, quietLogLevel,
 		showErrorArg,
 		showStreamsArg,
+		showChaptersArg,
 		showFormatArg,
 		outputArg, jsonOutput,
 		filepath,

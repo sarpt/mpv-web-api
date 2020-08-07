@@ -23,7 +23,7 @@ type observeHandler = func(res mpv.ObserveResponse) error
 // Movie specifies information about a movie file that can be played
 type Movie struct {
 	Path            string
-	Duration        int
+	Duration        float64
 	VideoStreams    []probe.VideoStream
 	AudioStreams    []probe.AudioStream
 	SubtitleStreams []probe.SubtitleStream
@@ -33,7 +33,7 @@ type Movie struct {
 type Playback struct {
 	Movie       Movie
 	Fullscreen  bool
-	CurrentTime int
+	CurrentTime float64
 }
 
 // Server is used to serve API and hold state accessible to the API
@@ -157,31 +157,14 @@ func (s *Server) initWatchers() error {
 	return nil
 }
 
-func (s *Server) mainHandler() *http.ServeMux {
-	ssePlaybackHandlers := map[string]http.HandlerFunc{
-		getMethod: s.getSsePlaybackHandler,
-	}
-	playbackHandlers := map[string]http.HandlerFunc{
-		postMethod: s.postPlaybackHandler,
-		getMethod:  s.getPlaybackHandler,
+func (s Server) movieByPath(path string) (Movie, error) {
+	for _, movie := range s.movies {
+		if movie.Path == path {
+			return movie, nil
+		}
 	}
 
-	moviesHandlers := map[string]http.HandlerFunc{
-		getMethod: s.getMoviesHandler,
-	}
-
-	allHandlers := map[string]pathHandlers{
-		ssePlaybackPath: ssePlaybackHandlers,
-		playbackPath:    playbackHandlers,
-		moviesPath:      moviesHandlers,
-	}
-
-	mux := http.NewServeMux()
-	for path, pathHandlers := range allHandlers {
-		mux.HandleFunc(path, s.pathHandler(pathHandlers))
-	}
-
-	return mux
+	return Movie{}, errNoMovieAvailable
 }
 
 func formatSseEvent(eventName string, data []byte) []byte {

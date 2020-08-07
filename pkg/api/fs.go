@@ -1,7 +1,6 @@
 package api
 
 import (
-	"math"
 	"os"
 	"path/filepath"
 
@@ -35,7 +34,7 @@ func moviesInDirectories(directories []string) []Movie {
 				VideoStreams:    pr.VideoStreams,
 				AudioStreams:    pr.AudioStreams,
 				SubtitleStreams: pr.SubtitleStreams,
-				Duration:        int(math.Floor(pr.Format.Duration)),
+				Duration:        pr.Format.Duration,
 			}
 			movies = append(movies, movie)
 
