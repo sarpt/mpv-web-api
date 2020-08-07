@@ -91,8 +91,12 @@ func (s *Server) getSsePlaybackHandler(res http.ResponseWriter, req *http.Reques
 	res.Header().Set("Content-Type", "text/event-stream")
 	res.Header().Set("Access-Control-Allow-Origin", "*")
 
-	playbackChanges := make(chan Playback)
-	s.playbackObservers = append(s.playbackObservers, playbackChanges)
+	// Buffer of 1 in case connection is closed after playbackObservers fan-out dispatcher already acquired read lock (blocking the write lock).
+	// The dispatcher will expect for the select below to receive the message but the Context().Done() already waits to acquire a write lock.
+	// So the buffer of 1 ensures that one message will be buffered, dispatcher will not be blocked, and write lock will be obtained.
+	// When the write lock is obtained to remove from the set, even if a new playback will be received, read lock will wait until Context().Done() finishes.
+	playbackChanges := make(chan Playback, 1)
+	s.playbackObservers[req.RemoteAddr] = playbackChanges
 
 	for {
 		select {
@@ -113,6 +117,9 @@ func (s *Server) getSsePlaybackHandler(res http.ResponseWriter, req *http.Reques
 
 			flusher.Flush()
 		case <-req.Context().Done():
+			s.playbackObserversLock.Lock()
+			delete(s.playbackObservers, req.RemoteAddr)
+			s.playbackObserversLock.Unlock()
 			return
 		}
 	}

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"sync"
 
 	"github.com/sarpt/mpv-web-api/pkg/mpv"
 	"github.com/sarpt/mpv-web-api/pkg/probe"
@@ -38,14 +39,15 @@ type Playback struct {
 
 // Server is used to serve API and hold state accessible to the API
 type Server struct {
-	mpvSocketPath     string
-	movies            []Movie
-	mpvManager        mpv.Manager
-	playback          *Playback
-	address           string
-	allowCors         bool
-	playbackChanges   chan Playback
-	playbackObservers []chan Playback
+	mpvSocketPath         string
+	movies                []Movie
+	mpvManager            mpv.Manager
+	playback              *Playback
+	address               string
+	allowCors             bool
+	playbackChanges       chan Playback
+	playbackObservers     map[string]chan Playback
+	playbackObserversLock *sync.RWMutex
 }
 
 // Config controls behaviour of the api serve
@@ -81,7 +83,8 @@ func NewServer(cfg Config) (*Server, error) {
 		cfg.Address,
 		cfg.AllowCors,
 		make(chan Playback),
-		[]chan Playback{},
+		map[string]chan Playback{},
+		&sync.RWMutex{},
 	}, nil
 }
 
@@ -121,9 +124,11 @@ func (s *Server) initWatchers() error {
 				return
 			}
 
+			s.playbackObserversLock.RLock()
 			for _, observer := range s.playbackObservers {
 				observer <- playback
 			}
+			s.playbackObserversLock.RUnlock()
 		}
 	}()
 
