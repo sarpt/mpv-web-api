@@ -96,7 +96,9 @@ func (s *Server) getSsePlaybackHandler(res http.ResponseWriter, req *http.Reques
 	// So the buffer of 1 ensures that one message will be buffered, dispatcher will not be blocked, and write lock will be obtained.
 	// When the write lock is obtained to remove from the set, even if a new playback will be received, read lock will wait until Context().Done() finishes.
 	playbackChanges := make(chan Playback, 1)
+	s.playbackObserversLock.Lock()
 	s.playbackObservers[req.RemoteAddr] = playbackChanges
+	s.playbackObserversLock.Unlock()
 
 	for {
 		select {
