@@ -30,6 +30,7 @@ func moviesInDirectories(directories []string) []Movie {
 			}
 
 			movie := Movie{
+				Chapters:        pr.Chapters,
 				Path:            path,
 				VideoStreams:    pr.VideoStreams,
 				AudioStreams:    pr.AudioStreams,

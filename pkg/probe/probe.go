@@ -23,14 +23,21 @@ const (
 	jsonOutput      = "json"
 )
 
-// SubtitleStream specifies information about subtitles inluded in the movie
+// Chapter specifies information about chapters included in the file
+type Chapter struct {
+	StartTime float64
+	EndTime   float64
+	Title     string
+}
+
+// SubtitleStream specifies information about subtitles inluded in the file
 type SubtitleStream struct {
 	SubtitleID int
 	Language   string
 	Title      string
 }
 
-// AudioStream specifies information about audio the movie includes
+// AudioStream specifies information about audio the file includes
 type AudioStream struct {
 	AudioID  int
 	Language string
@@ -38,7 +45,7 @@ type AudioStream struct {
 	Channels int
 }
 
-// VideoStream specifies information about video the movie includes
+// VideoStream specifies information about video the file includes
 type VideoStream struct {
 	Language string
 	Width    int
@@ -50,11 +57,13 @@ type Format struct {
 	Name     string
 	LongName string
 	Duration float64
+	Title    string
 }
 
 // Result contains information about the file
 type Result struct {
 	Format          Format
+	Chapters        []Chapter
 	VideoStreams    []VideoStream
 	AudioStreams    []AudioStream
 	SubtitleStreams []SubtitleStream
@@ -80,6 +89,25 @@ func File(filepath string) (Result, error) {
 		Name:     ffprobeResult.Format.Name,
 		LongName: ffprobeResult.Format.LongName,
 		Duration: parsedDuration,
+		Title:    ffprobeResult.Format.Tags.Title,
+	}
+
+	for _, chapter := range ffprobeResult.Chapters {
+		startTime, err := strconv.ParseFloat(chapter.StartTime, 64)
+		if err != nil {
+			return result, err
+		}
+
+		endTime, err := strconv.ParseFloat(chapter.EndTime, 64)
+		if err != nil {
+			return result, err
+		}
+
+		result.Chapters = append(result.Chapters, Chapter{
+			Title:     chapter.Tags.Title,
+			StartTime: startTime,
+			EndTime:   endTime,
+		})
 	}
 
 	for _, str := range ffprobeResult.Streams {

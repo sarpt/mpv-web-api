@@ -1,8 +1,15 @@
 package probe
 
+type chapter struct {
+	StartTime string `json:"start_time"`
+	EndTime   string `json:"end_time"`
+	Tags      tags   `json:"tags"`
+}
+
 type tags struct {
 	Language string `json:"language"`
 	Title    string `json:"title"`
+	Filename string `json:"filename"`
 }
 
 type stream struct {
@@ -18,6 +25,7 @@ type format struct {
 	Name     string `json:"format_name"`
 	LongName string `json:"format_long_name"`
 	Duration string `json:"duration"`
+	Tags     tags   `json:"tags"`
 }
 
 type probeError struct {
@@ -26,6 +34,7 @@ type probeError struct {
 }
 
 type ffprobeResult struct {
+	Chapters   []chapter  `json:"chapters"`
 	Streams    []stream   `json:"streams"`
 	ProbeError probeError `json:"error"`
 	Format     format     `json:"format"`

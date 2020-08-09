@@ -23,28 +23,32 @@ type observeHandler = func(res mpv.ObserveResponse) error
 
 // Movie specifies information about a movie file that can be played
 type Movie struct {
-	Path            string
-	Duration        float64
-	VideoStreams    []probe.VideoStream
+	Chapters        []probe.Chapter
 	AudioStreams    []probe.AudioStream
+	Duration        float64
+	Path            string
 	SubtitleStreams []probe.SubtitleStream
+	VideoStreams    []probe.VideoStream
 }
 
 // Playback contains information about currently played movie file
 type Playback struct {
-	Movie       Movie
-	Fullscreen  bool
-	CurrentTime float64
+	CurrentTime        float64
+	CurrentChapterIdx  int
+	Fullscreen         bool
+	Movie              Movie
+	SelectedAudioID    int
+	SelectedSubtitleID int
 }
 
 // Server is used to serve API and hold state accessible to the API
 type Server struct {
-	mpvSocketPath         string
-	movies                []Movie
-	mpvManager            mpv.Manager
-	playback              *Playback
 	address               string
 	allowCors             bool
+	movies                []Movie
+	mpvManager            mpv.Manager
+	mpvSocketPath         string
+	playback              *Playback
 	playbackChanges       chan Playback
 	playbackObservers     map[string]chan Playback
 	playbackObserversLock *sync.RWMutex
@@ -53,9 +57,9 @@ type Server struct {
 // Config controls behaviour of the api serve
 type Config struct {
 	Address           string
+	AllowCors         bool
 	MoviesDirectories []string
 	MpvSocketPath     string
-	AllowCors         bool
 }
 
 // NewServer prepares and returns a server that can be used to handle API
@@ -76,12 +80,12 @@ func NewServer(cfg Config) (*Server, error) {
 	playback := &Playback{}
 
 	return &Server{
-		cfg.MpvSocketPath,
-		movies,
-		mpvManager,
-		playback,
 		cfg.Address,
 		cfg.AllowCors,
+		movies,
+		mpvManager,
+		cfg.MpvSocketPath,
+		playback,
 		make(chan Playback),
 		map[string]chan Playback{},
 		&sync.RWMutex{},
