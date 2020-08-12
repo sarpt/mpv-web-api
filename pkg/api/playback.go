@@ -28,7 +28,10 @@ type postPlaybackResponse struct {
 
 var (
 	postFormArgumentsHandlers = map[string]func(res http.ResponseWriter, req *http.Request, s *Server) error{
-		pathArg: pathHandler,
+		pathArg:       pathHandler,
+		fullscreenArg: fullscreenHandler,
+		audioIDArg:    audioIDHandler,
+		subtitleIDArg: subtitleIDHandler,
 	}
 )
 
