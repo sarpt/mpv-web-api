@@ -23,6 +23,9 @@ type observeHandler = func(res mpv.ObserveResponse) error
 
 // Movie specifies information about a movie file that can be played
 type Movie struct {
+	Title           string
+	FormatName      string
+	FormatLongName  string
 	Chapters        []probe.Chapter
 	AudioStreams    []probe.AudioStream
 	Duration        float64
@@ -76,7 +79,7 @@ func NewServer(cfg Config) (*Server, error) {
 		return &Server{}, err
 	}
 
-	movies := moviesInDirectories(cfg.MoviesDirectories)
+	movies := probeDirectories(cfg.MoviesDirectories)
 	playback := &Playback{}
 
 	return &Server{
@@ -188,4 +191,31 @@ func formatSseEvent(eventName string, data []byte) []byte {
 
 	out = append(out, []byte("\n\n")...)
 	return out
+}
+
+func probeDirectories(directories []string) []Movie {
+	var movies []Movie
+
+	probeResults, _ := probe.Directories(directories)
+	for _, probeResult := range probeResults {
+		if !probeResult.IsMovieFile() {
+			continue
+		}
+
+		movie := Movie{
+			Title:           probeResult.Format.Title,
+			FormatName:      probeResult.Format.Name,
+			FormatLongName:  probeResult.Format.LongName,
+			Chapters:        probeResult.Chapters,
+			Path:            probeResult.Path,
+			VideoStreams:    probeResult.VideoStreams,
+			AudioStreams:    probeResult.AudioStreams,
+			SubtitleStreams: probeResult.SubtitleStreams,
+			Duration:        probeResult.Format.Duration,
+		}
+
+		movies = append(movies, movie)
+	}
+
+	return movies
 }

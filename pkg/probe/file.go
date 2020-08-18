@@ -32,24 +32,25 @@ type Chapter struct {
 
 // SubtitleStream specifies information about subtitles inluded in the file
 type SubtitleStream struct {
-	SubtitleID int
 	Language   string
+	SubtitleID int
 	Title      string
 }
 
 // AudioStream specifies information about audio the file includes
 type AudioStream struct {
 	AudioID  int
+	Channels int
 	Language string
 	Title    string
-	Channels int
 }
 
 // VideoStream specifies information about video the file includes
 type VideoStream struct {
+	Height   int
 	Language string
 	Width    int
-	Height   int
+	Title    string
 }
 
 // Format specifies general information about media container file
@@ -62,6 +63,7 @@ type Format struct {
 
 // Result contains information about the file
 type Result struct {
+	Path            string
 	Format          Format
 	Chapters        []Chapter
 	VideoStreams    []VideoStream
@@ -74,6 +76,7 @@ type Result struct {
 // As of now it usses "ffprobe" ran as a separate process to get this information. May be changed to use libav go wrappers in the future
 func File(filepath string) (Result, error) {
 	result := Result{
+		Path:            filepath,
 		Format:          Format{},
 		Chapters:        []Chapter{},
 		VideoStreams:    []VideoStream{},
@@ -123,12 +126,14 @@ func File(filepath string) (Result, error) {
 				Language: str.Tags.Language,
 				Width:    str.Width,
 				Height:   str.Height,
+				Title:    str.Tags.Title,
 			})
 		case audioCodecType:
 			result.AudioStreams = append(result.AudioStreams, AudioStream{
 				AudioID:  len(result.AudioStreams) + 1,
 				Language: str.Tags.Language,
 				Channels: str.Channels,
+				Title:    str.Tags.Title,
 			})
 		case subtitleCodecType:
 			result.SubtitleStreams = append(result.SubtitleStreams, SubtitleStream{
