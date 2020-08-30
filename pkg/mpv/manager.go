@@ -1,22 +1,85 @@
 package mpv
 
+import (
+	"fmt"
+	"os"
+	"os/exec"
+)
+
+const (
+	mpvName           = "mpv"
+	idleArg           = "--idle"
+	inputIpcServerArg = "--input-ipc-server"
+)
+
 // Manager handles dispatching of commands, while exposing a facade.
-// TODO: Managed should also handle mpv binary detection and lifetime handling
 type Manager struct {
-	cd *CommandDispatcher
+	mpvCmd     *exec.Cmd
+	socketPath string
+	cd         *CommandDispatcher
 }
 
-// NewManager instantiates new command dispatcher, preparing new Manager to be used
-// TODO: add mpv binary detection and mpv process startup
-func NewManager(mpvSocketPath string) (Manager, error) {
-	cd, err := NewCommandDispatcher(mpvSocketPath)
-	if err != nil {
-		return Manager{}, err
+// NewManager starts mpv process and instantiates new command dispatcher, preparing new Manager for use
+func NewManager(mpvSocketPath string) *Manager {
+	m := &Manager{
+		socketPath: mpvSocketPath,
 	}
 
-	return Manager{
-		cd,
-	}, nil
+	go func(m *Manager) {
+		var err error
+		for {
+			if m.mpvCmd != nil {
+				fmt.Fprintf(os.Stdout, "watching for mpv process exit...\n")
+
+				err = m.mpvCmd.Wait()
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "mpv process finished with error: %s\n", err)
+				} else {
+					fmt.Fprintf(os.Stdout, "mpv process finished successfully\n")
+				}
+
+				m.cd.Close()
+				fmt.Fprintf(os.Stdout, "restarting mpv process and command dispatcher...\n")
+			}
+
+			err = m.startMpv()
+			if err != nil {
+				fmt.Fprintf(os.Stdout, "could not start mpv process due to error: %s\n", err)
+				return // TODO: add some handling of errors on the manager instance
+			}
+			fmt.Fprintf(os.Stdout, "mpv process started\n")
+
+			err = m.startCommandDispatcher()
+			if err != nil {
+				fmt.Fprintf(os.Stdout, "could not start command dispatcher due to error: %s\n", err)
+				return // TODO: add some handling of errors on the manager instance
+			}
+			fmt.Fprintf(os.Stdout, "command dispatcher started\n")
+		}
+	}(m)
+
+	return m
+}
+
+func (m *Manager) startMpv() error {
+	cmd := exec.Command(mpvName, idleArg, fmt.Sprintf("%s=%s", inputIpcServerArg, m.socketPath))
+	err := cmd.Start()
+	if err != nil {
+		return fmt.Errorf("could not start mpv process: %w", err)
+	}
+
+	m.mpvCmd = cmd
+	return nil
+}
+
+func (m *Manager) startCommandDispatcher() error {
+	cd, err := NewCommandDispatcher(m.socketPath)
+	if err != nil {
+		return err
+	}
+
+	m.cd = cd
+	return nil
 }
 
 // ChangeFullscreen instructs mpv to change the fullscreen state

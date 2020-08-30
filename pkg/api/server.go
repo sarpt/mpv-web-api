@@ -6,17 +6,10 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"os/exec"
 	"sync"
 
 	"github.com/sarpt/mpv-web-api/pkg/mpv"
 	"github.com/sarpt/mpv-web-api/pkg/probe"
-)
-
-const (
-	mpvName           = "mpv"
-	idleArg           = "--idle"
-	inputIpcServerArg = "--input-ipc-server"
 )
 
 type observeHandler = func(res mpv.ObserveResponse) error
@@ -49,7 +42,7 @@ type Server struct {
 	address               string
 	allowCors             bool
 	movies                []Movie
-	mpvManager            mpv.Manager
+	mpvManager            *mpv.Manager
 	mpvSocketPath         string
 	playback              *Playback
 	playbackChanges       chan Playback
@@ -67,17 +60,7 @@ type Config struct {
 
 // NewServer prepares and returns a server that can be used to handle API
 func NewServer(cfg Config) (*Server, error) {
-	// TODO: move this to mpv.Manager
-	cmd := exec.Command(mpvName, idleArg, fmt.Sprintf("%s=%s", inputIpcServerArg, cfg.MpvSocketPath))
-	err := cmd.Start()
-	if err != nil {
-		return &Server{}, fmt.Errorf("could not start mpv binary: %w", err)
-	}
-
-	mpvManager, err := mpv.NewManager(cfg.MpvSocketPath)
-	if err != nil {
-		return &Server{}, err
-	}
+	mpvManager := mpv.NewManager(cfg.MpvSocketPath)
 
 	movies := probeDirectories(cfg.MoviesDirectories)
 	playback := &Playback{}
