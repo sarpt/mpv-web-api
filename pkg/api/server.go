@@ -143,7 +143,7 @@ func (s *Server) initWatchers() error {
 	}()
 
 	for _, propertyName := range mpv.ObservableProperties {
-		_, err := s.mpvManager.ObserveProperty(propertyName, observeResponses)
+		_, err := s.mpvManager.SubscribeToProperty(propertyName, observeResponses)
 		if err != nil {
 			return fmt.Errorf("could not initialize watchers due to error when observing property: %w", err)
 		}

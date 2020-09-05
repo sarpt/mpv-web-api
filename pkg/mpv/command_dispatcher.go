@@ -20,8 +20,17 @@ const (
 )
 
 var (
-	// ErrCommandFailedResponse informs about mpv returning something other than "success" in an error field of a response
+	// ErrCommandFailedResponse informs about mpv returning something other than "success" in an error field of a response.
 	ErrCommandFailedResponse = errors.New("mpv response does not include success state")
+
+	// ErrConnectionInProgress informs about failure of operation due to connection of command dispatcher being in progress.
+	ErrConnectionInProgress = errors.New("command dispatcher is connected to mpv socket")
+
+	// ErrNoPropertyObserver informs about failure of finding observer for a specified property name (most likely property is not observed).
+	ErrNoPropertyObserver = errors.New("could not find observer for a provided property name")
+
+	// ErrNoPropertySubscription informs about failure of finding observer for a specified subscription id.
+	ErrNoPropertySubscription = errors.New("could not find subscription for a provided subscription id")
 
 	newline = []byte("\n")
 )
@@ -55,90 +64,135 @@ type ResponsePayload struct {
 
 // CommandDispatcher connects to the provided socket path and handles sending commands and handling results
 type CommandDispatcher struct {
-	conn                   net.Conn
-	requests               map[int]chan ResponsePayload
-	requestID              int
-	requestIDLock          *sync.Mutex
-	propertyObservers      map[string]propertyObserverGroup
-	propertyObserverID     int
-	propertyObserverIDLock *sync.Mutex
-}
-
-type propertyObserverGroup struct {
-	responsePayloads chan ResponsePayload
-	observers        map[int]propertyObserver
+	socketPath                 string
+	listeningOnSocket          bool
+	linteningOnSocketLock      *sync.RWMutex
+	conn                       net.Conn
+	requests                   map[int]chan ResponsePayload
+	requestID                  int
+	requestIDLock              *sync.Mutex
+	propertyObservers          map[string]propertyObserver
+	propertySubscriptionID     int
+	propertySubscriptionIDLock *sync.Mutex
 }
 
 type propertyObserver struct {
+	responsePayloads chan ResponsePayload
+	subscriptions    map[int]propertySubscriber
+}
+
+type propertySubscriber struct {
 	propertyChanges chan<- ObserveResponse
 	done            chan bool
 }
 
-// NewCommandDispatcher returns dispatcher connected to the socket
-// Error is returned when connection to the socket failed
+// NewCommandDispatcher returns dispatcher connected to the socket.
+// Error is returned when connection to the socket fails.
 func NewCommandDispatcher(socketPath string) (*CommandDispatcher, error) {
-	var conn net.Conn
-	var err error
-
-	for {
-		conn, err = net.Dial(socketType, socketPath)
-		if err == nil {
-			break
-		}
-
-		time.Sleep(1 * time.Second) // mpv takes a longer moment to start listening on the socket, repeat until connection succesful; TODO: add timeout
-	}
-
 	cd := &CommandDispatcher{
-		conn:                   conn,
-		requests:               make(map[int]chan ResponsePayload),
-		requestID:              1,
-		requestIDLock:          &sync.Mutex{},
-		propertyObservers:      make(map[string]propertyObserverGroup),
-		propertyObserverID:     1,
-		propertyObserverIDLock: &sync.Mutex{},
+		socketPath:                 socketPath,
+		listeningOnSocket:          false,
+		linteningOnSocketLock:      &sync.RWMutex{},
+		requests:                   make(map[int]chan ResponsePayload),
+		requestID:                  1,
+		requestIDLock:              &sync.Mutex{},
+		propertyObservers:          make(map[string]propertyObserver),
+		propertySubscriptionID:     1,
+		propertySubscriptionIDLock: &sync.Mutex{},
 	}
 
-	cd.listenOnUnixSocket()
-	return cd, nil
+	err := cd.connectToSocket()
+
+	return cd, err
 }
 
-// ObserveProperty listen to observe property mpv events.
-// Returned id is used as a key to listened observe property mpv events. Id should be used to unsubscribe.
-// When error is encountered id is useless.
+func (cd *CommandDispatcher) connectToSocket() error {
+	conn, err := waitForSocketConnection(cd.socketPath)
+	if err != nil {
+		return err
+	}
+
+	cd.conn = conn
+	cd.listenOnUnixSocket()
+
+	return nil
+}
+
+func (cd *CommandDispatcher) reobserveProperties() error {
+	for propertyName := range cd.propertyObservers {
+		err := cd.observeProperty(propertyName)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (cd *CommandDispatcher) addPropertyObserver(propertyName string) (propertyObserver, error) {
+	newObserver := propertyObserver{
+		responsePayloads: make(chan ResponsePayload),
+		subscriptions:    make(map[int]propertySubscriber),
+	}
+	cd.propertyObservers[propertyName] = newObserver
+
+	err := cd.observeProperty(propertyName)
+	return newObserver, err
+}
+
+func (cd CommandDispatcher) observeProperty(propertyName string) error {
+	requestID := cd.reserveRequestID()
+	command := NewObserveProperty(requestID, propertyName)
+	_, err := cd.Request(command)
+	return err
+}
+
+// ReconnectToSocket attempts to reconnect to the unix socket.
+// When connection is already estabilished, ErrConnectionInProgress will be returned as reconnection is an invalid operation while connection is in progress.
+// During the process the property observers already registered on command dispatcher are rerequested.
+// It's necessary since the instance of mpv listening after reconnection will most likely be a different one than the previous one.
+func (cd *CommandDispatcher) ReconnectToSocket() error {
+	cd.linteningOnSocketLock.RLock()
+	listeningOnTheSocket := cd.listeningOnSocket
+	cd.linteningOnSocketLock.RUnlock()
+
+	if listeningOnTheSocket {
+		return ErrConnectionInProgress
+	}
+
+	err := cd.connectToSocket()
+	if err != nil {
+		return err
+	}
+
+	return cd.reobserveProperties()
+}
+
+// SubscribeToProperty listens to property mpv events.
+// Returned id is used as a key to listened property mpv events. Id should be used when unsubscribing. When error is encountered id is useless.
 // The channel provided is never closed to enable aggregation from multiple observers.
 // However calling unsubscribe will ensure that command dispatcher will stop trying to send on a specified channel.
-func (cd *CommandDispatcher) ObserveProperty(propertyName string, out chan<- ObserveResponse) (int, error) {
-	var responsePayloads chan ResponsePayload
+func (cd *CommandDispatcher) SubscribeToProperty(propertyName string, out chan<- ObserveResponse) (int, error) {
+	var propertyObserver propertyObserver
 
 	done := make(chan bool)
-	propertyObserverID := cd.ReservePropertyObserverID()
+	propertySubscriptionID := cd.reservePropertySubscriptionID()
 
-	propertyObservers, ok := cd.propertyObservers[propertyName]
+	propertyObserver, ok := cd.propertyObservers[propertyName]
 	if !ok {
-		responsePayloads = make(chan ResponsePayload)
-		outputs := make(map[int]propertyObserver)
-		outputs[propertyObserverID] = propertyObserver{
-			propertyChanges: out,
-			done:            done,
-		}
-		newObserver := propertyObserverGroup{
-			responsePayloads: responsePayloads,
-			observers:        outputs,
-		}
-		cd.propertyObservers[propertyName] = newObserver
-		command := NewObserveProperty(propertyObserverID, propertyName)
-		_, err := cd.Request(command)
+		newObserver, err := cd.addPropertyObserver(propertyName)
 		if err != nil {
 			return 0, err
 		}
-	} else {
-		responsePayloads = propertyObservers.responsePayloads
-		propertyObservers.observers[propertyObserverID] = propertyObserver{
-			propertyChanges: out,
-			done:            done,
-		}
+
+		propertyObserver = newObserver
 	}
+
+	propertyObserver.subscriptions[propertySubscriptionID] = propertySubscriber{
+		propertyChanges: out,
+		done:            done,
+	}
+	responsePayloads := propertyObserver.responsePayloads
 
 	go func() {
 		var payload ResponsePayload
@@ -152,26 +206,25 @@ func (cd *CommandDispatcher) ObserveProperty(propertyName string, out chan<- Obs
 					},
 				}
 			case <-done:
-				delete(propertyObservers.observers, propertyObserverID)
+				delete(propertyObserver.subscriptions, propertySubscriptionID)
 				return
 			}
 		}
 	}()
 
-	return propertyObserverID, nil
+	return propertySubscriptionID, nil
 }
 
 // UnobserveProperty instructs command dispatcher to stop sending updates about property on specified id.
 func (cd *CommandDispatcher) UnobserveProperty(propertyName string, id int) error {
-
 	propertyObservers, ok := cd.propertyObservers[propertyName]
 	if !ok {
-		return errors.New("could not find observer for a provided property name")
+		return ErrNoPropertyObserver
 	}
 
-	propertyObserver, ok := propertyObservers.observers[id]
+	propertyObserver, ok := propertyObservers.subscriptions[id]
 	if !ok {
-		return errors.New("could not find observer for a provided observer id")
+		return ErrNoPropertySubscription
 	}
 
 	propertyObserver.done <- true
@@ -185,7 +238,7 @@ func (cd *CommandDispatcher) Request(command Command) (Response, error) {
 
 	requestResult := make(chan ResponsePayload)
 
-	requestID := cd.ReserveRequestID()
+	requestID := cd.reserveRequestID()
 	cd.requests[requestID] = requestResult
 	defer delete(cd.requests, requestID)
 
@@ -202,28 +255,6 @@ func (cd *CommandDispatcher) Request(command Command) (Response, error) {
 	return Response{
 		Data: resPayload.Data,
 	}, nil
-}
-
-// ReserveRequestID takes a requestID from the available pool in a concurrent safe way.
-func (cd *CommandDispatcher) ReserveRequestID() int {
-	cd.requestIDLock.Lock()
-	defer cd.requestIDLock.Unlock()
-
-	requestID := cd.requestID
-	cd.requestID++
-
-	return requestID
-}
-
-// ReservePropertyObserverID takes a subscriptionID from the available pool in a concurrent safe way.
-func (cd *CommandDispatcher) ReservePropertyObserverID() int {
-	cd.propertyObserverIDLock.Lock()
-	defer cd.propertyObserverIDLock.Unlock()
-
-	propertyObserverID := cd.propertyObserverID
-	cd.propertyObserverID++
-
-	return propertyObserverID
 }
 
 // Dispatch sends a commmand with specified requestID to the mpv using socket in path provided during construction.
@@ -247,9 +278,24 @@ func (cd CommandDispatcher) Close() {
 	cd.conn.Close()
 }
 
-// IsResultSuccess return whether returned result specifies successful command execution
-func IsResultSuccess(result ResponsePayload) bool {
-	return result.Err == resultSuccess
+func (cd *CommandDispatcher) reserveRequestID() int {
+	cd.requestIDLock.Lock()
+	defer cd.requestIDLock.Unlock()
+
+	requestID := cd.requestID
+	cd.requestID++
+
+	return requestID
+}
+
+func (cd *CommandDispatcher) reservePropertySubscriptionID() int {
+	cd.propertySubscriptionIDLock.Lock()
+	defer cd.propertySubscriptionIDLock.Unlock()
+
+	propertyObserverID := cd.propertySubscriptionID
+	cd.propertySubscriptionID++
+
+	return propertyObserverID
 }
 
 func (cd CommandDispatcher) listenOnUnixSocket() {
@@ -270,7 +316,7 @@ func (cd CommandDispatcher) listenOnUnixSocket() {
 		for {
 			payload, more := <-payloads
 			if !more {
-				return
+				break
 			}
 
 			var result ResponsePayload
@@ -307,7 +353,36 @@ func (cd CommandDispatcher) listenOnUnixSocket() {
 				close(request)
 			}
 		}
+
+		cd.linteningOnSocketLock.Lock()
+		cd.listeningOnSocket = false
+		cd.linteningOnSocketLock.Unlock()
 	}()
+
+	cd.linteningOnSocketLock.Lock()
+	cd.listeningOnSocket = true
+	cd.linteningOnSocketLock.Unlock()
+}
+
+// IsResultSuccess return whether returned result specifies successful command execution
+func IsResultSuccess(result ResponsePayload) bool {
+	return result.Err == resultSuccess
+}
+
+func waitForSocketConnection(socketPath string) (net.Conn, error) {
+	var conn net.Conn
+	var err error
+
+	for {
+		conn, err = net.Dial(socketType, socketPath)
+		if err == nil {
+			break
+		}
+
+		time.Sleep(1 * time.Second) // mpv takes a longer moment to start listening on the socket, repeat until connection succesful; TODO: add timeout
+	}
+
+	return conn, nil // error will be returned on timeout; TODO: add timeout
 }
 
 func prepareCommandPayload(command Command, requestID int) ([]byte, error) {

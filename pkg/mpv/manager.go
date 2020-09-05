@@ -25,40 +25,51 @@ func NewManager(mpvSocketPath string) *Manager {
 		socketPath: mpvSocketPath,
 	}
 
-	go func(m *Manager) {
-		var err error
-		for {
-			if m.mpvCmd != nil {
-				fmt.Fprintf(os.Stdout, "watching for mpv process exit...\n")
+	go m.watchMpvProcess()
 
-				err = m.mpvCmd.Wait()
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "mpv process finished with error: %s\n", err)
-				} else {
-					fmt.Fprintf(os.Stdout, "mpv process finished successfully\n")
-				}
+	return m
+}
 
-				m.cd.Close()
-				fmt.Fprintf(os.Stdout, "restarting mpv process and command dispatcher...\n")
-			}
+func (m *Manager) watchMpvProcess() {
+	var err error
+	for {
+		if m.mpvCmd != nil {
+			fmt.Fprintf(os.Stdout, "watching for mpv process exit...\n")
 
-			err = m.startMpv()
+			err = m.mpvCmd.Wait()
 			if err != nil {
-				fmt.Fprintf(os.Stdout, "could not start mpv process due to error: %s\n", err)
-				return // TODO: add some handling of errors on the manager instance
+				fmt.Fprintf(os.Stderr, "mpv process finished with error: %s\n", err)
+			} else {
+				fmt.Fprintf(os.Stdout, "mpv process finished successfully\n")
 			}
-			fmt.Fprintf(os.Stdout, "mpv process started\n")
 
+			m.cd.Close()
+			fmt.Fprintf(os.Stdout, "restarting mpv process and command dispatcher...\n")
+		}
+
+		err = m.startMpv()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "could not start mpv process due to error: %s\n", err)
+			return // TODO: add some handling of errors on the manager instance
+		}
+		fmt.Fprintf(os.Stdout, "mpv process started\n")
+
+		if m.cd == nil {
 			err = m.startCommandDispatcher()
 			if err != nil {
-				fmt.Fprintf(os.Stdout, "could not start command dispatcher due to error: %s\n", err)
+				fmt.Fprintf(os.Stderr, "could not start command dispatcher due to error: %s\n", err)
 				return // TODO: add some handling of errors on the manager instance
 			}
 			fmt.Fprintf(os.Stdout, "command dispatcher started\n")
+		} else {
+			err = m.cd.ReconnectToSocket()
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "command dispatcher could not reconnect to socket due to error: %s\n", err)
+				return // TODO: add some handling of errors on the manager instance
+			}
+			fmt.Fprintf(os.Stdout, "command dispatcher reconnected to socket\n")
 		}
-	}(m)
-
-	return m
+	}
 }
 
 func (m *Manager) startMpv() error {
@@ -106,9 +117,9 @@ func (m Manager) ChangeAudio(audioID string) error {
 	return err
 }
 
-// ObserveProperty instructs mpv to listen on property changes and send those changes on the out channel
-func (m Manager) ObserveProperty(propertyName string, out chan<- ObserveResponse) (int, error) {
-	return m.cd.ObserveProperty(propertyName, out)
+// SubscribeToProperty instructs mpv to listen on property changes and send those changes on the out channel
+func (m Manager) SubscribeToProperty(propertyName string, out chan<- ObserveResponse) (int, error) {
+	return m.cd.SubscribeToProperty(propertyName, out)
 }
 
 // Close cleans up manager's resources
