@@ -8,6 +8,7 @@ import (
 
 const (
 	optionsMethod = "OPTIONS"
+	headMethod    = "HEAD"
 	postMethod    = "POST"
 	getMethod     = "GET"
 
@@ -61,6 +62,18 @@ func (s *Server) pathHandler(handlers pathHandlers) http.HandlerFunc {
 		if method == optionsMethod {
 			optionsHandler(allowedMethods(handlers), res, req)
 
+			return
+		}
+
+		if method == headMethod {
+			_, ok := handlers[getMethod]
+			if !ok {
+				res.WriteHeader(404)
+
+				return
+			}
+
+			res.WriteHeader(200) // TODO: parameters validation
 			return
 		}
 
