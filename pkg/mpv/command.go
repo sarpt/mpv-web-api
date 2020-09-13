@@ -9,10 +9,6 @@ const (
 
 	// FullscreenProperty is used to inform about state of mpv being in full screen
 	FullscreenProperty = "fullscreen"
-	// FullscreenEnabled is a value of fullscreen property indicating that mpv is in full screen
-	FullscreenEnabled = "yes"
-	// FullscreenDisabled is a value of fullscreen property indicating that mpv is not in full screen
-	FullscreenDisabled = "no"
 
 	// AudioID is an option used to change the audio track
 	AudioID = "aid"
@@ -25,6 +21,25 @@ const (
 
 	// PlaybackTimeProperty is used for reading and setting current time of playback in seconds
 	PlaybackTimeProperty = "playback-time"
+
+	// PauseProperty is used for pausing or unpausing playback
+	PauseProperty = "pause"
+
+	// LoopFileProperty is used for looping currently played file
+	LoopFileProperty = "loop-file"
+
+	// ABLoopAProperty is used for setting custom looping in the specified timeframe. A is one of the two ends of the time range.
+	ABLoopAProperty = "ab-loop-a"
+
+	// ABLoopBProperty is used for setting custom looping in the specified timeframe. B is one of the two ends of the time range.
+	ABLoopBProperty = "ab-loop-a"
+
+	// YesValue is a value of properties equivalent to true (where required by property)
+	YesValue = "yes"
+	// NoValue is a value of properties equivalent to false (where required by property)
+	NoValue = "no"
+	// InfValue is a value of property specifying infinity (eg. loop)
+	InfValue = "inf"
 )
 
 var (
@@ -33,6 +48,10 @@ var (
 		FullscreenProperty,
 		PathProperty,
 		PlaybackTimeProperty,
+		PauseProperty,
+		LoopFileProperty,
+		ABLoopAProperty,
+		ABLoopBProperty,
 	}
 )
 
@@ -58,7 +77,7 @@ func NewLoadFile(path string) Command {
 
 // NewSetProperty returns command setting the property of the mpv.
 // Probably not very useful on its own, rather it's used by other Command creators eg. NewFullscreen.
-func NewSetProperty(property string, value string) Command {
+func NewSetProperty(property string, value interface{}) Command {
 	return Command{
 		name:   setPropertyCommand,
 		values: []interface{}{property, value},
@@ -67,12 +86,28 @@ func NewSetProperty(property string, value string) Command {
 
 // NewFullscreen returns the command setting whether the fullscreen should be enabled
 func NewFullscreen(enabled bool) Command {
-	var fullscreen string = FullscreenDisabled
+	var fullscreen string = NoValue
 	if enabled {
-		fullscreen = FullscreenEnabled
+		fullscreen = YesValue
 	}
 
 	return NewSetProperty(FullscreenProperty, fullscreen)
+}
+
+// NewSetPause returns the command changing the state of playback pause
+func NewSetPause(paused bool) Command {
+	return NewSetProperty(PauseProperty, paused)
+}
+
+// NewSetLoopFile returns the command changing the state of current file looping
+func NewSetLoopFile(looped bool) Command {
+	var loopedVal string = NoValue
+
+	if looped {
+		loopedVal = InfValue
+	}
+
+	return NewSetProperty(LoopFileProperty, loopedVal)
 }
 
 // NewSetAudioID returns the command changing the audio track to the specidifed audio id

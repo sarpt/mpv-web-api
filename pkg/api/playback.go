@@ -12,6 +12,8 @@ const (
 	fullscreenArg = "fullscreen"
 	subtitleIDArg = "subtitleID"
 	audioIDArg    = "audioID"
+	pauseArg      = "pause"
+	loopFileArg   = "loopFile"
 
 	playbackSseEvent = "playback"
 )
@@ -21,23 +23,27 @@ type getPlaybackResponse struct {
 }
 
 type postPlaybackResponse struct {
-	getPlaybackResponse
-	Error string `json:"error"`
+	ArgumentErrors map[string]string `json:"argumentErrors"`
+	GeneralError   string            `json:"generalError"`
 }
 
 var (
-	postFormArgumentsHandlers = map[string]func(res http.ResponseWriter, req *http.Request, s *Server) error{
+	postPlaybackFormArgumentsHandlers = map[string]func(res http.ResponseWriter, req *http.Request, s *Server) error{
 		pathArg:       pathHandler,
 		fullscreenArg: fullscreenHandler,
 		audioIDArg:    audioIDHandler,
 		subtitleIDArg: subtitleIDHandler,
+		pauseArg:      pauseHandler,
+		loopFileArg:   loopFileHandler,
 	}
 )
 
 func (s *Server) postPlaybackHandler(res http.ResponseWriter, req *http.Request) {
-	responsePayload := postPlaybackResponse{}
+	responsePayload := postPlaybackResponse{
+		ArgumentErrors: map[string]string{},
+	}
 
-	for arg, handler := range postFormArgumentsHandlers {
+	for arg, handler := range postPlaybackFormArgumentsHandlers {
 		postVal := req.PostFormValue(arg)
 		if postVal == "" {
 			continue
@@ -45,25 +51,21 @@ func (s *Server) postPlaybackHandler(res http.ResponseWriter, req *http.Request)
 
 		err := handler(res, req, s)
 		if err != nil {
-			responsePayload.Error = err.Error()
+			responsePayload.ArgumentErrors[arg] = err.Error()
 			break
 		}
 	}
 
-	responsePayload.Playback = *s.playback
 	out, err := json.Marshal(responsePayload)
 	if err != nil {
-		s.errLog.Printf("could not encode json payload: %s", err)
+		responsePayload.GeneralError = fmt.Sprintf("could not encode json payload: %s", err)
+		s.errLog.Printf(responsePayload.GeneralError)
 		res.WriteHeader(500)
 
 		return
 	}
 
-	if responsePayload.Error != "" {
-		res.WriteHeader(400)
-	} else {
-		res.WriteHeader(200)
-	}
+	res.WriteHeader(200)
 	res.Write([]byte(out))
 }
 
@@ -156,4 +158,22 @@ func subtitleIDHandler(res http.ResponseWriter, req *http.Request, s *Server) er
 	subtitleID := req.PostFormValue(subtitleIDArg)
 
 	return s.mpvManager.ChangeSubtitle(subtitleID)
+}
+
+func loopFileHandler(res http.ResponseWriter, req *http.Request, s *Server) error {
+	loopFile, err := strconv.ParseBool(req.PostFormValue(loopFileArg))
+	if err != nil {
+		return err
+	}
+
+	return s.mpvManager.LoopFile(loopFile)
+}
+
+func pauseHandler(res http.ResponseWriter, req *http.Request, s *Server) error {
+	pause, err := strconv.ParseBool(req.PostFormValue(pauseArg))
+	if err != nil {
+		return err
+	}
+
+	return s.mpvManager.ChangePause(pause)
 }

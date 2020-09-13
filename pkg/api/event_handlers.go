@@ -14,7 +14,31 @@ func (s *Server) handleFullscreenEvent(res mpv.ObserveResponse) error {
 		return errors.New("could not decode data for fullscreen change event")
 	}
 
-	s.playback.Fullscreen = enabled == mpv.FullscreenEnabled
+	s.playback.Fullscreen = enabled == mpv.YesValue
+	return nil
+}
+
+func (s *Server) handleLoopFileEvent(res mpv.ObserveResponse) error {
+	enabled, ok := res.Data.(string)
+	if !ok {
+		return errors.New("could not decode data for loop-file change event")
+	}
+
+	if enabled != mpv.NoValue {
+		s.playback.Loop.Variant = fileLoop
+	} else {
+		s.playback.Loop.Variant = ""
+	}
+	return nil
+}
+
+func (s *Server) handlePauseEvent(res mpv.ObserveResponse) error {
+	paused, ok := res.Data.(string)
+	if !ok {
+		return errors.New("could not decode data for pause change event")
+	}
+
+	s.playback.Paused = paused == mpv.YesValue
 	return nil
 }
 

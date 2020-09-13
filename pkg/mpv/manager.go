@@ -12,7 +12,7 @@ const (
 	idleArg           = "--idle"
 	inputIpcServerArg = "--input-ipc-server"
 
-	logPrefix = "mpv.Manager#"
+	managerLogPrefix = "mpv.Manager#"
 )
 
 // Manager handles dispatching of commands, while exposing a facade.
@@ -28,8 +28,8 @@ type Manager struct {
 func NewManager(mpvSocketPath string, outWriter io.Writer, errWriter io.Writer) *Manager {
 	m := &Manager{
 		socketPath: mpvSocketPath,
-		outLog:     log.New(outWriter, logPrefix, log.LstdFlags),
-		errLog:     log.New(errWriter, logPrefix, log.LstdFlags),
+		outLog:     log.New(outWriter, managerLogPrefix, log.LstdFlags),
+		errLog:     log.New(errWriter, managerLogPrefix, log.LstdFlags),
 	}
 
 	go m.watchMpvProcess()
@@ -121,6 +121,18 @@ func (m Manager) ChangeSubtitle(subtitleID string) error {
 // ChangeAudio instructs mpv to change the audio to the one with specified id
 func (m Manager) ChangeAudio(audioID string) error {
 	_, err := m.cd.Request(NewSetAudioID(audioID))
+	return err
+}
+
+// ChangePause instructs mpv to change the pause state
+func (m Manager) ChangePause(paused bool) error {
+	_, err := m.cd.Request(NewSetPause(paused))
+	return err
+}
+
+// LoopFile instructs mpv to change the loop state
+func (m Manager) LoopFile(loop bool) error {
+	_, err := m.cd.Request(NewSetLoopFile(loop))
 	return err
 }
 

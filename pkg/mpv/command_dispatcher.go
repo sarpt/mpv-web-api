@@ -33,7 +33,7 @@ var (
 
 	newline = []byte("\n")
 
-	logPrefx = "mpv.CommandDispatcher#"
+	commandDispatcherLogPrefix = "mpv.CommandDispatcher#"
 )
 
 // CommandPayload represents command payload sent to the mpv
@@ -73,6 +73,7 @@ type CommandDispatcher struct {
 	requestID                  int
 	requestIDLock              *sync.Mutex
 	propertyObservers          map[string]propertyObserver
+	propertyObserversLock      *sync.RWMutex
 	propertySubscriptionID     int
 	propertySubscriptionIDLock *sync.Mutex
 	errLog                     *log.Logger
@@ -99,9 +100,10 @@ func NewCommandDispatcher(socketPath string, errWriter io.Writer) (*CommandDispa
 		requestID:                  1,
 		requestIDLock:              &sync.Mutex{},
 		propertyObservers:          make(map[string]propertyObserver),
+		propertyObserversLock:      &sync.RWMutex{},
 		propertySubscriptionID:     1,
 		propertySubscriptionIDLock: &sync.Mutex{},
-		errLog:                     log.New(errWriter, logPrefx, log.LstdFlags),
+		errLog:                     log.New(errWriter, commandDispatcherLogPrefix, log.LstdFlags),
 	}
 
 	err := cd.connectToSocket()
@@ -122,6 +124,9 @@ func (cd *CommandDispatcher) connectToSocket() error {
 }
 
 func (cd *CommandDispatcher) reobserveProperties() error {
+	cd.propertyObserversLock.RLock()
+	defer cd.propertyObserversLock.RUnlock()
+
 	for propertyName := range cd.propertyObservers {
 		err := cd.observeProperty(propertyName)
 		if err != nil {
@@ -137,7 +142,10 @@ func (cd *CommandDispatcher) addPropertyObserver(propertyName string) (propertyO
 		responsePayloads: make(chan ResponsePayload),
 		subscriptions:    make(map[int]propertySubscriber),
 	}
+
+	cd.propertyObserversLock.Lock()
 	cd.propertyObservers[propertyName] = newObserver
+	cd.propertyObserversLock.Unlock()
 
 	err := cd.observeProperty(propertyName)
 	return newObserver, err
@@ -181,7 +189,7 @@ func (cd *CommandDispatcher) SubscribeToProperty(propertyName string, out chan<-
 	done := make(chan bool)
 	propertySubscriptionID := cd.reservePropertySubscriptionID()
 
-	propertyObserver, ok := cd.propertyObservers[propertyName]
+	propertyObserver, ok := cd.getPropertyObserver(propertyName)
 	if !ok {
 		newObserver, err := cd.addPropertyObserver(propertyName)
 		if err != nil {
@@ -220,17 +228,17 @@ func (cd *CommandDispatcher) SubscribeToProperty(propertyName string, out chan<-
 
 // UnobserveProperty instructs command dispatcher to stop sending updates about property on specified id.
 func (cd *CommandDispatcher) UnobserveProperty(propertyName string, id int) error {
-	propertyObservers, ok := cd.propertyObservers[propertyName]
+	propertyObserver, ok := cd.getPropertyObserver(propertyName)
 	if !ok {
 		return ErrNoPropertyObserver
 	}
 
-	propertyObserver, ok := propertyObservers.subscriptions[id]
+	propertySubscription, ok := propertyObserver.subscriptions[id]
 	if !ok {
 		return ErrNoPropertySubscription
 	}
 
-	propertyObserver.done <- true
+	propertySubscription.done <- true
 	return nil
 }
 
@@ -279,6 +287,14 @@ func (cd *CommandDispatcher) Dispatch(command Command, requestID int) error {
 // Close makes connection by ipc to the mpv closed
 func (cd CommandDispatcher) Close() {
 	cd.conn.Close()
+}
+
+func (cd CommandDispatcher) getPropertyObserver(propertyName string) (propertyObserver, bool) {
+	cd.propertyObserversLock.RLock()
+	defer cd.propertyObserversLock.RUnlock()
+
+	propertyObserver, ok := cd.propertyObservers[propertyName]
+	return propertyObserver, ok
 }
 
 func (cd *CommandDispatcher) reserveRequestID() int {
@@ -334,7 +350,7 @@ func (cd CommandDispatcher) listenOnUnixSocket() {
 			}
 
 			if result.Event == propertyChangeEvent {
-				propertyObserver, ok := cd.propertyObservers[result.Name]
+				propertyObserver, ok := cd.getPropertyObserver(result.Name)
 				if !ok {
 					cd.errLog.Printf("observe property event provided to not observed property %s\n", result.Name)
 					continue

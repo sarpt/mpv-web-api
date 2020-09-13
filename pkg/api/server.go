@@ -15,7 +15,9 @@ import (
 )
 
 const (
-	logPrefix = "api.Server#"
+	logPrefix             = "api.Server#"
+	fileLoop  loopVariant = "file"
+	abLoop    loopVariant = "ab"
 )
 
 var (
@@ -37,6 +39,15 @@ type Movie struct {
 	VideoStreams    []probe.VideoStream
 }
 
+type loopVariant string
+
+// PlaybackLoop contains information about playback loop
+type PlaybackLoop struct {
+	Variant loopVariant
+	ATime   int
+	BTime   int
+}
+
 // Playback contains information about currently played movie file
 type Playback struct {
 	CurrentTime        float64
@@ -45,6 +56,8 @@ type Playback struct {
 	Movie              Movie
 	SelectedAudioID    int
 	SelectedSubtitleID int
+	Paused             bool
+	Loop               PlaybackLoop
 }
 
 // Server is used to serve API and hold state accessible to the API
@@ -126,6 +139,8 @@ func (s *Server) initWatchers() error {
 	observeResponses := make(chan mpv.ObserveResponse)
 	observeHandlers := map[string]observeHandler{
 		mpv.FullscreenProperty:   s.handleFullscreenEvent,
+		mpv.LoopFileProperty:     s.handleLoopFileEvent,
+		mpv.PauseProperty:        s.handlePauseEvent,
 		mpv.PathProperty:         s.handlePathEvent,
 		mpv.PlaybackTimeProperty: s.handlePlaybackTimeEvent,
 	}
