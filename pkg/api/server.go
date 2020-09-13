@@ -4,12 +4,22 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"os"
 	"sync"
 
 	"github.com/sarpt/mpv-web-api/pkg/mpv"
 	"github.com/sarpt/mpv-web-api/pkg/probe"
+)
+
+const (
+	logPrefix = "api.Server#"
+)
+
+var (
+	sseEventEnd = []byte("\n\n")
 )
 
 type observeHandler = func(res mpv.ObserveResponse) error
@@ -48,6 +58,8 @@ type Server struct {
 	playbackChanges       chan Playback
 	playbackObservers     map[string]chan Playback
 	playbackObserversLock *sync.RWMutex
+	outLog                *log.Logger
+	errLog                *log.Logger
 }
 
 // Config controls behaviour of the api serve
@@ -56,11 +68,20 @@ type Config struct {
 	AllowCors         bool
 	MoviesDirectories []string
 	MpvSocketPath     string
+	outWriter         io.Writer
+	errWriter         io.Writer
 }
 
 // NewServer prepares and returns a server that can be used to handle API
 func NewServer(cfg Config) (*Server, error) {
-	mpvManager := mpv.NewManager(cfg.MpvSocketPath)
+	if cfg.outWriter == nil {
+		cfg.outWriter = os.Stdout
+	}
+	if cfg.errWriter == nil {
+		cfg.errWriter = os.Stderr
+	}
+
+	mpvManager := mpv.NewManager(cfg.MpvSocketPath, cfg.outWriter, cfg.errWriter)
 
 	movies := probeDirectories(cfg.MoviesDirectories)
 	playback := &Playback{}
@@ -75,6 +96,8 @@ func NewServer(cfg Config) (*Server, error) {
 		make(chan Playback),
 		map[string]chan Playback{},
 		&sync.RWMutex{},
+		log.New(cfg.outWriter, logPrefix, log.LstdFlags),
+		log.New(cfg.errWriter, logPrefix, log.LstdFlags),
 	}, nil
 }
 
@@ -90,7 +113,7 @@ func (s *Server) Serve() error {
 		return errors.New("could not start watching for properties")
 	}
 
-	fmt.Fprintf(os.Stdout, "running server at %s\n", s.address)
+	s.outLog.Printf("running server at %s\n", s.address)
 	return serv.ListenAndServe()
 }
 
@@ -136,7 +159,7 @@ func (s *Server) initWatchers() error {
 
 			err := observeHandler(observeResponse)
 			if err != nil {
-				fmt.Fprintf(os.Stdout, "could not handle property '%s' observer handling: %s\n", observeResponse.Property, err)
+				s.errLog.Printf("could not handle property '%s' observer handling: %s\n", observeResponse.Property, err)
 			}
 			s.playbackChanges <- *s.playback
 		}
@@ -172,7 +195,7 @@ func formatSseEvent(eventName string, data []byte) []byte {
 		out = append(out, []byte(fmt.Sprintf("data:%s\n", dataEntry))...)
 	}
 
-	out = append(out, []byte("\n\n")...)
+	out = append(out, sseEventEnd...)
 	return out
 }
 

@@ -57,7 +57,7 @@ func NewLoadFile(path string) Command {
 }
 
 // NewSetProperty returns command setting the property of the mpv.
-// Probably not very usefull on its own, rather it's used by other Command creators eg. NewFullscreen.
+// Probably not very useful on its own, rather it's used by other Command creators eg. NewFullscreen.
 func NewSetProperty(property string, value string) Command {
 	return Command{
 		name:   setPropertyCommand,

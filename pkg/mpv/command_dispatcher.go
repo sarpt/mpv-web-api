@@ -4,10 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
+	"log"
 	"net"
-	"os"
 	"sync"
 	"time"
 )
@@ -33,6 +32,8 @@ var (
 	ErrNoPropertySubscription = errors.New("could not find subscription for a provided subscription id")
 
 	newline = []byte("\n")
+
+	logPrefx = "mpv.CommandDispatcher#"
 )
 
 // CommandPayload represents command payload sent to the mpv
@@ -74,6 +75,7 @@ type CommandDispatcher struct {
 	propertyObservers          map[string]propertyObserver
 	propertySubscriptionID     int
 	propertySubscriptionIDLock *sync.Mutex
+	errLog                     *log.Logger
 }
 
 type propertyObserver struct {
@@ -88,7 +90,7 @@ type propertySubscriber struct {
 
 // NewCommandDispatcher returns dispatcher connected to the socket.
 // Error is returned when connection to the socket fails.
-func NewCommandDispatcher(socketPath string) (*CommandDispatcher, error) {
+func NewCommandDispatcher(socketPath string, errWriter io.Writer) (*CommandDispatcher, error) {
 	cd := &CommandDispatcher{
 		socketPath:                 socketPath,
 		listeningOnSocket:          false,
@@ -99,6 +101,7 @@ func NewCommandDispatcher(socketPath string) (*CommandDispatcher, error) {
 		propertyObservers:          make(map[string]propertyObserver),
 		propertySubscriptionID:     1,
 		propertySubscriptionIDLock: &sync.Mutex{},
+		errLog:                     log.New(errWriter, logPrefx, log.LstdFlags),
 	}
 
 	err := cd.connectToSocket()
@@ -304,9 +307,9 @@ func (cd CommandDispatcher) listenOnUnixSocket() {
 	go func() {
 		err := readNewlineSeparatedJSONs(cd.conn, payloads)
 		if err == io.EOF {
-			fmt.Fprintf(os.Stderr, "connection closed\n")
+			cd.errLog.Println("connection closed")
 		} else {
-			fmt.Fprintf(os.Stderr, "could not read the payload from the connection\n")
+			cd.errLog.Println("could not read the payload from the connection")
 		}
 
 		close(payloads)
@@ -326,14 +329,14 @@ func (cd CommandDispatcher) listenOnUnixSocket() {
 
 			err := json.Unmarshal(payload, &result)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "could not parse the response: %s\npayload: %s\n", err, payload)
+				cd.errLog.Printf("could not parse the response: %s\npayload: %s\n", err, payload)
 				continue
 			}
 
 			if result.Event == propertyChangeEvent {
 				propertyObserver, ok := cd.propertyObservers[result.Name]
 				if !ok {
-					fmt.Fprintf(os.Stderr, "observe property event provided to not observed property %s\n", result.Name)
+					cd.errLog.Printf("observe property event provided to not observed property %s\n", result.Name)
 					continue
 				}
 
@@ -345,7 +348,7 @@ func (cd CommandDispatcher) listenOnUnixSocket() {
 
 				request, ok := cd.requests[result.RequestID]
 				if !ok {
-					fmt.Fprintf(os.Stderr, "result %d provided to not dispatched request\n", result.RequestID)
+					cd.errLog.Printf("result %d provided to not dispatched request\n", result.RequestID)
 					continue
 				}
 

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"strconv"
 )
 
@@ -54,7 +53,7 @@ func (s *Server) postPlaybackHandler(res http.ResponseWriter, req *http.Request)
 	responsePayload.Playback = *s.playback
 	out, err := json.Marshal(responsePayload)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "could not encode json payload: %s", err)
+		s.errLog.Printf("could not encode json payload: %s", err)
 		res.WriteHeader(500)
 
 		return
@@ -112,12 +111,12 @@ func (s *Server) getSsePlaybackHandler(res http.ResponseWriter, req *http.Reques
 
 			out, err := json.Marshal(playback)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "could not write to the client")
+				s.errLog.Println("could not write to the client")
 			}
 
 			_, err = res.Write(formatSseEvent(playbackSseEvent, out))
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "could not write to the client")
+				s.errLog.Println("could not write to the client")
 			}
 
 			flusher.Flush()
@@ -132,7 +131,7 @@ func (s *Server) getSsePlaybackHandler(res http.ResponseWriter, req *http.Reques
 
 func pathHandler(res http.ResponseWriter, req *http.Request, s *Server) error {
 	filePath := req.PostFormValue(pathArg)
-	fmt.Fprintf(os.Stdout, "playing file '%s' due to request from %s\n", filePath, req.RemoteAddr)
+	s.outLog.Printf("playing file '%s' due to request from %s\n", filePath, req.RemoteAddr)
 
 	return s.mpvManager.LoadFile(filePath)
 }
@@ -143,7 +142,7 @@ func fullscreenHandler(res http.ResponseWriter, req *http.Request, s *Server) er
 		return err
 	}
 
-	fmt.Fprintf(os.Stdout, "changing fullscreen to %t due to request from %s\n", fullscreen, req.RemoteAddr)
+	s.outLog.Printf("changing fullscreen to %t due to request from %s\n", fullscreen, req.RemoteAddr)
 	return s.mpvManager.ChangeFullscreen(fullscreen)
 }
 
