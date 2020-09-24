@@ -11,9 +11,11 @@ type getMoviesRespone struct {
 }
 
 func (s *Server) getMoviesHandler(res http.ResponseWriter, req *http.Request) {
+	s.moviesLock.Lock()
 	moviesResponse := getMoviesRespone{
 		Movies: s.movies,
 	}
+	s.moviesLock.Unlock()
 
 	response, err := json.Marshal(&moviesResponse)
 	if err != nil {

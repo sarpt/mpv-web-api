@@ -15,7 +15,8 @@ const (
 	pauseArg      = "pause"
 	loopFileArg   = "loopFile"
 
-	playbackSseEvent = "playback"
+	playbackSseEvent       = "playback"
+	multiPartFormMaxMemory = 32 << 20
 )
 
 type getPlaybackResponse struct {
@@ -43,16 +44,26 @@ func (s *Server) postPlaybackHandler(res http.ResponseWriter, req *http.Request)
 		ArgumentErrors: map[string]string{},
 	}
 
-	for arg, handler := range postPlaybackFormArgumentsHandlers {
-		postVal := req.PostFormValue(arg)
-		if postVal == "" {
+	err := req.ParseMultipartForm(multiPartFormMaxMemory)
+	if err != nil {
+		responsePayload.GeneralError = fmt.Sprintf("could not parse POST form data: %s", err)
+		s.errLog.Printf(responsePayload.GeneralError)
+		res.WriteHeader(400)
+
+		return
+	}
+
+	for arg := range req.PostForm {
+		handler, ok := postPlaybackFormArgumentsHandlers[arg]
+		if !ok {
+			responsePayload.ArgumentErrors[arg] = fmt.Sprintf("the %s argument is invalid", arg)
 			continue
 		}
 
 		err := handler(res, req, s)
 		if err != nil {
 			responsePayload.ArgumentErrors[arg] = err.Error()
-			break
+			continue
 		}
 	}
 

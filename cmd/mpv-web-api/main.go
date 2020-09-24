@@ -37,8 +37,20 @@ func init() {
 }
 
 func main() {
-	var moviesDirectories []string
+	cfg := api.Config{
+		MpvSocketPath: mpvSocketPath,
+		Address:       *address,
+		AllowCors:     *allowCors,
+	}
+	server, err := api.NewServer(cfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%s\n", err)
 
+		return
+	}
+	defer server.Close()
+
+	var moviesDirectories []string
 	if len(dir.Values()) == 0 {
 		wd, err := os.Getwd()
 		if err == nil {
@@ -51,20 +63,7 @@ func main() {
 	}
 
 	fmt.Fprintf(os.Stdout, "directories being watched for movie files:\n%s\n", strings.Join(moviesDirectories, "\n"))
-
-	cfg := api.Config{
-		MpvSocketPath:     mpvSocketPath,
-		MoviesDirectories: moviesDirectories,
-		Address:           *address,
-		AllowCors:         *allowCors,
-	}
-	server, err := api.NewServer(cfg)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s\n", err)
-
-		return
-	}
-	defer server.Close()
+	server.AddDirectories(moviesDirectories)
 
 	err = server.Serve()
 	if err != nil {

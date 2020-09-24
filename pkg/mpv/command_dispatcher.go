@@ -91,8 +91,8 @@ type propertySubscriber struct {
 
 // NewCommandDispatcher returns dispatcher connected to the socket.
 // Error is returned when connection to the socket fails.
-func NewCommandDispatcher(socketPath string, errWriter io.Writer) (*CommandDispatcher, error) {
-	cd := &CommandDispatcher{
+func NewCommandDispatcher(socketPath string, errWriter io.Writer) *CommandDispatcher {
+	return &CommandDispatcher{
 		socketPath:                 socketPath,
 		listeningOnSocket:          false,
 		linteningOnSocketLock:      &sync.RWMutex{},
@@ -105,13 +105,9 @@ func NewCommandDispatcher(socketPath string, errWriter io.Writer) (*CommandDispa
 		propertySubscriptionIDLock: &sync.Mutex{},
 		errLog:                     log.New(errWriter, commandDispatcherLogPrefix, log.LstdFlags),
 	}
-
-	err := cd.connectToSocket()
-
-	return cd, err
 }
 
-func (cd *CommandDispatcher) connectToSocket() error {
+func (cd *CommandDispatcher) connectToMpvSocket() error {
 	conn, err := waitForSocketConnection(cd.socketPath)
 	if err != nil {
 		return err
@@ -123,7 +119,7 @@ func (cd *CommandDispatcher) connectToSocket() error {
 	return nil
 }
 
-func (cd *CommandDispatcher) reobserveProperties() error {
+func (cd *CommandDispatcher) observeProperties() error {
 	cd.propertyObserversLock.RLock()
 	defer cd.propertyObserversLock.RUnlock()
 
@@ -137,6 +133,9 @@ func (cd *CommandDispatcher) reobserveProperties() error {
 	return nil
 }
 
+// addPropertyObserver creates a new observer for a specific property.
+// The request to observer property will not be made if the connection is not estabilished since it will fail,
+// but the observer is added to propertyObservers map which will be used during connection to start observing properties on a new connection.
 func (cd *CommandDispatcher) addPropertyObserver(propertyName string) (propertyObserver, error) {
 	newObserver := propertyObserver{
 		responsePayloads: make(chan ResponsePayload),
@@ -146,6 +145,11 @@ func (cd *CommandDispatcher) addPropertyObserver(propertyName string) (propertyO
 	cd.propertyObserversLock.Lock()
 	cd.propertyObservers[propertyName] = newObserver
 	cd.propertyObserversLock.Unlock()
+
+	// Do not try to send a request when dispatcher is not connected to the MPV instance through the socket.
+	if !cd.Connected() {
+		return newObserver, nil
+	}
 
 	err := cd.observeProperty(propertyName)
 	return newObserver, err
@@ -158,25 +162,30 @@ func (cd CommandDispatcher) observeProperty(propertyName string) error {
 	return err
 }
 
-// ReconnectToSocket attempts to reconnect to the unix socket.
-// When connection is already estabilished, ErrConnectionInProgress will be returned as reconnection is an invalid operation while connection is in progress.
-// During the process the property observers already registered on command dispatcher are rerequested.
-// It's necessary since the instance of mpv listening after reconnection will most likely be a different one than the previous one.
-func (cd *CommandDispatcher) ReconnectToSocket() error {
-	cd.linteningOnSocketLock.RLock()
-	listeningOnTheSocket := cd.listeningOnSocket
-	cd.linteningOnSocketLock.RUnlock()
-
-	if listeningOnTheSocket {
+// Connect attempts to connect to the unix socket through which dispatcher will communicate with MPV.
+// When connection is already estabilished, ErrConnectionInProgress will be returned as connection is an invalid operation while dispatcher is already connected.
+// During the process the property observers already registered on command dispatcher are observed.
+// It's necessary since either there command dispatcher was reconnected (due to MPV instance closing or other), thus losing all observers,
+// or subscriptions occured before connection was made, resulting in no request being sent since there was no MPV instance to receive those requests.
+func (cd *CommandDispatcher) Connect() error {
+	if cd.Connected() {
 		return ErrConnectionInProgress
 	}
 
-	err := cd.connectToSocket()
+	err := cd.connectToMpvSocket()
 	if err != nil {
 		return err
 	}
 
-	return cd.reobserveProperties()
+	return cd.observeProperties()
+}
+
+// Connected notifies whether CommandDispatcher is ready to make requests and observe properties.
+func (cd *CommandDispatcher) Connected() bool {
+	cd.linteningOnSocketLock.RLock()
+	defer cd.linteningOnSocketLock.RUnlock()
+
+	return cd.listeningOnSocket
 }
 
 // SubscribeToProperty listens to property mpv events.
@@ -189,7 +198,7 @@ func (cd *CommandDispatcher) SubscribeToProperty(propertyName string, out chan<-
 	done := make(chan bool)
 	propertySubscriptionID := cd.reservePropertySubscriptionID()
 
-	propertyObserver, ok := cd.getPropertyObserver(propertyName)
+	propertyObserver, ok := cd.propertyObserver(propertyName)
 	if !ok {
 		newObserver, err := cd.addPropertyObserver(propertyName)
 		if err != nil {
@@ -228,7 +237,7 @@ func (cd *CommandDispatcher) SubscribeToProperty(propertyName string, out chan<-
 
 // UnobserveProperty instructs command dispatcher to stop sending updates about property on specified id.
 func (cd *CommandDispatcher) UnobserveProperty(propertyName string, id int) error {
-	propertyObserver, ok := cd.getPropertyObserver(propertyName)
+	propertyObserver, ok := cd.propertyObserver(propertyName)
 	if !ok {
 		return ErrNoPropertyObserver
 	}
@@ -268,7 +277,7 @@ func (cd *CommandDispatcher) Request(command Command) (Response, error) {
 	}, nil
 }
 
-// Dispatch sends a commmand with specified requestID to the mpv using socket in path provided during construction.
+// Dispatch sends a commmand with specified requestID to the mpv using socket.
 // Returns error if command was not correctly dispatched.
 func (cd *CommandDispatcher) Dispatch(command Command, requestID int) error {
 	payload, err := prepareCommandPayload(command, requestID)
@@ -284,12 +293,12 @@ func (cd *CommandDispatcher) Dispatch(command Command, requestID int) error {
 	return nil
 }
 
-// Close makes connection by ipc to the mpv closed
+// Close makes connection by ipc to the mpv closed.
 func (cd CommandDispatcher) Close() {
 	cd.conn.Close()
 }
 
-func (cd CommandDispatcher) getPropertyObserver(propertyName string) (propertyObserver, bool) {
+func (cd CommandDispatcher) propertyObserver(propertyName string) (propertyObserver, bool) {
 	cd.propertyObserversLock.RLock()
 	defer cd.propertyObserversLock.RUnlock()
 
@@ -350,7 +359,7 @@ func (cd CommandDispatcher) listenOnUnixSocket() {
 			}
 
 			if result.Event == propertyChangeEvent {
-				propertyObserver, ok := cd.getPropertyObserver(result.Name)
+				propertyObserver, ok := cd.propertyObserver(result.Name)
 				if !ok {
 					cd.errLog.Printf("observe property event provided to not observed property %s\n", result.Name)
 					continue

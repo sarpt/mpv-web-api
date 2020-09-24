@@ -26,10 +26,13 @@ type Manager struct {
 
 // NewManager starts mpv process and instantiates new command dispatcher, preparing new Manager for use
 func NewManager(mpvSocketPath string, outWriter io.Writer, errWriter io.Writer) *Manager {
+	errLog := log.New(errWriter, managerLogPrefix, log.LstdFlags)
+
 	m := &Manager{
 		socketPath: mpvSocketPath,
 		outLog:     log.New(outWriter, managerLogPrefix, log.LstdFlags),
-		errLog:     log.New(errWriter, managerLogPrefix, log.LstdFlags),
+		errLog:     errLog,
+		cd:         NewCommandDispatcher(mpvSocketPath, errLog.Writer()),
 	}
 
 	go m.watchMpvProcess()
@@ -61,21 +64,12 @@ func (m *Manager) watchMpvProcess() {
 		}
 		m.outLog.Println("mpv process started")
 
-		if m.cd == nil {
-			err = m.startCommandDispatcher()
-			if err != nil {
-				m.errLog.Printf("could not start command dispatcher due to error: %s\n", err)
-				return // TODO: add some handling of errors on the manager instance
-			}
-			m.outLog.Println("command dispatcher started")
-		} else {
-			err = m.cd.ReconnectToSocket()
-			if err != nil {
-				m.errLog.Printf("command dispatcher could not reconnect to socket due to error: %s\n", err)
-				return // TODO: add some handling of errors on the manager instance
-			}
-			m.outLog.Println("command dispatcher reconnected to socket")
+		err = m.cd.Connect()
+		if err != nil {
+			m.errLog.Printf("command dispatcher could not connect to socket due to error: %s\n", err)
+			return // TODO: add some handling of errors on the manager instance
 		}
+		m.outLog.Println("command dispatcher connected to socket")
 	}
 }
 
@@ -87,16 +81,6 @@ func (m *Manager) startMpv() error {
 	}
 
 	m.mpvCmd = cmd
-	return nil
-}
-
-func (m *Manager) startCommandDispatcher() error {
-	cd, err := NewCommandDispatcher(m.socketPath, m.errLog.Writer())
-	if err != nil {
-		return err
-	}
-
-	m.cd = cd
 	return nil
 }
 

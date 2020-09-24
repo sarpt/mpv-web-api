@@ -65,6 +65,7 @@ type Server struct {
 	address               string
 	allowCors             bool
 	movies                []Movie
+	moviesLock            *sync.RWMutex
 	mpvManager            *mpv.Manager
 	mpvSocketPath         string
 	playback              *Playback
@@ -77,12 +78,11 @@ type Server struct {
 
 // Config controls behaviour of the api serve
 type Config struct {
-	Address           string
-	AllowCors         bool
-	MoviesDirectories []string
-	MpvSocketPath     string
-	outWriter         io.Writer
-	errWriter         io.Writer
+	Address       string
+	AllowCors     bool
+	MpvSocketPath string
+	outWriter     io.Writer
+	errWriter     io.Writer
 }
 
 // NewServer prepares and returns a server that can be used to handle API
@@ -96,13 +96,13 @@ func NewServer(cfg Config) (*Server, error) {
 
 	mpvManager := mpv.NewManager(cfg.MpvSocketPath, cfg.outWriter, cfg.errWriter)
 
-	movies := probeDirectories(cfg.MoviesDirectories)
 	playback := &Playback{}
 
 	return &Server{
 		cfg.Address,
 		cfg.AllowCors,
-		movies,
+		[]Movie{},
+		&sync.RWMutex{},
 		mpvManager,
 		cfg.MpvSocketPath,
 		playback,
@@ -145,41 +145,48 @@ func (s *Server) initWatchers() error {
 		mpv.PlaybackTimeProperty: s.handlePlaybackTimeEvent,
 	}
 
-	go func() {
-		for {
-			playback, ok := <-s.playbackChanges
-			if !ok {
-				return
-			}
+	go s.watchPlaybackChanges()
+	go s.watchObservePropertyResponses(observeHandlers, observeResponses)
 
-			s.playbackObserversLock.RLock()
-			for _, observer := range s.playbackObservers {
-				observer <- playback
-			}
-			s.playbackObserversLock.RUnlock()
+	return s.observeProperties(observeResponses)
+}
+
+func (s Server) watchPlaybackChanges() {
+	for {
+		playback, ok := <-s.playbackChanges
+		if !ok {
+			return
 		}
-	}()
 
-	go func() {
-		for {
-			observeResponse, open := <-observeResponses
-			if !open {
-				return
-			}
-
-			observeHandler, ok := observeHandlers[observeResponse.Property]
-			if !ok {
-				continue
-			}
-
-			err := observeHandler(observeResponse)
-			if err != nil {
-				s.errLog.Printf("could not handle property '%s' observer handling: %s\n", observeResponse.Property, err)
-			}
-			s.playbackChanges <- *s.playback
+		s.playbackObserversLock.RLock()
+		for _, observer := range s.playbackObservers {
+			observer <- playback
 		}
-	}()
+		s.playbackObserversLock.RUnlock()
+	}
+}
 
+func (s Server) watchObservePropertyResponses(observeHandlers map[string]observeHandler, observeResponses chan mpv.ObserveResponse) {
+	for {
+		observeResponse, open := <-observeResponses
+		if !open {
+			return
+		}
+
+		observeHandler, ok := observeHandlers[observeResponse.Property]
+		if !ok {
+			continue
+		}
+
+		err := observeHandler(observeResponse)
+		if err != nil {
+			s.errLog.Printf("could not handle property '%s' observer handling: %s\n", observeResponse.Property, err)
+		}
+		s.playbackChanges <- *s.playback
+	}
+}
+
+func (s Server) observeProperties(observeResponses chan mpv.ObserveResponse) error {
 	for _, propertyName := range mpv.ObservableProperties {
 		_, err := s.mpvManager.SubscribeToProperty(propertyName, observeResponses)
 		if err != nil {
@@ -214,29 +221,16 @@ func formatSseEvent(eventName string, data []byte) []byte {
 	return out
 }
 
-func probeDirectories(directories []string) []Movie {
-	var movies []Movie
-
-	probeResults, _ := probe.Directories(directories)
-	for _, probeResult := range probeResults {
-		if !probeResult.IsMovieFile() {
-			continue
-		}
-
-		movie := Movie{
-			Title:           probeResult.Format.Title,
-			FormatName:      probeResult.Format.Name,
-			FormatLongName:  probeResult.Format.LongName,
-			Chapters:        probeResult.Chapters,
-			Path:            probeResult.Path,
-			VideoStreams:    probeResult.VideoStreams,
-			AudioStreams:    probeResult.AudioStreams,
-			SubtitleStreams: probeResult.SubtitleStreams,
-			Duration:        probeResult.Format.Duration,
-		}
-
-		movies = append(movies, movie)
+func mapProbeResultToMovie(result probe.Result) Movie {
+	return Movie{
+		Title:           result.Format.Title,
+		FormatName:      result.Format.Name,
+		FormatLongName:  result.Format.LongName,
+		Chapters:        result.Chapters,
+		Path:            result.Path,
+		VideoStreams:    result.VideoStreams,
+		AudioStreams:    result.AudioStreams,
+		SubtitleStreams: result.SubtitleStreams,
+		Duration:        result.Format.Duration,
 	}
-
-	return movies
 }
