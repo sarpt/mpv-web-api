@@ -121,7 +121,7 @@ func (m Manager) LoopFile(loop bool) error {
 }
 
 // SubscribeToProperty instructs mpv to listen on property changes and send those changes on the out channel
-func (m Manager) SubscribeToProperty(propertyName string, out chan<- ObserveResponse) (int, error) {
+func (m Manager) SubscribeToProperty(propertyName string, out chan<- ObservePropertyResponse) (int, error) {
 	return m.cd.SubscribeToProperty(propertyName, out)
 }
 

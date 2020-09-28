@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -11,69 +10,34 @@ import (
 	"sync"
 
 	"github.com/sarpt/mpv-web-api/pkg/mpv"
-	"github.com/sarpt/mpv-web-api/pkg/probe"
 )
 
 const (
-	logPrefix             = "api.Server#"
-	fileLoop  loopVariant = "file"
-	abLoop    loopVariant = "ab"
+	logPrefix = "api.Server#"
 )
 
-var (
-	sseEventEnd = []byte("\n\n")
-)
-
-type observeHandler = func(res mpv.ObserveResponse) error
-
-// Movie specifies information about a movie file that can be played
-type Movie struct {
-	Title           string
-	FormatName      string
-	FormatLongName  string
-	Chapters        []probe.Chapter
-	AudioStreams    []probe.AudioStream
-	Duration        float64
-	Path            string
-	SubtitleStreams []probe.SubtitleStream
-	VideoStreams    []probe.VideoStream
-}
-
-type loopVariant string
-
-// PlaybackLoop contains information about playback loop
-type PlaybackLoop struct {
-	Variant loopVariant
-	ATime   int
-	BTime   int
-}
-
-// Playback contains information about currently played movie file
-type Playback struct {
-	CurrentTime        float64
-	CurrentChapterIdx  int
-	Fullscreen         bool
-	Movie              Movie
-	SelectedAudioID    int
-	SelectedSubtitleID int
-	Paused             bool
-	Loop               PlaybackLoop
-}
+type observePropertyHandler = func(res mpv.ObservePropertyResponse) error
 
 // Server is used to serve API and hold state accessible to the API
 type Server struct {
-	address               string
-	allowCors             bool
-	movies                []Movie
-	moviesLock            *sync.RWMutex
-	mpvManager            *mpv.Manager
-	mpvSocketPath         string
-	playback              *Playback
-	playbackChanges       chan Playback
-	playbackObservers     map[string]chan Playback
-	playbackObserversLock *sync.RWMutex
-	outLog                *log.Logger
-	errLog                *log.Logger
+	address                    string
+	allowCors                  bool
+	directories                []string
+	directoriesLock            *sync.RWMutex
+	movies                     []Movie
+	moviesLock                 *sync.RWMutex
+	moviesChanges              chan MoviesChange
+	moviesChangesLock          *sync.RWMutex
+	moviesChangesObservers     map[string]chan MoviesChange
+	moviesChangesObserversLock *sync.RWMutex
+	mpvManager                 *mpv.Manager
+	mpvSocketPath              string
+	playback                   *Playback
+	playbackChanges            chan Playback
+	playbackObservers          map[string]chan Playback
+	playbackObserversLock      *sync.RWMutex
+	errLog                     *log.Logger
+	outLog                     *log.Logger
 }
 
 // Config controls behaviour of the api serve
@@ -96,16 +60,20 @@ func NewServer(cfg Config) (*Server, error) {
 
 	mpvManager := mpv.NewManager(cfg.MpvSocketPath, cfg.outWriter, cfg.errWriter)
 
-	playback := &Playback{}
-
 	return &Server{
 		cfg.Address,
 		cfg.AllowCors,
+		[]string{},
+		&sync.RWMutex{},
 		[]Movie{},
+		&sync.RWMutex{},
+		make(chan MoviesChange),
+		&sync.RWMutex{},
+		map[string]chan MoviesChange{},
 		&sync.RWMutex{},
 		mpvManager,
 		cfg.MpvSocketPath,
-		playback,
+		&Playback{},
 		make(chan Playback),
 		map[string]chan Playback{},
 		&sync.RWMutex{},
@@ -136,8 +104,8 @@ func (s Server) Close() {
 }
 
 func (s *Server) initWatchers() error {
-	observeResponses := make(chan mpv.ObserveResponse)
-	observeHandlers := map[string]observeHandler{
+	observePropertyResponses := make(chan mpv.ObservePropertyResponse)
+	observePropertyHandlers := map[string]observePropertyHandler{
 		mpv.FullscreenProperty:   s.handleFullscreenEvent,
 		mpv.LoopFileProperty:     s.handleLoopFileEvent,
 		mpv.PauseProperty:        s.handlePauseEvent,
@@ -146,47 +114,31 @@ func (s *Server) initWatchers() error {
 	}
 
 	go s.watchPlaybackChanges()
-	go s.watchObservePropertyResponses(observeHandlers, observeResponses)
+	go s.watchObservePropertyResponses(observePropertyHandlers, observePropertyResponses)
 
-	return s.observeProperties(observeResponses)
+	return s.observeProperties(observePropertyResponses)
 }
 
-func (s Server) watchPlaybackChanges() {
+func (s Server) watchObservePropertyResponses(handlers map[string]observePropertyHandler, responses chan mpv.ObservePropertyResponse) {
 	for {
-		playback, ok := <-s.playbackChanges
-		if !ok {
-			return
-		}
-
-		s.playbackObserversLock.RLock()
-		for _, observer := range s.playbackObservers {
-			observer <- playback
-		}
-		s.playbackObserversLock.RUnlock()
-	}
-}
-
-func (s Server) watchObservePropertyResponses(observeHandlers map[string]observeHandler, observeResponses chan mpv.ObserveResponse) {
-	for {
-		observeResponse, open := <-observeResponses
+		observePropertyResponse, open := <-responses
 		if !open {
 			return
 		}
 
-		observeHandler, ok := observeHandlers[observeResponse.Property]
+		observeHandler, ok := handlers[observePropertyResponse.Property]
 		if !ok {
 			continue
 		}
 
-		err := observeHandler(observeResponse)
+		err := observeHandler(observePropertyResponse)
 		if err != nil {
-			s.errLog.Printf("could not handle property '%s' observer handling: %s\n", observeResponse.Property, err)
+			s.errLog.Printf("could not handle property '%s' observer handling: %s\n", observePropertyResponse.Property, err)
 		}
-		s.playbackChanges <- *s.playback
 	}
 }
 
-func (s Server) observeProperties(observeResponses chan mpv.ObserveResponse) error {
+func (s Server) observeProperties(observeResponses chan mpv.ObservePropertyResponse) error {
 	for _, propertyName := range mpv.ObservableProperties {
 		_, err := s.mpvManager.SubscribeToProperty(propertyName, observeResponses)
 		if err != nil {
@@ -195,42 +147,4 @@ func (s Server) observeProperties(observeResponses chan mpv.ObserveResponse) err
 	}
 
 	return nil
-}
-
-func (s Server) movieByPath(path string) (Movie, error) {
-	for _, movie := range s.movies {
-		if movie.Path == path {
-			return movie, nil
-		}
-	}
-
-	return Movie{}, errNoMovieAvailable
-}
-
-func formatSseEvent(eventName string, data []byte) []byte {
-	var out []byte
-
-	out = append(out, []byte(fmt.Sprintf("event:%s\n", eventName))...)
-
-	dataEntries := bytes.Split(data, []byte("\n"))
-	for _, dataEntry := range dataEntries {
-		out = append(out, []byte(fmt.Sprintf("data:%s\n", dataEntry))...)
-	}
-
-	out = append(out, sseEventEnd...)
-	return out
-}
-
-func mapProbeResultToMovie(result probe.Result) Movie {
-	return Movie{
-		Title:           result.Format.Title,
-		FormatName:      result.Format.Name,
-		FormatLongName:  result.Format.LongName,
-		Chapters:        result.Chapters,
-		Path:            result.Path,
-		VideoStreams:    result.VideoStreams,
-		AudioStreams:    result.AudioStreams,
-		SubtitleStreams: result.SubtitleStreams,
-		Duration:        result.Format.Duration,
-	}
 }

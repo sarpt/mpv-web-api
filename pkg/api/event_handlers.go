@@ -8,20 +8,33 @@ import (
 	"github.com/sarpt/mpv-web-api/pkg/mpv"
 )
 
-func (s *Server) handleFullscreenEvent(res mpv.ObserveResponse) error {
+var (
+	// ErrResponseDataNotString occurs when observe response data is not a string.
+	ErrResponseDataNotString = errors.New("response data is not a string")
+	// ErrResponseDataNotInt occurs when observe response data is not an integer.
+	ErrResponseDataNotInt = errors.New("response data is not an integer")
+
+	// ErrPlaybackTimeNotFloat occurs when playback time is not a correct decimal number.
+	ErrPlaybackTimeNotFloat = errors.New("playback time could not be converted to a float number")
+	// ErrPlaybackPathNotServed occurs when playback path is set to file that is not being served by api.
+	ErrPlaybackPathNotServed = errors.New("playback path is not served")
+)
+
+func (s *Server) handleFullscreenEvent(res mpv.ObservePropertyResponse) error {
 	enabled, ok := res.Data.(string)
 	if !ok {
-		return errors.New("could not decode data for fullscreen change event")
+		return ErrResponseDataNotString
 	}
 
 	s.playback.Fullscreen = enabled == mpv.YesValue
+	s.playbackChanges <- *s.playback
 	return nil
 }
 
-func (s *Server) handleLoopFileEvent(res mpv.ObserveResponse) error {
+func (s *Server) handleLoopFileEvent(res mpv.ObservePropertyResponse) error {
 	enabled, ok := res.Data.(string)
 	if !ok {
-		return errors.New("could not decode data for loop-file change event")
+		return ErrResponseDataNotString
 	}
 
 	if enabled != mpv.NoValue {
@@ -29,50 +42,55 @@ func (s *Server) handleLoopFileEvent(res mpv.ObserveResponse) error {
 	} else {
 		s.playback.Loop.Variant = ""
 	}
+	s.playbackChanges <- *s.playback
 	return nil
 }
 
-func (s *Server) handlePauseEvent(res mpv.ObserveResponse) error {
+func (s *Server) handlePauseEvent(res mpv.ObservePropertyResponse) error {
 	paused, ok := res.Data.(string)
 	if !ok {
-		return errors.New("could not decode data for pause change event")
+		return ErrResponseDataNotString
 	}
 
 	s.playback.Paused = paused == mpv.YesValue
+	s.playbackChanges <- *s.playback
 	return nil
 }
 
-func (s *Server) handleAudioIDChangeEvent(res mpv.ObserveResponse) error {
+func (s *Server) handleAudioIDChangeEvent(res mpv.ObservePropertyResponse) error {
 	aid, ok := res.Data.(int)
 	if !ok {
-		return errors.New("could not decode audio id change event")
+		return ErrResponseDataNotInt
 	}
 
 	s.playback.SelectedAudioID = aid
+	s.playbackChanges <- *s.playback
 	return nil
 }
 
-func (s *Server) handleSubtitleIDChangeEvent(res mpv.ObserveResponse) error {
+func (s *Server) handleSubtitleIDChangeEvent(res mpv.ObservePropertyResponse) error {
 	sid, ok := res.Data.(int)
 	if !ok {
-		return errors.New("could not decode subtitle id change event")
+		return ErrResponseDataNotInt
 	}
 
 	s.playback.SelectedAudioID = sid
+	s.playbackChanges <- *s.playback
 	return nil
 }
 
-func (s *Server) handleChapterChangeEvent(res mpv.ObserveResponse) error {
+func (s *Server) handleChapterChangeEvent(res mpv.ObservePropertyResponse) error {
 	chapterIdx, ok := res.Data.(int)
 	if !ok {
-		return errors.New("could not decode chapter change change event")
+		return ErrResponseDataNotInt
 	}
 
 	s.playback.CurrentChapterIdx = chapterIdx
+	s.playbackChanges <- *s.playback
 	return nil
 }
 
-func (s *Server) handlePathEvent(res mpv.ObserveResponse) error {
+func (s *Server) handlePathEvent(res mpv.ObservePropertyResponse) error {
 	if res.Data == nil {
 		s.playback.Movie = Movie{}
 		return nil
@@ -80,22 +98,23 @@ func (s *Server) handlePathEvent(res mpv.ObserveResponse) error {
 
 	path, ok := res.Data.(string)
 	if !ok {
-		return errors.New("could not decode data for path change event")
+		return ErrResponseDataNotString
 	}
 
 	movie, err := s.movieByPath(path)
 	if err != nil {
-		return fmt.Errorf("could not retrieve movie by path %s", path)
+		return fmt.Errorf("%w:%s", ErrPlaybackPathNotServed, path)
 	}
 
 	s.playback.Movie = movie
+	s.playbackChanges <- *s.playback
 	return nil
 }
 
-func (s *Server) handlePlaybackTimeEvent(res mpv.ObserveResponse) error {
+func (s *Server) handlePlaybackTimeEvent(res mpv.ObservePropertyResponse) error {
 	currentTime, ok := res.Data.(string)
 	if !ok {
-		return errors.New("could not decode data for playback time change event")
+		return ErrResponseDataNotString
 	}
 
 	if currentTime == "" {
@@ -104,9 +123,10 @@ func (s *Server) handlePlaybackTimeEvent(res mpv.ObserveResponse) error {
 
 	currentTimeNum, err := strconv.ParseFloat(currentTime, 64)
 	if err != nil {
-		return errors.New("the playback time could not be converted to number")
+		return ErrPlaybackTimeNotFloat
 	}
 
 	s.playback.CurrentTime = currentTimeNum
+	s.playbackChanges <- *s.playback
 	return nil
 }

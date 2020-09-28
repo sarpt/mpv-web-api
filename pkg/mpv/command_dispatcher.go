@@ -47,8 +47,8 @@ type Response struct {
 	Data interface{} `json:"data"`
 }
 
-// ObserveResponse is a result of mpv emitting event with a property change
-type ObserveResponse struct {
+// ObservePropertyResponse is a result of mpv emitting event with a property change
+type ObservePropertyResponse struct {
 	Response
 	Property string
 }
@@ -85,7 +85,7 @@ type propertyObserver struct {
 }
 
 type propertySubscriber struct {
-	propertyChanges chan<- ObserveResponse
+	propertyChanges chan<- ObservePropertyResponse
 	done            chan bool
 }
 
@@ -192,7 +192,7 @@ func (cd *CommandDispatcher) Connected() bool {
 // Returned id is used as a key to listened property mpv events. Id should be used when unsubscribing. When error is encountered id is useless.
 // The channel provided is never closed to enable aggregation from multiple observers.
 // However calling unsubscribe will ensure that command dispatcher will stop trying to send on a specified channel.
-func (cd *CommandDispatcher) SubscribeToProperty(propertyName string, out chan<- ObserveResponse) (int, error) {
+func (cd *CommandDispatcher) SubscribeToProperty(propertyName string, out chan<- ObservePropertyResponse) (int, error) {
 	var propertyObserver propertyObserver
 
 	done := make(chan bool)
@@ -219,7 +219,7 @@ func (cd *CommandDispatcher) SubscribeToProperty(propertyName string, out chan<-
 		for {
 			select {
 			case payload = <-responsePayloads:
-				out <- ObserveResponse{
+				out <- ObservePropertyResponse{
 					Property: propertyName,
 					Response: Response{
 						Data: payload.Data,

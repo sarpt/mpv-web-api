@@ -15,21 +15,45 @@ const (
 	pauseArg      = "pause"
 	loopFileArg   = "loopFile"
 
-	playbackSseEvent       = "playback"
-	multiPartFormMaxMemory = 32 << 20
+	playbackAllSseEvent = "all"
 )
+
+var (
+	fileLoop loopVariant = "file"
+	abLoop   loopVariant = "ab"
+)
+
+type loopVariant string
+
+// PlaybackLoop contains information about playback loop
+type PlaybackLoop struct {
+	Variant loopVariant
+	ATime   int
+	BTime   int
+}
+
+// Playback contains information about currently played movie file
+type Playback struct {
+	CurrentTime        float64
+	CurrentChapterIdx  int
+	Fullscreen         bool
+	Movie              Movie
+	SelectedAudioID    int
+	SelectedSubtitleID int
+	Paused             bool
+	Loop               PlaybackLoop
+}
 
 type getPlaybackResponse struct {
 	Playback Playback `json:"playback"`
 }
 
 type postPlaybackResponse struct {
-	ArgumentErrors map[string]string `json:"argumentErrors"`
-	GeneralError   string            `json:"generalError"`
+	handlerErrors
 }
 
 var (
-	postPlaybackFormArgumentsHandlers = map[string]func(res http.ResponseWriter, req *http.Request, s *Server) error{
+	postPlaybackFormArgumentsHandlers = map[string]formArgumentHandler{
 		pathArg:       pathHandler,
 		fullscreenArg: fullscreenHandler,
 		audioIDArg:    audioIDHandler,
@@ -40,30 +64,28 @@ var (
 )
 
 func (s *Server) postPlaybackHandler(res http.ResponseWriter, req *http.Request) {
-	responsePayload := postPlaybackResponse{
-		ArgumentErrors: map[string]string{},
-	}
+	responsePayload := postPlaybackResponse{}
 
-	err := req.ParseMultipartForm(multiPartFormMaxMemory)
-	if err != nil {
-		responsePayload.GeneralError = fmt.Sprintf("could not parse POST form data: %s", err)
+	args, errors := validateFormRequest(req, postPlaybackFormArgumentsHandlers)
+	if errors.GeneralError != "" {
 		s.errLog.Printf(responsePayload.GeneralError)
 		res.WriteHeader(400)
+		res.Write([]byte(fmt.Sprintf(responsePayload.GeneralError)))
 
 		return
 	}
 
-	for arg := range req.PostForm {
-		handler, ok := postPlaybackFormArgumentsHandlers[arg]
-		if !ok {
-			responsePayload.ArgumentErrors[arg] = fmt.Sprintf("the %s argument is invalid", arg)
-			continue
-		}
+	responsePayload.ArgumentErrors = errors.ArgumentErrors
 
+	for _, handler := range args {
 		err := handler(res, req, s)
 		if err != nil {
-			responsePayload.ArgumentErrors[arg] = err.Error()
-			continue
+			responsePayload.GeneralError = err.Error()
+			s.errLog.Printf(responsePayload.GeneralError)
+			res.WriteHeader(500)
+			res.Write([]byte(fmt.Sprintf(responsePayload.GeneralError)))
+
+			return
 		}
 	}
 
@@ -72,6 +94,7 @@ func (s *Server) postPlaybackHandler(res http.ResponseWriter, req *http.Request)
 		responsePayload.GeneralError = fmt.Sprintf("could not encode json payload: %s", err)
 		s.errLog.Printf(responsePayload.GeneralError)
 		res.WriteHeader(500)
+		res.Write([]byte(fmt.Sprintf(responsePayload.GeneralError)))
 
 		return
 	}
@@ -97,14 +120,11 @@ func (s *Server) getPlaybackHandler(res http.ResponseWriter, req *http.Request) 
 }
 
 func (s *Server) getSsePlaybackHandler(res http.ResponseWriter, req *http.Request) {
-	flusher, ok := res.(http.Flusher)
-	if !ok {
+	flusher, err := sseFlusher(res)
+	if err != nil {
 		res.WriteHeader(400)
 		return
 	}
-	res.Header().Set("Connection", "keep-alive")
-	res.Header().Set("Content-Type", "text/event-stream")
-	res.Header().Set("Access-Control-Allow-Origin", "*")
 
 	// Buffer of 1 in case connection is closed after playbackObservers fan-out dispatcher already acquired read lock (blocking the write lock).
 	// The dispatcher will expect for the select below to receive the message but the Context().Done() already waits to acquire a write lock.
@@ -124,12 +144,14 @@ func (s *Server) getSsePlaybackHandler(res http.ResponseWriter, req *http.Reques
 
 			out, err := json.Marshal(playback)
 			if err != nil {
-				s.errLog.Println("could not write to the client")
+				s.errLog.Println("could not create response")
+				continue
 			}
 
-			_, err = res.Write(formatSseEvent(playbackSseEvent, out))
+			_, err = res.Write(formatSseEvent(playbackAllSseEvent, out))
 			if err != nil {
 				s.errLog.Println("could not write to the client")
+				continue
 			}
 
 			flusher.Flush()
@@ -139,6 +161,23 @@ func (s *Server) getSsePlaybackHandler(res http.ResponseWriter, req *http.Reques
 			s.playbackObserversLock.Unlock()
 			return
 		}
+	}
+}
+
+// watchPlaybackChanges reads all playbackChanges done by path/event handlers.
+// It's a fan-out dispatcher, which notifies all playback observers (subscribers from SSE etc.) when a playbackChange occurs.
+func (s Server) watchPlaybackChanges() {
+	for {
+		playback, ok := <-s.playbackChanges
+		if !ok {
+			return
+		}
+
+		s.playbackObserversLock.RLock()
+		for _, observer := range s.playbackObservers {
+			observer <- playback
+		}
+		s.playbackObserversLock.RUnlock()
 	}
 }
 
@@ -162,12 +201,14 @@ func fullscreenHandler(res http.ResponseWriter, req *http.Request, s *Server) er
 func audioIDHandler(res http.ResponseWriter, req *http.Request, s *Server) error {
 	audioID := req.PostFormValue(audioIDArg)
 
+	s.outLog.Printf("changing audio id to %s due to request from %s\n", audioID, req.RemoteAddr)
 	return s.mpvManager.ChangeAudio(audioID)
 }
 
 func subtitleIDHandler(res http.ResponseWriter, req *http.Request, s *Server) error {
 	subtitleID := req.PostFormValue(subtitleIDArg)
 
+	s.outLog.Printf("changing subtitle id to %s due to request from %s\n", subtitleID, req.RemoteAddr)
 	return s.mpvManager.ChangeSubtitle(subtitleID)
 }
 
@@ -177,6 +218,7 @@ func loopFileHandler(res http.ResponseWriter, req *http.Request, s *Server) erro
 		return err
 	}
 
+	s.outLog.Printf("changing file looping to %t due to request from %s\n", loopFile, req.RemoteAddr)
 	return s.mpvManager.LoopFile(loopFile)
 }
 
@@ -186,5 +228,6 @@ func pauseHandler(res http.ResponseWriter, req *http.Request, s *Server) error {
 		return err
 	}
 
+	s.outLog.Printf("changing pause to %t due to request from %s\n", pause, req.RemoteAddr)
 	return s.mpvManager.ChangePause(pause)
 }
