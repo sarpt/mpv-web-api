@@ -135,6 +135,8 @@ func (s *Server) getSsePlaybackHandler(res http.ResponseWriter, req *http.Reques
 	s.playbackObservers[req.RemoteAddr] = playbackChanges
 	s.playbackObserversLock.Unlock()
 
+	s.outLog.Printf("added /sse/playback observer with addr %s\n", req.RemoteAddr)
+
 	for {
 		select {
 		case playback, ok := <-playbackChanges:
@@ -159,6 +161,8 @@ func (s *Server) getSsePlaybackHandler(res http.ResponseWriter, req *http.Reques
 			s.playbackObserversLock.Lock()
 			delete(s.playbackObservers, req.RemoteAddr)
 			s.playbackObserversLock.Unlock()
+			s.outLog.Printf("removing /sse/playback observer with addr %s\n", req.RemoteAddr)
+
 			return
 		}
 	}

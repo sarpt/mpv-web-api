@@ -22,8 +22,8 @@ var (
 
 // MoviesChange holds information about changes to the list of movies being served.
 type MoviesChange struct {
-	variant MoviesChangeVariant
-	items   []Movie
+	Variant MoviesChangeVariant
+	Items   []Movie
 }
 
 // Movie specifies information about a movie file that can be played
@@ -41,6 +41,18 @@ type Movie struct {
 
 type getMoviesRespone struct {
 	Movies []Movie `json:"movies"`
+}
+
+// AddMovies appends movies to the list of movies served on current server instance
+func (s *Server) AddMovies(movies []Movie) {
+	s.moviesLock.Lock()
+	s.movies = append(s.movies, movies...)
+	s.moviesLock.Unlock()
+
+	s.moviesChanges <- MoviesChange{
+		Variant: added,
+		Items:   movies,
+	}
 }
 
 func (s *Server) getMoviesHandler(res http.ResponseWriter, req *http.Request) {
@@ -74,6 +86,8 @@ func (s *Server) getSseMoviesHandler(res http.ResponseWriter, req *http.Request)
 	s.moviesChangesObservers[req.RemoteAddr] = moviesChanges
 	s.moviesChangesObserversLock.Unlock()
 
+	s.outLog.Printf("added /sse/movies observer with addr %s\n", req.RemoteAddr)
+
 	for {
 		select {
 		case change, ok := <-moviesChanges:
@@ -81,13 +95,13 @@ func (s *Server) getSseMoviesHandler(res http.ResponseWriter, req *http.Request)
 				return
 			}
 
-			out, err := json.Marshal(change)
+			out, err := json.Marshal(change.Items)
 			if err != nil {
 				s.errLog.Println("could not create response")
 				continue
 			}
 
-			_, err = res.Write(formatSseEvent(string(change.variant), out))
+			_, err = res.Write(formatSseEvent(string(change.Variant), out))
 			if err != nil {
 				s.errLog.Println("could not write to the client")
 				continue
@@ -98,6 +112,8 @@ func (s *Server) getSseMoviesHandler(res http.ResponseWriter, req *http.Request)
 			s.moviesChangesObserversLock.Lock()
 			delete(s.moviesChangesObservers, req.RemoteAddr)
 			s.moviesChangesObserversLock.Unlock()
+			s.outLog.Printf("removing /sse/movies observer with addr %s\n", req.RemoteAddr)
+
 			return
 		}
 	}
@@ -111,6 +127,24 @@ func (s Server) movieByPath(path string) (Movie, error) {
 	}
 
 	return Movie{}, errNoMovieAvailable
+}
+
+// watchMoviesChanges reads all moviesChanges done by path/event handlers.
+// It's a fan-out dispatcher, which notifies all movies observers (subscribers from SSE etc.) when a moviesChange occurs.
+// TODO: this method does not differ all that much from playbackChanges and seems like it's quite generic -> need to consider creating some abstraction over this
+func (s Server) watchMoviesChanges() {
+	for {
+		changes, ok := <-s.moviesChanges
+		if !ok {
+			return
+		}
+
+		s.moviesChangesObserversLock.RLock()
+		for _, observer := range s.moviesChangesObservers {
+			observer <- changes
+		}
+		s.moviesChangesObserversLock.RUnlock()
+	}
 }
 
 func mapProbeResultToMovie(result probe.Result) Movie {

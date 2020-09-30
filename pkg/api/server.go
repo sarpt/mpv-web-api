@@ -114,6 +114,7 @@ func (s *Server) initWatchers() error {
 	}
 
 	go s.watchPlaybackChanges()
+	go s.watchMoviesChanges()
 	go s.watchObservePropertyResponses(observePropertyHandlers, observePropertyResponses)
 
 	return s.observeProperties(observePropertyResponses)

@@ -15,7 +15,16 @@ const (
 
 	methodsSeparator = ", "
 
-	multiPartFormMaxMemory = 32 << 20
+	multiPartFormMaxMemory   = 32 << 20
+	multiPartFormContentType = "multipart/form-data"
+
+	accessControlAllowOriginHeader  = "Access-Control-Allow-Origin"
+	accessControlAllowMethodsHeader = "Access-Control-Allow-Methods"
+	accessControlAllowHeadersHeader = "Access-Control-Allow-Headers"
+	contentTypeHeader               = "Content-Type"
+
+	allowedOrigins = "*"
+	allowedHeaders = "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, Method"
 )
 
 type pathHandlers map[string]http.HandlerFunc
@@ -69,7 +78,7 @@ func (s *Server) mainHandler() *http.ServeMux {
 func (s *Server) pathHandler(handlers pathHandlers) http.HandlerFunc {
 	return func(res http.ResponseWriter, req *http.Request) {
 		if s.allowCors {
-			res.Header().Set("Access-Control-Allow-Origin", "*")
+			res.Header().Set(accessControlAllowOriginHeader, allowedOrigins)
 		}
 
 		method := req.Method
@@ -105,8 +114,8 @@ func (s *Server) pathHandler(handlers pathHandlers) http.HandlerFunc {
 func optionsHandler(allowedMethods []string, res http.ResponseWriter, req *http.Request) {
 	allowedMethods = append(allowedMethods, http.MethodOptions)
 
-	res.Header().Set("Access-Control-Allow-Methods", strings.Join(allowedMethods, methodsSeparator))
-	res.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, Method")
+	res.Header().Set(accessControlAllowMethodsHeader, strings.Join(allowedMethods, methodsSeparator))
+	res.Header().Set(accessControlAllowHeadersHeader, allowedHeaders)
 }
 
 func allowedMethods(handlers pathHandlers) []string {
@@ -128,11 +137,11 @@ func validateFormRequest(req *http.Request, handlers map[string]formArgumentHand
 	}
 
 	var err error
-	contentType, ok := req.Header["Content-Type"]
-	if !ok || len(contentType) < 1 || !strings.Contains(contentType[0], "multipart/form-data") {
-		err = req.ParseForm()
-	} else {
+	contentType, ok := req.Header[contentTypeHeader]
+	if ok && len(contentType) > 0 && strings.Contains(contentType[0], multiPartFormContentType) {
 		err = req.ParseMultipartForm(multiPartFormMaxMemory)
+	} else {
+		err = req.ParseForm()
 	}
 
 	if err != nil {
