@@ -24,10 +24,9 @@ type Server struct {
 	allowCors                  bool
 	directories                []string
 	directoriesLock            *sync.RWMutex
-	movies                     []Movie
+	movies                     map[string]Movie
 	moviesLock                 *sync.RWMutex
 	moviesChanges              chan MoviesChange
-	moviesChangesLock          *sync.RWMutex
 	moviesChangesObservers     map[string]chan MoviesChange
 	moviesChangesObserversLock *sync.RWMutex
 	mpvManager                 *mpv.Manager
@@ -65,10 +64,9 @@ func NewServer(cfg Config) (*Server, error) {
 		cfg.AllowCors,
 		[]string{},
 		&sync.RWMutex{},
-		[]Movie{},
+		map[string]Movie{},
 		&sync.RWMutex{},
 		make(chan MoviesChange),
-		&sync.RWMutex{},
 		map[string]chan MoviesChange{},
 		&sync.RWMutex{},
 		mpvManager,

@@ -137,6 +137,13 @@ func (s *Server) getSsePlaybackHandler(res http.ResponseWriter, req *http.Reques
 
 	s.outLog.Printf("added /sse/playback observer with addr %s\n", req.RemoteAddr)
 
+	if replaySseState(req) {
+		err := sendPlayback(*s.playback, res, flusher)
+		if err != nil {
+			s.errLog.Println(err.Error())
+		}
+	}
+
 	for {
 		select {
 		case playback, ok := <-playbackChanges:
@@ -144,19 +151,10 @@ func (s *Server) getSsePlaybackHandler(res http.ResponseWriter, req *http.Reques
 				return
 			}
 
-			out, err := json.Marshal(playback)
+			err := sendPlayback(playback, res, flusher)
 			if err != nil {
-				s.errLog.Println("could not create response")
-				continue
+				s.errLog.Println(err.Error())
 			}
-
-			_, err = res.Write(formatSseEvent(playbackAllSseEvent, out))
-			if err != nil {
-				s.errLog.Println("could not write to the client")
-				continue
-			}
-
-			flusher.Flush()
 		case <-req.Context().Done():
 			s.playbackObserversLock.Lock()
 			delete(s.playbackObservers, req.RemoteAddr)
@@ -183,6 +181,21 @@ func (s Server) watchPlaybackChanges() {
 		}
 		s.playbackObserversLock.RUnlock()
 	}
+}
+
+func sendPlayback(playback Playback, res http.ResponseWriter, flusher http.Flusher) error {
+	out, err := json.Marshal(playback)
+	if err != nil {
+		return errResponseJSONCreationFailed
+	}
+
+	_, err = res.Write(formatSseEvent(playbackAllSseEvent, out))
+	if err != nil {
+		return errClientWritingFailed
+	}
+
+	flusher.Flush()
+	return nil
 }
 
 func pathHandler(res http.ResponseWriter, req *http.Request, s *Server) error {

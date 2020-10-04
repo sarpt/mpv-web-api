@@ -137,8 +137,7 @@ func validateFormRequest(req *http.Request, handlers map[string]formArgumentHand
 	}
 
 	var err error
-	contentType, ok := req.Header[contentTypeHeader]
-	if ok && len(contentType) > 0 && strings.Contains(contentType[0], multiPartFormContentType) {
+	if multipartFormRequest(req) {
 		err = req.ParseMultipartForm(multiPartFormMaxMemory)
 	} else {
 		err = req.ParseForm()
@@ -161,4 +160,10 @@ func validateFormRequest(req *http.Request, handlers map[string]formArgumentHand
 	}
 
 	return correctHandlers, handlerErrors
+}
+
+func multipartFormRequest(req *http.Request) bool {
+	contentType, ok := req.Header[contentTypeHeader]
+
+	return ok && len(contentType) > 0 && strings.Contains(contentType[0], multiPartFormContentType)
 }

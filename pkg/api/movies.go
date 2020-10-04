@@ -23,7 +23,7 @@ var (
 // MoviesChange holds information about changes to the list of movies being served.
 type MoviesChange struct {
 	Variant MoviesChangeVariant
-	Items   []Movie
+	Items   map[string]Movie
 }
 
 // Movie specifies information about a movie file that can be played
@@ -40,18 +40,29 @@ type Movie struct {
 }
 
 type getMoviesRespone struct {
-	Movies []Movie `json:"movies"`
+	Movies map[string]Movie `json:"movies"`
 }
 
 // AddMovies appends movies to the list of movies served on current server instance
-func (s *Server) AddMovies(movies []Movie) {
+func (s *Server) AddMovies(movies map[string]Movie) {
+	addedMovies := map[string]Movie{}
+
 	s.moviesLock.Lock()
-	s.movies = append(s.movies, movies...)
+	for path, movie := range movies {
+		if _, ok := s.movies[path]; ok {
+			continue
+		}
+
+		s.movies[path] = movie
+		addedMovies[path] = movie
+	}
 	s.moviesLock.Unlock()
 
-	s.moviesChanges <- MoviesChange{
-		Variant: added,
-		Items:   movies,
+	if len(addedMovies) > 0 {
+		s.moviesChanges <- MoviesChange{
+			Variant: added,
+			Items:   addedMovies,
+		}
 	}
 }
 
@@ -88,6 +99,13 @@ func (s *Server) getSseMoviesHandler(res http.ResponseWriter, req *http.Request)
 
 	s.outLog.Printf("added /sse/movies observer with addr %s\n", req.RemoteAddr)
 
+	if replaySseState(req) {
+		err := sendMovies(s.movies, res, flusher)
+		if err != nil {
+			s.errLog.Println(err.Error())
+		}
+	}
+
 	for {
 		select {
 		case change, ok := <-moviesChanges:
@@ -95,19 +113,10 @@ func (s *Server) getSseMoviesHandler(res http.ResponseWriter, req *http.Request)
 				return
 			}
 
-			out, err := json.Marshal(change.Items)
+			err := sendMovies(change.Items, res, flusher)
 			if err != nil {
-				s.errLog.Println("could not create response")
-				continue
+				s.errLog.Println(err.Error())
 			}
-
-			_, err = res.Write(formatSseEvent(string(change.Variant), out))
-			if err != nil {
-				s.errLog.Println("could not write to the client")
-				continue
-			}
-
-			flusher.Flush()
 		case <-req.Context().Done():
 			s.moviesChangesObserversLock.Lock()
 			delete(s.moviesChangesObservers, req.RemoteAddr)
@@ -145,6 +154,21 @@ func (s Server) watchMoviesChanges() {
 		}
 		s.moviesChangesObserversLock.RUnlock()
 	}
+}
+
+func sendMovies(movies map[string]Movie, res http.ResponseWriter, flusher http.Flusher) error {
+	out, err := json.Marshal(movies)
+	if err != nil {
+		return errResponseJSONCreationFailed
+	}
+
+	_, err = res.Write(formatSseEvent(string(added), out))
+	if err != nil {
+		return errClientWritingFailed
+	}
+
+	flusher.Flush()
+	return nil
 }
 
 func mapProbeResultToMovie(result probe.Result) Movie {

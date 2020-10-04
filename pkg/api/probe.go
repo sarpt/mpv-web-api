@@ -12,7 +12,7 @@ var (
 )
 
 func (s *Server) probeDirectory(directory string) []probe.SkippedFile {
-	var movies []Movie
+	movies := map[string]Movie{}
 	s.outLog.Printf("probing directory %s\n", directory)
 
 	probeResults, skippedFiles := probe.Directory(directory)
@@ -22,7 +22,7 @@ func (s *Server) probeDirectory(directory string) []probe.SkippedFile {
 		}
 
 		movie := mapProbeResultToMovie(probeResult)
-		movies = append(movies, movie)
+		movies[movie.Path] = movie
 	}
 
 	s.AddMovies(movies)
