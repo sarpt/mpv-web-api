@@ -416,7 +416,7 @@ func waitForSocketConnection(socketPath string) (net.Conn, error) {
 func prepareCommandPayload(command Command, requestID int) ([]byte, error) {
 	var payload []byte
 	cmd := CommandPayload{
-		Command:   command.Get(),
+		Command:   command.JSONIPCFormat(),
 		RequestID: requestID,
 	}
 

@@ -62,12 +62,12 @@ type Command struct {
 	values []interface{} // i'm not conviced about this interface{} thing. Probably should do a reflection or type assertion whether it's an int or a string
 }
 
-// Get returns the representation expected by the mpv in the JSON payload
-func (cmd Command) Get() []interface{} {
+// JSONIPCFormat returns the representation expected by the mpv in the JSON payload.
+func (cmd Command) JSONIPCFormat() []interface{} {
 	return append([]interface{}{cmd.name}, cmd.values...)
 }
 
-// NewLoadFile returns command for the mpv to load a file under the path
+// NewLoadFile returns command for the mpv to load a file under the path.
 func NewLoadFile(path string) Command {
 	return Command{
 		name:   loadfileCommand,
@@ -84,7 +84,7 @@ func NewSetProperty(property string, value interface{}) Command {
 	}
 }
 
-// NewFullscreen returns the command setting whether the fullscreen should be enabled
+// NewFullscreen returns the command setting whether the fullscreen should be enabled.
 func NewFullscreen(enabled bool) Command {
 	var fullscreen string = NoValue
 	if enabled {
@@ -94,12 +94,12 @@ func NewFullscreen(enabled bool) Command {
 	return NewSetProperty(FullscreenProperty, fullscreen)
 }
 
-// NewSetPause returns the command changing the state of playback pause
+// NewSetPause returns the command changing the state of playback pause.
 func NewSetPause(paused bool) Command {
 	return NewSetProperty(PauseProperty, paused)
 }
 
-// NewSetLoopFile returns the command changing the state of current file looping
+// NewSetLoopFile returns the command changing the state of current file looping.
 func NewSetLoopFile(looped bool) Command {
 	var loopedVal string = NoValue
 
@@ -110,17 +110,17 @@ func NewSetLoopFile(looped bool) Command {
 	return NewSetProperty(LoopFileProperty, loopedVal)
 }
 
-// NewSetAudioID returns the command changing the audio track to the specidifed audio id
+// NewSetAudioID returns the command changing the audio track to the specidifed audio id.
 func NewSetAudioID(aid string) Command {
 	return NewSetProperty(AudioID, aid)
 }
 
-// NewSetSubtitleID return the command changing the subtitle track to she specified subtitle id
+// NewSetSubtitleID return the command changing the subtitle track to she specified subtitle id.
 func NewSetSubtitleID(sid string) Command {
 	return NewSetProperty(SubtitleID, sid)
 }
 
-// NewObserveProperty returns the command that instructs mpv to report as event changes for the specific mpv state property
+// NewObserveProperty returns the command that instructs mpv to report as event changes for the specific mpv state property.
 func NewObserveProperty(id int, propertyName string) Command {
 	return Command{
 		name:   observePropertyCommand,

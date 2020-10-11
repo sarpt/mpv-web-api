@@ -74,7 +74,7 @@ func (s *Status) removeObservingAddress(remoteAddr string, observerVariant Statu
 	}
 }
 
-func (s *Status) getObservingAddresses() map[string][]StatusObserverVariant {
+func (s *Status) observingAddresses() map[string][]StatusObserverVariant {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
@@ -96,58 +96,32 @@ func (s *Status) safeCopy() Status {
 	return *s
 }
 
-func (s *Server) getSseStatusHandler(res http.ResponseWriter, req *http.Request) {
-	flusher, err := sseFlusher(res)
-	if err != nil {
-		res.WriteHeader(400)
-		return
-	}
-
-	statusChanges := make(chan StatusChange, 1)
-	s.addStatusChangeObserver(req.RemoteAddr, statusChanges)
-
-	if replaySseState(req) {
-		err := sendStatus(statusReplay, s.status, res, flusher)
-
-		if err != nil {
-			s.errLog.Println(err.Error())
-		}
-	}
-
-	for {
-		select {
-		case change, ok := <-statusChanges:
-			if !ok {
-				return
-			}
-
-			err := sendStatus(change.Variant, &change.Status, res, flusher)
-			if err != nil {
-				s.errLog.Println(err.Error())
-			}
-		case <-req.Context().Done():
-			s.removeStatusChangeObserver(req.RemoteAddr)
-			return
-		}
+func (s *Server) createStatusReplayHandler() sseReplayHandler {
+	return func(res http.ResponseWriter, flusher http.Flusher) error {
+		return sendStatus(statusReplay, s.status, res, flusher)
 	}
 }
 
-func (s *Server) addStatusChangeObserver(remoteAddr string, changes chan StatusChange) {
-	s.statusChangesObserversLock.Lock()
-	s.statusChangesObservers[remoteAddr] = changes
-	s.statusChangesObserversLock.Unlock()
+func (s *Server) createStatusChangeHandler() sseChangeHandler {
+	return func(res http.ResponseWriter, flusher http.Flusher, changes interface{}) error {
+		statusChange, ok := changes.(StatusChange)
+		if !ok {
+			return errIncorrectChangesType
+		}
 
-	s.addObservingAddressToStatus(remoteAddr, statusObserverVariant)
-	s.outLog.Printf("added /sse/status observer with addr %s\n", remoteAddr)
+		return sendStatus(statusChange.Variant, &statusChange.Status, res, flusher)
+	}
 }
 
-func (s *Server) removeStatusChangeObserver(remoteAddr string) {
-	s.moviesChangesObserversLock.Lock()
-	delete(s.moviesChangesObservers, remoteAddr)
-	s.moviesChangesObserversLock.Unlock()
+func (s *Server) createGetSseStatusHandler() getSseHandler {
+	cfg := SseHandlerConfig{
+		ObserverVariant: statusObserverVariant,
+		Observers:       s.statusChangesObservers,
+		ChangeHandler:   s.createStatusChangeHandler(),
+		ReplayHandler:   s.createStatusReplayHandler(),
+	}
 
-	s.removeObservingAddressFromStatus(remoteAddr, statusObserverVariant)
-	s.outLog.Printf("removing /sse/movies observer with addr %s\n", remoteAddr)
+	return s.createGetSseHandler(cfg)
 }
 
 func (s Server) addObservingAddressToStatus(remoteAddr string, observerVariant StatusObserverVariant) {
@@ -174,11 +148,11 @@ func (s Server) watchStatusChanges() {
 			return
 		}
 
-		s.statusChangesObserversLock.RLock()
-		for _, observer := range s.statusChangesObservers {
+		s.statusChangesObservers.Lock.RLock()
+		for _, observer := range s.statusChangesObservers.Items {
 			observer <- changes
 		}
-		s.statusChangesObserversLock.RUnlock()
+		s.statusChangesObservers.Lock.RUnlock()
 	}
 }
 

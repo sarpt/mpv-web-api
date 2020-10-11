@@ -20,27 +20,24 @@ type observePropertyHandler = func(res mpv.ObservePropertyResponse) error
 
 // Server is used to serve API and hold state accessible to the API
 type Server struct {
-	address                    string
-	allowCors                  bool
-	directories                []string
-	directoriesLock            *sync.RWMutex
-	movies                     map[string]Movie
-	moviesLock                 *sync.RWMutex
-	moviesChanges              chan MoviesChange
-	moviesChangesObservers     map[string]chan MoviesChange
-	moviesChangesObserversLock *sync.RWMutex
-	mpvManager                 *mpv.Manager
-	mpvSocketPath              string
-	playback                   *Playback
-	playbackChanges            chan Playback
-	playbackObservers          map[string]chan Playback
-	playbackObserversLock      *sync.RWMutex
-	status                     *Status
-	statusChanges              chan StatusChange
-	statusChangesObservers     map[string]chan StatusChange
-	statusChangesObserversLock *sync.RWMutex
-	errLog                     *log.Logger
-	outLog                     *log.Logger
+	address                  string
+	allowCors                bool
+	directories              []string
+	directoriesLock          *sync.RWMutex
+	movies                   map[string]Movie
+	moviesLock               *sync.RWMutex
+	moviesChanges            chan MoviesChange
+	moviesChangesObservers   SSEObservers
+	mpvManager               *mpv.Manager
+	mpvSocketPath            string
+	playback                 *Playback
+	playbackChanges          chan Playback
+	playbackChangesObservers SSEObservers
+	status                   *Status
+	statusChanges            chan StatusChange
+	statusChangesObservers   SSEObservers
+	errLog                   *log.Logger
+	outLog                   *log.Logger
 }
 
 // Config controls behaviour of the api serve
@@ -71,21 +68,27 @@ func NewServer(cfg Config) (*Server, error) {
 		map[string]Movie{},
 		&sync.RWMutex{},
 		make(chan MoviesChange),
-		map[string]chan MoviesChange{},
-		&sync.RWMutex{},
+		SSEObservers{
+			Items: map[string]chan interface{}{},
+			Lock:  &sync.RWMutex{},
+		},
 		mpvManager,
 		cfg.MpvSocketPath,
 		&Playback{},
 		make(chan Playback),
-		map[string]chan Playback{},
-		&sync.RWMutex{},
+		SSEObservers{
+			Items: map[string]chan interface{}{},
+			Lock:  &sync.RWMutex{},
+		},
 		&Status{
 			ObservingAddresses: map[string][]StatusObserverVariant{},
 			lock:               &sync.RWMutex{},
 		},
 		make(chan StatusChange),
-		map[string]chan StatusChange{},
-		&sync.RWMutex{},
+		SSEObservers{
+			Items: map[string]chan interface{}{},
+			Lock:  &sync.RWMutex{},
+		},
 		log.New(cfg.outWriter, logPrefix, log.LstdFlags),
 		log.New(cfg.errWriter, logPrefix, log.LstdFlags),
 	}, nil

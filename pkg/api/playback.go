@@ -119,56 +119,6 @@ func (s *Server) getPlaybackHandler(res http.ResponseWriter, req *http.Request) 
 	res.Write(response)
 }
 
-func (s *Server) getSsePlaybackHandler(res http.ResponseWriter, req *http.Request) {
-	flusher, err := sseFlusher(res)
-	if err != nil {
-		res.WriteHeader(400)
-		return
-	}
-
-	// Buffer of 1 in case connection is closed after playbackObservers fan-out dispatcher already acquired read lock (blocking the write lock).
-	// The dispatcher will expect for the select below to receive the message but the Context().Done() already waits to acquire a write lock.
-	// So the buffer of 1 ensures that one message will be buffered, dispatcher will not be blocked, and write lock will be obtained.
-	// When the write lock is obtained to remove from the set, even if a new playback will be received, read lock will wait until Context().Done() finishes.
-	playbackChanges := make(chan Playback, 1)
-	s.playbackObserversLock.Lock()
-	s.playbackObservers[req.RemoteAddr] = playbackChanges
-	s.playbackObserversLock.Unlock()
-
-	s.addObservingAddressToStatus(req.RemoteAddr, playbackObserverVariant)
-	s.outLog.Printf("added /sse/playback observer with addr %s\n", req.RemoteAddr)
-
-	if replaySseState(req) {
-		err := sendPlayback(*s.playback, res, flusher)
-		if err != nil {
-			s.errLog.Println(err.Error())
-		}
-	}
-
-	for {
-		select {
-		case playback, ok := <-playbackChanges:
-			if !ok {
-				return
-			}
-
-			err := sendPlayback(playback, res, flusher)
-			if err != nil {
-				s.errLog.Println(err.Error())
-			}
-		case <-req.Context().Done():
-			s.playbackObserversLock.Lock()
-			delete(s.playbackObservers, req.RemoteAddr)
-			s.playbackObserversLock.Unlock()
-
-			s.removeObservingAddressFromStatus(req.RemoteAddr, playbackObserverVariant)
-			s.outLog.Printf("removing /sse/playback observer with addr %s\n", req.RemoteAddr)
-
-			return
-		}
-	}
-}
-
 // watchPlaybackChanges reads all playbackChanges done by path/event handlers.
 // It's a fan-out dispatcher, which notifies all playback observers (subscribers from SSE etc.) when a playbackChange occurs.
 func (s Server) watchPlaybackChanges() {
@@ -178,12 +128,40 @@ func (s Server) watchPlaybackChanges() {
 			return
 		}
 
-		s.playbackObserversLock.RLock()
-		for _, observer := range s.playbackObservers {
+		s.playbackChangesObservers.Lock.RLock()
+		for _, observer := range s.playbackChangesObservers.Items {
 			observer <- playback
 		}
-		s.playbackObserversLock.RUnlock()
+		s.playbackChangesObservers.Lock.RUnlock()
 	}
+}
+
+func (s *Server) createPlaybackReplayHandler() sseReplayHandler {
+	return func(res http.ResponseWriter, flusher http.Flusher) error {
+		return sendPlayback(*s.playback, res, flusher)
+	}
+}
+
+func (s *Server) createPlaybackChangesHandler() sseChangeHandler {
+	return func(res http.ResponseWriter, flusher http.Flusher, changes interface{}) error {
+		newPlayback, ok := changes.(Playback)
+		if !ok {
+			return errIncorrectChangesType
+		}
+
+		return sendPlayback(newPlayback, res, flusher)
+	}
+}
+
+func (s *Server) createGetSsePlaybackHandler() getSseHandler {
+	cfg := SseHandlerConfig{
+		ObserverVariant: playbackObserverVariant,
+		Observers:       s.playbackChangesObservers,
+		ChangeHandler:   s.createPlaybackChangesHandler(),
+		ReplayHandler:   s.createPlaybackReplayHandler(),
+	}
+
+	return s.createGetSseHandler(cfg)
 }
 
 func sendPlayback(playback Playback, res http.ResponseWriter, flusher http.Flusher) error {

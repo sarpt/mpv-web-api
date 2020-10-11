@@ -38,15 +38,15 @@ type handlerErrors struct {
 
 func (s *Server) mainHandler() *http.ServeMux {
 	sseStatusHandlers := map[string]http.HandlerFunc{
-		http.MethodGet: s.getSseStatusHandler,
+		http.MethodGet: s.createGetSseStatusHandler(),
 	}
 
 	ssePlaybackHandlers := map[string]http.HandlerFunc{
-		http.MethodGet: s.getSsePlaybackHandler,
+		http.MethodGet: s.createGetSsePlaybackHandler(),
 	}
 
 	sseMoviesHandlers := map[string]http.HandlerFunc{
-		http.MethodGet: s.getSseMoviesHandler,
+		http.MethodGet: s.createGetSseMoviesHandler(),
 	}
 
 	playbackHandlers := map[string]http.HandlerFunc{

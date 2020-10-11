@@ -89,52 +89,6 @@ func (s *Server) getMoviesHandler(res http.ResponseWriter, req *http.Request) {
 	res.Write(response)
 }
 
-func (s *Server) getSseMoviesHandler(res http.ResponseWriter, req *http.Request) {
-	flusher, err := sseFlusher(res)
-	if err != nil {
-		res.WriteHeader(400)
-		return
-	}
-
-	moviesChanges := make(chan MoviesChange, 1)
-	s.moviesChangesObserversLock.Lock()
-	s.moviesChangesObservers[req.RemoteAddr] = moviesChanges
-	s.moviesChangesObserversLock.Unlock()
-
-	s.addObservingAddressToStatus(req.RemoteAddr, moviesObserverVariant)
-	s.outLog.Printf("added /sse/movies observer with addr %s\n", req.RemoteAddr)
-
-	if replaySseState(req) {
-		err := sendMovies(s.movies, res, flusher)
-		if err != nil {
-			s.errLog.Println(err.Error())
-		}
-	}
-
-	for {
-		select {
-		case change, ok := <-moviesChanges:
-			if !ok {
-				return
-			}
-
-			err := sendMovies(change.Items, res, flusher)
-			if err != nil {
-				s.errLog.Println(err.Error())
-			}
-		case <-req.Context().Done():
-			s.moviesChangesObserversLock.Lock()
-			delete(s.moviesChangesObservers, req.RemoteAddr)
-			s.moviesChangesObserversLock.Unlock()
-
-			s.removeObservingAddressFromStatus(req.RemoteAddr, moviesObserverVariant)
-			s.outLog.Printf("removing /sse/movies observer with addr %s\n", req.RemoteAddr)
-
-			return
-		}
-	}
-}
-
 func (s Server) movieByPath(path string) (Movie, error) {
 	for _, movie := range s.movies {
 		if movie.Path == path {
@@ -143,6 +97,34 @@ func (s Server) movieByPath(path string) (Movie, error) {
 	}
 
 	return Movie{}, errNoMovieAvailable
+}
+
+func (s *Server) createMoviesReplayHandler() sseReplayHandler {
+	return func(res http.ResponseWriter, flusher http.Flusher) error {
+		return sendMovies(s.movies, res, flusher)
+	}
+}
+
+func (s *Server) createMoviesChangeHandler() sseChangeHandler {
+	return func(res http.ResponseWriter, flusher http.Flusher, changes interface{}) error {
+		moviesChange, ok := changes.(MoviesChange)
+		if !ok {
+			return errIncorrectChangesType
+		}
+
+		return sendMovies(moviesChange.Items, res, flusher)
+	}
+}
+
+func (s *Server) createGetSseMoviesHandler() getSseHandler {
+	cfg := SseHandlerConfig{
+		ObserverVariant: moviesObserverVariant,
+		Observers:       s.moviesChangesObservers,
+		ChangeHandler:   s.createMoviesChangeHandler(),
+		ReplayHandler:   s.createMoviesReplayHandler(),
+	}
+
+	return s.createGetSseHandler(cfg)
 }
 
 // watchMoviesChanges reads all moviesChanges done by path/event handlers.
@@ -155,11 +137,11 @@ func (s Server) watchMoviesChanges() {
 			return
 		}
 
-		s.moviesChangesObserversLock.RLock()
-		for _, observer := range s.moviesChangesObservers {
+		s.moviesChangesObservers.Lock.RLock()
+		for _, observer := range s.moviesChangesObservers.Items {
 			observer <- changes
 		}
-		s.moviesChangesObserversLock.RUnlock()
+		s.moviesChangesObservers.Lock.RUnlock()
 	}
 }
 
