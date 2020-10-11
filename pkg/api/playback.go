@@ -8,6 +8,8 @@ import (
 )
 
 const (
+	playbackObserverVariant StatusObserverVariant = "playback"
+
 	pathArg       = "path"
 	fullscreenArg = "fullscreen"
 	subtitleIDArg = "subtitleID"
@@ -16,9 +18,7 @@ const (
 	loopFileArg   = "loopFile"
 
 	playbackAllSseEvent = "all"
-)
 
-var (
 	fileLoop loopVariant = "file"
 	abLoop   loopVariant = "ab"
 )
@@ -135,6 +135,7 @@ func (s *Server) getSsePlaybackHandler(res http.ResponseWriter, req *http.Reques
 	s.playbackObservers[req.RemoteAddr] = playbackChanges
 	s.playbackObserversLock.Unlock()
 
+	s.addObservingAddressToStatus(req.RemoteAddr, playbackObserverVariant)
 	s.outLog.Printf("added /sse/playback observer with addr %s\n", req.RemoteAddr)
 
 	if replaySseState(req) {
@@ -159,6 +160,8 @@ func (s *Server) getSsePlaybackHandler(res http.ResponseWriter, req *http.Reques
 			s.playbackObserversLock.Lock()
 			delete(s.playbackObservers, req.RemoteAddr)
 			s.playbackObserversLock.Unlock()
+
+			s.removeObservingAddressFromStatus(req.RemoteAddr, playbackObserverVariant)
 			s.outLog.Printf("removing /sse/playback observer with addr %s\n", req.RemoteAddr)
 
 			return

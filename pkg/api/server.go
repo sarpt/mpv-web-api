@@ -35,6 +35,10 @@ type Server struct {
 	playbackChanges            chan Playback
 	playbackObservers          map[string]chan Playback
 	playbackObserversLock      *sync.RWMutex
+	status                     *Status
+	statusChanges              chan StatusChange
+	statusChangesObservers     map[string]chan StatusChange
+	statusChangesObserversLock *sync.RWMutex
 	errLog                     *log.Logger
 	outLog                     *log.Logger
 }
@@ -75,6 +79,13 @@ func NewServer(cfg Config) (*Server, error) {
 		make(chan Playback),
 		map[string]chan Playback{},
 		&sync.RWMutex{},
+		&Status{
+			ObservingAddresses: map[string][]StatusObserverVariant{},
+			lock:               &sync.RWMutex{},
+		},
+		make(chan StatusChange),
+		map[string]chan StatusChange{},
+		&sync.RWMutex{},
 		log.New(cfg.outWriter, logPrefix, log.LstdFlags),
 		log.New(cfg.errWriter, logPrefix, log.LstdFlags),
 	}, nil
@@ -113,6 +124,7 @@ func (s *Server) initWatchers() error {
 
 	go s.watchPlaybackChanges()
 	go s.watchMoviesChanges()
+	go s.watchStatusChanges()
 	go s.watchObservePropertyResponses(observePropertyHandlers, observePropertyResponses)
 
 	return s.observeProperties(observePropertyResponses)

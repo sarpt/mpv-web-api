@@ -13,11 +13,15 @@ import (
 type MoviesChangeVariant string
 
 var (
+	errNoMovieAvailable = errors.New("movie with specified path does not exist")
+)
+
+const (
+	moviesObserverVariant StatusObserverVariant = "movies"
+
 	added   MoviesChangeVariant = "added"
 	updated MoviesChangeVariant = "updated"
 	removed MoviesChangeVariant = "removed"
-
-	errNoMovieAvailable = errors.New("movie with specified path does not exist")
 )
 
 // MoviesChange holds information about changes to the list of movies being served.
@@ -97,6 +101,7 @@ func (s *Server) getSseMoviesHandler(res http.ResponseWriter, req *http.Request)
 	s.moviesChangesObservers[req.RemoteAddr] = moviesChanges
 	s.moviesChangesObserversLock.Unlock()
 
+	s.addObservingAddressToStatus(req.RemoteAddr, moviesObserverVariant)
 	s.outLog.Printf("added /sse/movies observer with addr %s\n", req.RemoteAddr)
 
 	if replaySseState(req) {
@@ -121,6 +126,8 @@ func (s *Server) getSseMoviesHandler(res http.ResponseWriter, req *http.Request)
 			s.moviesChangesObserversLock.Lock()
 			delete(s.moviesChangesObservers, req.RemoteAddr)
 			s.moviesChangesObserversLock.Unlock()
+
+			s.removeObservingAddressFromStatus(req.RemoteAddr, moviesObserverVariant)
 			s.outLog.Printf("removing /sse/movies observer with addr %s\n", req.RemoteAddr)
 
 			return
