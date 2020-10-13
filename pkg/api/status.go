@@ -140,22 +140,6 @@ func (s Server) removeObservingAddressFromStatus(remoteAddr string, observerVari
 	}
 }
 
-// watchStatusChanges reads all statusChanges done by path/event handlers.
-func (s Server) watchStatusChanges() {
-	for {
-		changes, ok := <-s.statusChanges
-		if !ok {
-			return
-		}
-
-		s.statusChangesObservers.Lock.RLock()
-		for _, observer := range s.statusChangesObservers.Items {
-			observer <- changes
-		}
-		s.statusChangesObservers.Lock.RUnlock()
-	}
-}
-
 func sendStatus(variant StatusChangeVariant, status *Status, res http.ResponseWriter, flusher http.Flusher) error {
 	out, err := status.jsonMarshal()
 	if err != nil {

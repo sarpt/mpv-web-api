@@ -119,23 +119,6 @@ func (s *Server) getPlaybackHandler(res http.ResponseWriter, req *http.Request) 
 	res.Write(response)
 }
 
-// watchPlaybackChanges reads all playbackChanges done by path/event handlers.
-// It's a fan-out dispatcher, which notifies all playback observers (subscribers from SSE etc.) when a playbackChange occurs.
-func (s Server) watchPlaybackChanges() {
-	for {
-		playback, ok := <-s.playbackChanges
-		if !ok {
-			return
-		}
-
-		s.playbackChangesObservers.Lock.RLock()
-		for _, observer := range s.playbackChangesObservers.Items {
-			observer <- playback
-		}
-		s.playbackChangesObservers.Lock.RUnlock()
-	}
-}
-
 func (s *Server) createPlaybackReplayHandler() sseReplayHandler {
 	return func(res http.ResponseWriter, flusher http.Flusher) error {
 		return sendPlayback(*s.playback, res, flusher)

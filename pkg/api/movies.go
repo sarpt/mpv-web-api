@@ -127,24 +127,6 @@ func (s *Server) createGetSseMoviesHandler() getSseHandler {
 	return s.createGetSseHandler(cfg)
 }
 
-// watchMoviesChanges reads all moviesChanges done by path/event handlers.
-// It's a fan-out dispatcher, which notifies all movies observers (subscribers from SSE etc.) when a moviesChange occurs.
-// TODO: this method does not differ all that much from playbackChanges and seems like it's quite generic -> need to consider creating some abstraction over this
-func (s Server) watchMoviesChanges() {
-	for {
-		changes, ok := <-s.moviesChanges
-		if !ok {
-			return
-		}
-
-		s.moviesChangesObservers.Lock.RLock()
-		for _, observer := range s.moviesChangesObservers.Items {
-			observer <- changes
-		}
-		s.moviesChangesObservers.Lock.RUnlock()
-	}
-}
-
 func sendMovies(movies map[string]Movie, res http.ResponseWriter, flusher http.Flusher) error {
 	out, err := json.Marshal(movies)
 	if err != nil {

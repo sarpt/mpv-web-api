@@ -26,15 +26,15 @@ type Server struct {
 	directoriesLock          *sync.RWMutex
 	movies                   map[string]Movie
 	moviesLock               *sync.RWMutex
-	moviesChanges            chan MoviesChange
+	moviesChanges            chan interface{}
 	moviesChangesObservers   SSEObservers
 	mpvManager               *mpv.Manager
 	mpvSocketPath            string
 	playback                 *Playback
-	playbackChanges          chan Playback
+	playbackChanges          chan interface{}
 	playbackChangesObservers SSEObservers
 	status                   *Status
-	statusChanges            chan StatusChange
+	statusChanges            chan interface{}
 	statusChangesObservers   SSEObservers
 	errLog                   *log.Logger
 	outLog                   *log.Logger
@@ -67,7 +67,7 @@ func NewServer(cfg Config) (*Server, error) {
 		&sync.RWMutex{},
 		map[string]Movie{},
 		&sync.RWMutex{},
-		make(chan MoviesChange),
+		make(chan interface{}),
 		SSEObservers{
 			Items: map[string]chan interface{}{},
 			Lock:  &sync.RWMutex{},
@@ -75,7 +75,7 @@ func NewServer(cfg Config) (*Server, error) {
 		mpvManager,
 		cfg.MpvSocketPath,
 		&Playback{},
-		make(chan Playback),
+		make(chan interface{}),
 		SSEObservers{
 			Items: map[string]chan interface{}{},
 			Lock:  &sync.RWMutex{},
@@ -84,7 +84,7 @@ func NewServer(cfg Config) (*Server, error) {
 			ObservingAddresses: map[string][]StatusObserverVariant{},
 			lock:               &sync.RWMutex{},
 		},
-		make(chan StatusChange),
+		make(chan interface{}),
 		SSEObservers{
 			Items: map[string]chan interface{}{},
 			Lock:  &sync.RWMutex{},
@@ -125,9 +125,9 @@ func (s *Server) initWatchers() error {
 		mpv.PlaybackTimeProperty: s.handlePlaybackTimeEvent,
 	}
 
-	go s.watchPlaybackChanges()
-	go s.watchMoviesChanges()
-	go s.watchStatusChanges()
+	go watchChangesForSSEObservers(s.playbackChanges, s.playbackChangesObservers)
+	go watchChangesForSSEObservers(s.moviesChanges, s.moviesChangesObservers)
+	go watchChangesForSSEObservers(s.statusChanges, s.statusChangesObservers)
 	go s.watchObservePropertyResponses(observePropertyHandlers, observePropertyResponses)
 
 	return s.observeProperties(observePropertyResponses)
@@ -161,4 +161,20 @@ func (s Server) observeProperties(observeResponses chan mpv.ObservePropertyRespo
 	}
 
 	return nil
+}
+
+// It's a fan-out dispatcher, which notifies all playback observers (subscribers from SSE etc.) when a playbackChange occurs.
+func watchChangesForSSEObservers(changes chan interface{}, observers SSEObservers) {
+	for {
+		change, ok := <-changes
+		if !ok {
+			return
+		}
+
+		observers.Lock.RLock()
+		for _, observer := range observers.Items {
+			observer <- change
+		}
+		observers.Lock.RUnlock()
+	}
 }
