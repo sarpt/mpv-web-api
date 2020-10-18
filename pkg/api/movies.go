@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sync"
 
 	"github.com/sarpt/mpv-web-api/pkg/probe"
 )
@@ -17,7 +18,7 @@ var (
 )
 
 const (
-	moviesObserverVariant StatusObserverVariant = "movies"
+	moviesObserverVariant SSEObserverVariant = "movies"
 
 	added   MoviesChangeVariant = "added"
 	updated MoviesChangeVariant = "updated"
@@ -47,35 +48,70 @@ type getMoviesRespone struct {
 	Movies map[string]Movie `json:"movies"`
 }
 
-// AddMovies appends movies to the list of movies served on current server instance
-func (s *Server) AddMovies(movies map[string]Movie) {
+// Movies is an aggregate state of the movies being served by the server instance.
+// Any modification done on the state should be done by exposed methods which should guarantee goroutine access safety.
+type Movies struct {
+	items   map[string]Movie
+	Changes chan interface{}
+	lock    *sync.RWMutex
+}
+
+// Add appends movies to the list of movies served on current server instance
+func (m *Movies) Add(movies map[string]Movie) {
 	addedMovies := map[string]Movie{}
 
-	s.moviesLock.Lock()
+	m.lock.Lock()
 	for path, movie := range movies {
-		if _, ok := s.movies[path]; ok {
+		if _, ok := m.items[path]; ok {
 			continue
 		}
 
-		s.movies[path] = movie
+		m.items[path] = movie
 		addedMovies[path] = movie
 	}
-	s.moviesLock.Unlock()
+	m.lock.Unlock()
 
 	if len(addedMovies) > 0 {
-		s.moviesChanges <- MoviesChange{
+		m.Changes <- MoviesChange{
 			Variant: added,
 			Items:   addedMovies,
 		}
 	}
 }
 
-func (s *Server) getMoviesHandler(res http.ResponseWriter, req *http.Request) {
-	s.moviesLock.Lock()
-	moviesResponse := getMoviesRespone{
-		Movies: s.movies,
+// All returns a copy of all Movies being served by the instance of the server.
+func (m *Movies) All() map[string]Movie {
+	allMovies := map[string]Movie{}
+
+	m.lock.RLock()
+	defer m.lock.RUnlock()
+
+	for path, movie := range m.items {
+		allMovies[path] = movie
 	}
-	s.moviesLock.Unlock()
+
+	return allMovies
+}
+
+// ByPath returns a Movie by a provided path.
+// When movie cannot be found, the error is being reported.
+func (m *Movies) ByPath(path string) (Movie, error) {
+	m.lock.RLock()
+	defer m.lock.RUnlock()
+
+	for _, movie := range m.items {
+		if movie.Path == path {
+			return movie, nil
+		}
+	}
+
+	return Movie{}, errNoMovieAvailable
+}
+
+func (s *Server) getMoviesHandler(res http.ResponseWriter, req *http.Request) {
+	moviesResponse := getMoviesRespone{
+		Movies: s.movies.All(),
+	}
 
 	response, err := json.Marshal(&moviesResponse)
 	if err != nil {
@@ -89,19 +125,9 @@ func (s *Server) getMoviesHandler(res http.ResponseWriter, req *http.Request) {
 	res.Write(response)
 }
 
-func (s Server) movieByPath(path string) (Movie, error) {
-	for _, movie := range s.movies {
-		if movie.Path == path {
-			return movie, nil
-		}
-	}
-
-	return Movie{}, errNoMovieAvailable
-}
-
 func (s *Server) createMoviesReplayHandler() sseReplayHandler {
 	return func(res http.ResponseWriter, flusher http.Flusher) error {
-		return sendMovies(s.movies, res, flusher)
+		return sendMovies(s.movies.All(), res, flusher)
 	}
 }
 
@@ -118,10 +144,9 @@ func (s *Server) createMoviesChangeHandler() sseChangeHandler {
 
 func (s *Server) createGetSseMoviesHandler() getSseHandler {
 	cfg := SseHandlerConfig{
-		ObserverVariant: moviesObserverVariant,
-		Observers:       s.moviesChangesObservers,
-		ChangeHandler:   s.createMoviesChangeHandler(),
-		ReplayHandler:   s.createMoviesReplayHandler(),
+		Observers:     s.moviesSSEObservers,
+		ChangeHandler: s.createMoviesChangeHandler(),
+		ReplayHandler: s.createMoviesReplayHandler(),
 	}
 
 	return s.createGetSseHandler(cfg)

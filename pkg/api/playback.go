@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	playbackObserverVariant StatusObserverVariant = "playback"
+	playbackObserverVariant SSEObserverVariant = "playback"
 
 	pathArg       = "path"
 	fullscreenArg = "fullscreen"
@@ -42,6 +42,7 @@ type Playback struct {
 	SelectedSubtitleID int
 	Paused             bool
 	Loop               PlaybackLoop
+	Changes            chan interface{} `json:"-"`
 }
 
 type getPlaybackResponse struct {
@@ -138,10 +139,9 @@ func (s *Server) createPlaybackChangesHandler() sseChangeHandler {
 
 func (s *Server) createGetSsePlaybackHandler() getSseHandler {
 	cfg := SseHandlerConfig{
-		ObserverVariant: playbackObserverVariant,
-		Observers:       s.playbackChangesObservers,
-		ChangeHandler:   s.createPlaybackChangesHandler(),
-		ReplayHandler:   s.createPlaybackReplayHandler(),
+		Observers:     s.playbackSSEObservers,
+		ChangeHandler: s.createPlaybackChangesHandler(),
+		ReplayHandler: s.createPlaybackReplayHandler(),
 	}
 
 	return s.createGetSseHandler(cfg)

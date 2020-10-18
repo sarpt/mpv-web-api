@@ -25,7 +25,7 @@ func (s *Server) probeDirectory(directory string) []probe.SkippedFile {
 		movies[movie.Path] = movie
 	}
 
-	s.AddMovies(movies)
+	s.movies.Add(movies)
 
 	s.outLog.Printf("finished probing directory %s\n", directory)
 	return skippedFiles

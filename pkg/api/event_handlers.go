@@ -27,7 +27,7 @@ func (s *Server) handleFullscreenEvent(res mpv.ObservePropertyResponse) error {
 	}
 
 	s.playback.Fullscreen = enabled == mpv.YesValue
-	s.playbackChanges <- *s.playback
+	s.playback.Changes <- *s.playback
 	return nil
 }
 
@@ -42,7 +42,7 @@ func (s *Server) handleLoopFileEvent(res mpv.ObservePropertyResponse) error {
 	} else {
 		s.playback.Loop.Variant = ""
 	}
-	s.playbackChanges <- *s.playback
+	s.playback.Changes <- *s.playback
 	return nil
 }
 
@@ -53,7 +53,7 @@ func (s *Server) handlePauseEvent(res mpv.ObservePropertyResponse) error {
 	}
 
 	s.playback.Paused = paused == mpv.YesValue
-	s.playbackChanges <- *s.playback
+	s.playback.Changes <- *s.playback
 	return nil
 }
 
@@ -64,7 +64,7 @@ func (s *Server) handleAudioIDChangeEvent(res mpv.ObservePropertyResponse) error
 	}
 
 	s.playback.SelectedAudioID = aid
-	s.playbackChanges <- *s.playback
+	s.playback.Changes <- *s.playback
 	return nil
 }
 
@@ -75,7 +75,7 @@ func (s *Server) handleSubtitleIDChangeEvent(res mpv.ObservePropertyResponse) er
 	}
 
 	s.playback.SelectedAudioID = sid
-	s.playbackChanges <- *s.playback
+	s.playback.Changes <- *s.playback
 	return nil
 }
 
@@ -86,7 +86,7 @@ func (s *Server) handleChapterChangeEvent(res mpv.ObservePropertyResponse) error
 	}
 
 	s.playback.CurrentChapterIdx = chapterIdx
-	s.playbackChanges <- *s.playback
+	s.playback.Changes <- *s.playback
 	return nil
 }
 
@@ -101,13 +101,13 @@ func (s *Server) handlePathEvent(res mpv.ObservePropertyResponse) error {
 		return ErrResponseDataNotString
 	}
 
-	movie, err := s.movieByPath(path)
+	movie, err := s.movies.ByPath(path)
 	if err != nil {
 		return fmt.Errorf("%w:%s", ErrPlaybackPathNotServed, path)
 	}
 
 	s.playback.Movie = movie
-	s.playbackChanges <- *s.playback
+	s.playback.Changes <- *s.playback
 	return nil
 }
 
@@ -127,6 +127,6 @@ func (s *Server) handlePlaybackTimeEvent(res mpv.ObservePropertyResponse) error 
 	}
 
 	s.playback.CurrentTime = currentTimeNum
-	s.playbackChanges <- *s.playback
+	s.playback.Changes <- *s.playback
 	return nil
 }

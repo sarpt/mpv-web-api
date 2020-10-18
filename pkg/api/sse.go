@@ -14,8 +14,9 @@ const (
 
 // SSEObservers represents client observers that are currently connected to this instance of api server
 type SSEObservers struct {
-	Items map[string]chan interface{}
-	Lock  *sync.RWMutex
+	Variant SSEObserverVariant
+	Items   map[string]chan interface{}
+	Lock    *sync.RWMutex
 }
 
 type getSseHandler = func(res http.ResponseWriter, req *http.Request)
@@ -24,10 +25,9 @@ type sseChangeHandler = func(res http.ResponseWriter, flusher http.Flusher, chan
 
 // SseHandlerConfig is used to control creation of SSE handler for Server
 type SseHandlerConfig struct {
-	ObserverVariant StatusObserverVariant
-	Observers       SSEObservers
-	ChangeHandler   sseChangeHandler
-	ReplayHandler   sseReplayHandler
+	Observers     SSEObservers
+	ChangeHandler sseChangeHandler
+	ReplayHandler sseReplayHandler
 }
 
 var (
@@ -89,8 +89,8 @@ func (s *Server) createGetSseHandler(cfg SseHandlerConfig) getSseHandler {
 		cfg.Observers.Items[req.RemoteAddr] = changes
 		cfg.Observers.Lock.Unlock()
 
-		s.addObservingAddressToStatus(req.RemoteAddr, cfg.ObserverVariant)
-		s.outLog.Printf("added %s observer with addr %s\n", cfg.ObserverVariant, req.RemoteAddr)
+		s.status.addObservingAddress(req.RemoteAddr, cfg.Observers.Variant)
+		s.outLog.Printf("added %s observer with addr %s\n", cfg.Observers.Variant, req.RemoteAddr)
 
 		if replaySseState(req) {
 			err := cfg.ReplayHandler(res, flusher)
@@ -115,8 +115,8 @@ func (s *Server) createGetSseHandler(cfg SseHandlerConfig) getSseHandler {
 				delete(cfg.Observers.Items, req.RemoteAddr)
 				cfg.Observers.Lock.Unlock()
 
-				s.removeObservingAddressFromStatus(req.RemoteAddr, cfg.ObserverVariant)
-				s.outLog.Printf("removing %s observer with addr %s\n", cfg.ObserverVariant, req.RemoteAddr)
+				s.status.removeObservingAddress(req.RemoteAddr, cfg.Observers.Variant)
+				s.outLog.Printf("removing %s observer with addr %s\n", cfg.Observers.Variant, req.RemoteAddr)
 
 				return
 			}

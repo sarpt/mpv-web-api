@@ -20,24 +20,20 @@ type observePropertyHandler = func(res mpv.ObservePropertyResponse) error
 
 // Server is used to serve API and hold state accessible to the API
 type Server struct {
-	address                  string
-	allowCors                bool
-	directories              []string
-	directoriesLock          *sync.RWMutex
-	movies                   map[string]Movie
-	moviesLock               *sync.RWMutex
-	moviesChanges            chan interface{}
-	moviesChangesObservers   SSEObservers
-	mpvManager               *mpv.Manager
-	mpvSocketPath            string
-	playback                 *Playback
-	playbackChanges          chan interface{}
-	playbackChangesObservers SSEObservers
-	status                   *Status
-	statusChanges            chan interface{}
-	statusChangesObservers   SSEObservers
-	errLog                   *log.Logger
-	outLog                   *log.Logger
+	address              string
+	allowCors            bool
+	directories          []string
+	directoriesLock      *sync.RWMutex
+	movies               Movies
+	moviesSSEObservers   SSEObservers
+	mpvManager           *mpv.Manager
+	mpvSocketPath        string
+	playback             *Playback
+	playbackSSEObservers SSEObservers
+	status               *Status
+	statusSSEObservers   SSEObservers
+	errLog               *log.Logger
+	outLog               *log.Logger
 }
 
 // Config controls behaviour of the api serve
@@ -65,29 +61,35 @@ func NewServer(cfg Config) (*Server, error) {
 		cfg.AllowCors,
 		[]string{},
 		&sync.RWMutex{},
-		map[string]Movie{},
-		&sync.RWMutex{},
-		make(chan interface{}),
+		Movies{
+			items:   map[string]Movie{},
+			Changes: make(chan interface{}),
+			lock:    &sync.RWMutex{},
+		},
 		SSEObservers{
-			Items: map[string]chan interface{}{},
-			Lock:  &sync.RWMutex{},
+			Variant: moviesObserverVariant,
+			Items:   map[string]chan interface{}{},
+			Lock:    &sync.RWMutex{},
 		},
 		mpvManager,
 		cfg.MpvSocketPath,
-		&Playback{},
-		make(chan interface{}),
+		&Playback{
+			Changes: make(chan interface{}),
+		},
 		SSEObservers{
-			Items: map[string]chan interface{}{},
-			Lock:  &sync.RWMutex{},
+			Variant: playbackObserverVariant,
+			Items:   map[string]chan interface{}{},
+			Lock:    &sync.RWMutex{},
 		},
 		&Status{
-			ObservingAddresses: map[string][]StatusObserverVariant{},
+			ObservingAddresses: map[string][]SSEObserverVariant{},
 			lock:               &sync.RWMutex{},
+			Changes:            make(chan interface{}),
 		},
-		make(chan interface{}),
 		SSEObservers{
-			Items: map[string]chan interface{}{},
-			Lock:  &sync.RWMutex{},
+			Variant: statusObserverVariant,
+			Items:   map[string]chan interface{}{},
+			Lock:    &sync.RWMutex{},
 		},
 		log.New(cfg.outWriter, logPrefix, log.LstdFlags),
 		log.New(cfg.errWriter, logPrefix, log.LstdFlags),
@@ -125,9 +127,9 @@ func (s *Server) initWatchers() error {
 		mpv.PlaybackTimeProperty: s.handlePlaybackTimeEvent,
 	}
 
-	go watchChangesForSSEObservers(s.playbackChanges, s.playbackChangesObservers)
-	go watchChangesForSSEObservers(s.moviesChanges, s.moviesChangesObservers)
-	go watchChangesForSSEObservers(s.statusChanges, s.statusChangesObservers)
+	go watchChangesForSSEObservers(s.playback.Changes, s.playbackSSEObservers)
+	go watchChangesForSSEObservers(s.movies.Changes, s.moviesSSEObservers)
+	go watchChangesForSSEObservers(s.status.Changes, s.statusSSEObservers)
 	go s.watchObservePropertyResponses(observePropertyHandlers, observePropertyResponses)
 
 	return s.observeProperties(observePropertyResponses)
@@ -163,7 +165,7 @@ func (s Server) observeProperties(observeResponses chan mpv.ObservePropertyRespo
 	return nil
 }
 
-// It's a fan-out dispatcher, which notifies all playback observers (subscribers from SSE etc.) when a playbackChange occurs.
+// watchChangesForSSEObservers is a fan-out dispatcher, which notifies all playback observers (subscribers from SSE etc.) when a playbackChange occurs.
 func watchChangesForSSEObservers(changes chan interface{}, observers SSEObservers) {
 	for {
 		change, ok := <-changes

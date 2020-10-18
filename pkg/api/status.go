@@ -6,14 +6,14 @@ import (
 	"sync"
 )
 
-// StatusObserverVariant specifies type of observer (movies, playback, etc.)
-type StatusObserverVariant string
+// SSEObserverVariant specifies type of observer (movies, playback, etc.)
+type SSEObserverVariant string
 
 // StatusChangeVariant specifies what type of change to server status occurs
 type StatusChangeVariant string
 
 const (
-	statusObserverVariant StatusObserverVariant = "status"
+	statusObserverVariant SSEObserverVariant = "status"
 
 	statusReplay          StatusChangeVariant = "replay"
 	clientObserverAdded   StatusChangeVariant = "client-observer-added"
@@ -29,12 +29,13 @@ type StatusChange struct {
 
 // Status holds information about server misc status
 type Status struct {
-	ObservingAddresses map[string][]StatusObserverVariant
+	ObservingAddresses map[string][]SSEObserverVariant
 	lock               *sync.RWMutex
+	Changes            chan interface{}
 }
 
-func (s *Status) addObservingAddress(remoteAddr string, observerVariant StatusObserverVariant) {
-	var observers []StatusObserverVariant
+func (s *Status) addObservingAddress(remoteAddr string, observerVariant SSEObserverVariant) {
+	var observers []SSEObserverVariant
 	var ok bool
 
 	s.lock.Lock()
@@ -42,14 +43,18 @@ func (s *Status) addObservingAddress(remoteAddr string, observerVariant StatusOb
 
 	observers, ok = s.ObservingAddresses[remoteAddr]
 	if !ok {
-		observers = []StatusObserverVariant{}
+		observers = []SSEObserverVariant{}
 	}
 
 	s.ObservingAddresses[remoteAddr] = append(observers, observerVariant)
+	s.Changes <- StatusChange{
+		Variant: clientObserverAdded,
+		Status:  *s,
+	}
 }
 
-func (s *Status) removeObservingAddress(remoteAddr string, observerVariant StatusObserverVariant) {
-	var observers []StatusObserverVariant
+func (s *Status) removeObservingAddress(remoteAddr string, observerVariant SSEObserverVariant) {
+	var observers []SSEObserverVariant
 	var ok bool
 
 	s.lock.Lock()
@@ -60,7 +65,7 @@ func (s *Status) removeObservingAddress(remoteAddr string, observerVariant Statu
 		return
 	}
 
-	filteredObservers := []StatusObserverVariant{}
+	filteredObservers := []SSEObserverVariant{}
 	for _, observer := range observers {
 		if observer != observerVariant {
 			filteredObservers = append(filteredObservers, observer)
@@ -72,9 +77,14 @@ func (s *Status) removeObservingAddress(remoteAddr string, observerVariant Statu
 	} else {
 		s.ObservingAddresses[remoteAddr] = filteredObservers
 	}
+
+	s.Changes <- StatusChange{
+		Variant: clientObserverRemoved,
+		Status:  *s,
+	}
 }
 
-func (s *Status) observingAddresses() map[string][]StatusObserverVariant {
+func (s *Status) observingAddresses() map[string][]SSEObserverVariant {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
@@ -115,29 +125,12 @@ func (s *Server) createStatusChangeHandler() sseChangeHandler {
 
 func (s *Server) createGetSseStatusHandler() getSseHandler {
 	cfg := SseHandlerConfig{
-		ObserverVariant: statusObserverVariant,
-		Observers:       s.statusChangesObservers,
-		ChangeHandler:   s.createStatusChangeHandler(),
-		ReplayHandler:   s.createStatusReplayHandler(),
+		Observers:     s.statusSSEObservers,
+		ChangeHandler: s.createStatusChangeHandler(),
+		ReplayHandler: s.createStatusReplayHandler(),
 	}
 
 	return s.createGetSseHandler(cfg)
-}
-
-func (s Server) addObservingAddressToStatus(remoteAddr string, observerVariant StatusObserverVariant) {
-	s.status.addObservingAddress(remoteAddr, observerVariant)
-	s.statusChanges <- StatusChange{
-		Variant: clientObserverAdded,
-		Status:  s.status.safeCopy(),
-	}
-}
-
-func (s Server) removeObservingAddressFromStatus(remoteAddr string, observerVariant StatusObserverVariant) {
-	s.status.removeObservingAddress(remoteAddr, observerVariant)
-	s.statusChanges <- StatusChange{
-		Variant: clientObserverRemoved,
-		Status:  s.status.safeCopy(),
-	}
 }
 
 func sendStatus(variant StatusChangeVariant, status *Status, res http.ResponseWriter, flusher http.Flusher) error {
