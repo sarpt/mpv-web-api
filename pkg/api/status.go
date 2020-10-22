@@ -30,8 +30,8 @@ type StatusChange struct {
 // Status holds information about server misc status
 type Status struct {
 	ObservingAddresses map[string][]SSEObserverVariant
-	lock               *sync.RWMutex
-	Changes            chan interface{}
+	lock               *sync.RWMutex    `json:"-"`
+	Changes            chan interface{} `json:"-"`
 }
 
 func (s *Status) addObservingAddress(remoteAddr string, observerVariant SSEObserverVariant) {
