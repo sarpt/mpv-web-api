@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	playbackObserverVariant SSEObserverVariant = "playback"
+	playbackSSEChannelVariant SSEChannelVariant = "playback"
 
 	pathArg       = "path"
 	fullscreenArg = "fullscreen"
@@ -137,14 +137,13 @@ func (s *Server) createPlaybackChangesHandler() sseChangeHandler {
 	}
 }
 
-func (s *Server) createGetSsePlaybackHandler() getSseHandler {
-	cfg := SseHandlerConfig{
+func (s *Server) playbackSSEChannel() SSEChannel {
+	return SSEChannel{
+		Variant:       playbackSSEChannelVariant,
 		Observers:     s.playbackSSEObservers,
 		ChangeHandler: s.createPlaybackChangesHandler(),
 		ReplayHandler: s.createPlaybackReplayHandler(),
 	}
-
-	return s.createGetSseHandler(cfg)
 }
 
 func sendPlayback(playback Playback, res http.ResponseWriter, flusher http.Flusher) error {

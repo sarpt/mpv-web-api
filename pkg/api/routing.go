@@ -10,9 +10,7 @@ const (
 	moviesPath      = "/movies"
 	directoriesPath = "/directories"
 	playbackPath    = "/playback"
-	ssePlaybackPath = "/sse/playback"
-	sseMoviesPath   = "/sse/movies"
-	sseStatusPath   = "/sse/status"
+	ssePath         = "/sse"
 
 	methodsSeparator = ", "
 
@@ -37,16 +35,15 @@ type handlerErrors struct {
 }
 
 func (s *Server) mainHandler() *http.ServeMux {
-	sseStatusHandlers := map[string]http.HandlerFunc{
-		http.MethodGet: s.createGetSseStatusHandler(),
+	sseCfg := SseHandlerConfig{
+		Channels: map[SSEChannelVariant]SSEChannel{
+			playbackSSEChannelVariant: s.playbackSSEChannel(),
+			moviesSSEChannelVariant:   s.moviesSSEChannel(),
+			statusSSEChannelVariant:   s.statusSSEChannel(),
+		},
 	}
-
-	ssePlaybackHandlers := map[string]http.HandlerFunc{
-		http.MethodGet: s.createGetSsePlaybackHandler(),
-	}
-
-	sseMoviesHandlers := map[string]http.HandlerFunc{
-		http.MethodGet: s.createGetSseMoviesHandler(),
+	sseHandlers := map[string]http.HandlerFunc{
+		http.MethodGet: s.createGetSseHandler(sseCfg),
 	}
 
 	playbackHandlers := map[string]http.HandlerFunc{
@@ -65,9 +62,7 @@ func (s *Server) mainHandler() *http.ServeMux {
 	}
 
 	allHandlers := map[string]pathHandlers{
-		ssePlaybackPath: ssePlaybackHandlers,
-		sseMoviesPath:   sseMoviesHandlers,
-		sseStatusPath:   sseStatusHandlers,
+		ssePath:         sseHandlers,
 		playbackPath:    playbackHandlers,
 		moviesPath:      moviesHandlers,
 		directoriesPath: directoriesHandlers,

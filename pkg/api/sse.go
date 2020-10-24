@@ -10,24 +10,30 @@ import (
 
 const (
 	replaySseStateArg = "replay"
+	sseChannelArg     = "channel"
 )
 
 // SSEObservers represents client observers that are currently connected to this instance of api server
 type SSEObservers struct {
-	Variant SSEObserverVariant
-	Items   map[string]chan interface{}
-	Lock    *sync.RWMutex
+	Items map[string]chan interface{}
+	Lock  *sync.RWMutex
 }
 
 type getSseHandler = func(res http.ResponseWriter, req *http.Request)
 type sseReplayHandler = func(res http.ResponseWriter, flusher http.Flusher) error
 type sseChangeHandler = func(res http.ResponseWriter, flusher http.Flusher, change interface{}) error
 
-// SseHandlerConfig is used to control creation of SSE handler for Server
-type SseHandlerConfig struct {
+// SSEChannel is used to construct channel on which subscribers can listen to on a mutexed on a single SSE keep-alive connection
+type SSEChannel struct {
 	Observers     SSEObservers
+	Variant       SSEChannelVariant
 	ChangeHandler sseChangeHandler
 	ReplayHandler sseReplayHandler
+}
+
+// SseHandlerConfig is used to control creation of SSE handler for Server
+type SseHandlerConfig struct {
+	Channels map[SSEChannelVariant]SSEChannel
 }
 
 var (
@@ -80,46 +86,68 @@ func (s *Server) createGetSseHandler(cfg SseHandlerConfig) getSseHandler {
 			return
 		}
 
-		// Buffer of 1 in case connection is closed after playbackObservers fan-out dispatcher already acquired read lock (blocking the write lock).
-		// The dispatcher will expect for the select below to receive the message but the Context().Done() already waits to acquire a write lock.
-		// So the buffer of 1 ensures that one message will be buffered, dispatcher will not be blocked, and write lock will be obtained.
-		// When the write lock is obtained to remove from the set, even if a new playback will be received, read lock will wait until Context().Done() finishes.
-		changes := make(chan interface{}, 1)
-		cfg.Observers.Lock.Lock()
-		cfg.Observers.Items[req.RemoteAddr] = changes
-		cfg.Observers.Lock.Unlock()
+		wg := &sync.WaitGroup{}
 
-		s.status.addObservingAddress(req.RemoteAddr, cfg.Observers.Variant)
-		s.outLog.Printf("added %s observer with addr %s\n", cfg.Observers.Variant, req.RemoteAddr)
+		channelVariants := req.URL.Query()[sseChannelArg]
+		for _, reqChannel := range channelVariants {
+			channelVariant := SSEChannelVariant(reqChannel)
 
-		if replaySseState(req) {
-			err := cfg.ReplayHandler(res, flusher)
+			channel, ok := cfg.Channels[channelVariant]
+			if !ok {
+				continue
+			}
+
+			wg.Add(1)
+			go s.observeChannelVariant(res, req, flusher, channel, wg)
+		}
+
+		wg.Wait()
+	}
+}
+
+func (s *Server) observeChannelVariant(res http.ResponseWriter, req *http.Request, flusher http.Flusher, channel SSEChannel, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	remoteAddr := req.RemoteAddr
+	// Buffer of 1 in case connection is closed after playbackObservers fan-out dispatcher already acquired read lock (blocking the write lock).
+	// The dispatcher will expect for the select below to receive the message but the Context().Done() already waits to acquire a write lock acquired by the dispatcher in order to send on a channel.
+	// So the buffer of 1 ensures that one message will be buffered, dispatcher will not be blocked, and write lock will be obtained.
+	// When the write lock is obtained to remove from the set, even if a new playback will be received, read lock will wait until Context().Done() finishes.
+	changes := make(chan interface{}, 1)
+	channel.Observers.Lock.Lock()
+	channel.Observers.Items[remoteAddr] = changes
+	channel.Observers.Lock.Unlock()
+
+	s.status.addObservingAddress(req.RemoteAddr, channel.Variant)
+	s.outLog.Printf("added %s observer with addr %s\n", channel.Variant, remoteAddr)
+
+	if replaySseState(req) {
+		err := channel.ReplayHandler(res, flusher)
+		if err != nil {
+			s.errLog.Println(err.Error())
+		}
+	}
+
+	for {
+		select {
+		case change, ok := <-changes:
+			if !ok {
+				return
+			}
+
+			err := channel.ChangeHandler(res, flusher, change)
 			if err != nil {
 				s.errLog.Println(err.Error())
 			}
-		}
+		case <-req.Context().Done():
+			channel.Observers.Lock.Lock()
+			delete(channel.Observers.Items, remoteAddr)
+			channel.Observers.Lock.Unlock()
 
-		for {
-			select {
-			case change, ok := <-changes:
-				if !ok {
-					return
-				}
+			s.status.removeObservingAddress(req.RemoteAddr, channel.Variant)
+			s.outLog.Printf("removing %s observer with addr %s\n", channel.Variant, remoteAddr)
 
-				err := cfg.ChangeHandler(res, flusher, change)
-				if err != nil {
-					s.errLog.Println(err.Error())
-				}
-			case <-req.Context().Done():
-				cfg.Observers.Lock.Lock()
-				delete(cfg.Observers.Items, req.RemoteAddr)
-				cfg.Observers.Lock.Unlock()
-
-				s.status.removeObservingAddress(req.RemoteAddr, cfg.Observers.Variant)
-				s.outLog.Printf("removing %s observer with addr %s\n", cfg.Observers.Variant, req.RemoteAddr)
-
-				return
-			}
+			return
 		}
 	}
 }

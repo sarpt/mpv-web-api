@@ -67,9 +67,8 @@ func NewServer(cfg Config) (*Server, error) {
 			lock:    &sync.RWMutex{},
 		},
 		SSEObservers{
-			Variant: moviesObserverVariant,
-			Items:   map[string]chan interface{}{},
-			Lock:    &sync.RWMutex{},
+			Items: map[string]chan interface{}{},
+			Lock:  &sync.RWMutex{},
 		},
 		mpvManager,
 		cfg.MpvSocketPath,
@@ -77,19 +76,17 @@ func NewServer(cfg Config) (*Server, error) {
 			Changes: make(chan interface{}),
 		},
 		SSEObservers{
-			Variant: playbackObserverVariant,
-			Items:   map[string]chan interface{}{},
-			Lock:    &sync.RWMutex{},
+			Items: map[string]chan interface{}{},
+			Lock:  &sync.RWMutex{},
 		},
 		&Status{
-			ObservingAddresses: map[string][]SSEObserverVariant{},
+			ObservingAddresses: map[string][]SSEChannelVariant{},
 			lock:               &sync.RWMutex{},
 			Changes:            make(chan interface{}),
 		},
 		SSEObservers{
-			Variant: statusObserverVariant,
-			Items:   map[string]chan interface{}{},
-			Lock:    &sync.RWMutex{},
+			Items: map[string]chan interface{}{},
+			Lock:  &sync.RWMutex{},
 		},
 		log.New(cfg.outWriter, logPrefix, log.LstdFlags),
 		log.New(cfg.errWriter, logPrefix, log.LstdFlags),
@@ -127,9 +124,9 @@ func (s *Server) initWatchers() error {
 		mpv.PlaybackTimeProperty: s.handlePlaybackTimeEvent,
 	}
 
-	go watchChangesForSSEObservers(s.playback.Changes, s.playbackSSEObservers)
-	go watchChangesForSSEObservers(s.movies.Changes, s.moviesSSEObservers)
-	go watchChangesForSSEObservers(s.status.Changes, s.statusSSEObservers)
+	go distributeChangesToSSEObservers(s.playback.Changes, s.playbackSSEObservers)
+	go distributeChangesToSSEObservers(s.movies.Changes, s.moviesSSEObservers)
+	go distributeChangesToSSEObservers(s.status.Changes, s.statusSSEObservers)
 	go s.watchObservePropertyResponses(observePropertyHandlers, observePropertyResponses)
 
 	return s.observeProperties(observePropertyResponses)
@@ -165,8 +162,8 @@ func (s Server) observeProperties(observeResponses chan mpv.ObservePropertyRespo
 	return nil
 }
 
-// watchChangesForSSEObservers is a fan-out dispatcher, which notifies all playback observers (subscribers from SSE etc.) when a playbackChange occurs.
-func watchChangesForSSEObservers(changes chan interface{}, observers SSEObservers) {
+// distributeChangesToSSEObservers is a fan-out dispatcher, which notifies all playback observers (subscribers from SSE etc.) when a playbackChange occurs.
+func distributeChangesToSSEObservers(changes chan interface{}, observers SSEObservers) {
 	for {
 		change, ok := <-changes
 		if !ok {

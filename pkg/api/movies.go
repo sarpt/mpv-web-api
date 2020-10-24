@@ -18,7 +18,7 @@ var (
 )
 
 const (
-	moviesObserverVariant SSEObserverVariant = "movies"
+	moviesSSEChannelVariant SSEChannelVariant = "movies"
 
 	added   MoviesChangeVariant = "added"
 	updated MoviesChangeVariant = "updated"
@@ -142,14 +142,13 @@ func (s *Server) createMoviesChangeHandler() sseChangeHandler {
 	}
 }
 
-func (s *Server) createGetSseMoviesHandler() getSseHandler {
-	cfg := SseHandlerConfig{
+func (s *Server) moviesSSEChannel() SSEChannel {
+	return SSEChannel{
+		Variant:       moviesSSEChannelVariant,
 		Observers:     s.moviesSSEObservers,
 		ChangeHandler: s.createMoviesChangeHandler(),
 		ReplayHandler: s.createMoviesReplayHandler(),
 	}
-
-	return s.createGetSseHandler(cfg)
 }
 
 func sendMovies(movies map[string]Movie, res http.ResponseWriter, flusher http.Flusher) error {
