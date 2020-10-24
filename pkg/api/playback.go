@@ -121,19 +121,19 @@ func (s *Server) getPlaybackHandler(res http.ResponseWriter, req *http.Request) 
 }
 
 func (s *Server) createPlaybackReplayHandler() sseReplayHandler {
-	return func(res http.ResponseWriter, flusher http.Flusher) error {
-		return sendPlayback(*s.playback, res, flusher)
+	return func(res SSEResponseWriter) error {
+		return sendPlayback(*s.playback, res)
 	}
 }
 
 func (s *Server) createPlaybackChangesHandler() sseChangeHandler {
-	return func(res http.ResponseWriter, flusher http.Flusher, changes interface{}) error {
+	return func(res SSEResponseWriter, changes interface{}) error {
 		newPlayback, ok := changes.(Playback)
 		if !ok {
 			return errIncorrectChangesType
 		}
 
-		return sendPlayback(newPlayback, res, flusher)
+		return sendPlayback(newPlayback, res)
 	}
 }
 
@@ -146,7 +146,7 @@ func (s *Server) playbackSSEChannel() SSEChannel {
 	}
 }
 
-func sendPlayback(playback Playback, res http.ResponseWriter, flusher http.Flusher) error {
+func sendPlayback(playback Playback, res SSEResponseWriter) error {
 	out, err := json.Marshal(playback)
 	if err != nil {
 		return errResponseJSONCreationFailed
@@ -154,10 +154,9 @@ func sendPlayback(playback Playback, res http.ResponseWriter, flusher http.Flush
 
 	_, err = res.Write(formatSseEvent(playbackAllSseEvent, out))
 	if err != nil {
-		return errClientWritingFailed
+		return fmt.Errorf("sending playback failed: %s: %w", errClientWritingFailed.Error(), err)
 	}
 
-	flusher.Flush()
 	return nil
 }
 

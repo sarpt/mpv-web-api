@@ -35,7 +35,7 @@ type handlerErrors struct {
 }
 
 func (s *Server) mainHandler() *http.ServeMux {
-	sseCfg := SseHandlerConfig{
+	sseCfg := SSEHandlerConfig{
 		Channels: map[SSEChannelVariant]SSEChannel{
 			playbackSSEChannelVariant: s.playbackSSEChannel(),
 			moviesSSEChannelVariant:   s.moviesSSEChannel(),

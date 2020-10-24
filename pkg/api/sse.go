@@ -20,8 +20,8 @@ type SSEObservers struct {
 }
 
 type getSseHandler = func(res http.ResponseWriter, req *http.Request)
-type sseReplayHandler = func(res http.ResponseWriter, flusher http.Flusher) error
-type sseChangeHandler = func(res http.ResponseWriter, flusher http.Flusher, change interface{}) error
+type sseReplayHandler = func(res SSEResponseWriter) error
+type sseChangeHandler = func(res SSEResponseWriter, change interface{}) error
 
 // SSEChannel is used to construct channel on which subscribers can listen to on a mutexed on a single SSE keep-alive connection
 type SSEChannel struct {
@@ -31,9 +31,30 @@ type SSEChannel struct {
 	ReplayHandler sseReplayHandler
 }
 
-// SseHandlerConfig is used to control creation of SSE handler for Server
-type SseHandlerConfig struct {
+// SSEHandlerConfig is used to control creation of SSE handler for Server
+type SSEHandlerConfig struct {
 	Channels map[SSEChannelVariant]SSEChannel
+}
+
+// SSEResponseWriter is used to send data through keep-alive SSE connection.
+// The writer and flusher are protected by lock since multiple go routines use the same connection to send events.
+type SSEResponseWriter struct {
+	res     http.ResponseWriter
+	flusher http.Flusher
+	lock    *sync.Mutex
+}
+
+// Write sends data through the connection
+func (f *SSEResponseWriter) Write(data []byte) (int, error) {
+	f.lock.Lock()
+	defer f.lock.Unlock()
+
+	n, err := f.res.Write(data)
+	if err == nil {
+		f.flusher.Flush()
+	}
+
+	return n, err
 }
 
 var (
@@ -45,17 +66,22 @@ var (
 	errIncorrectChangesType       = errors.New("changes of incorrect type provided to the change handler")
 )
 
-func sseFlusher(res http.ResponseWriter) (http.Flusher, error) {
+func sseResponseWriter(res http.ResponseWriter) (SSEResponseWriter, error) {
 	flusher, ok := res.(http.Flusher)
 	if !ok {
-		return flusher, errConvertToFlusherFailed
+		return SSEResponseWriter{}, errConvertToFlusherFailed
 	}
 
 	res.Header().Set("Connection", "keep-alive")
 	res.Header().Set("Content-Type", "text/event-stream")
 	res.Header().Set("Access-Control-Allow-Origin", "*")
 
-	return flusher, nil
+	sseFlusher := SSEResponseWriter{
+		res:     res,
+		flusher: flusher,
+		lock:    &sync.Mutex{},
+	}
+	return sseFlusher, nil
 }
 
 func replaySseState(req *http.Request) bool {
@@ -78,9 +104,9 @@ func formatSseEvent(eventName string, data []byte) []byte {
 	return out
 }
 
-func (s *Server) createGetSseHandler(cfg SseHandlerConfig) getSseHandler {
+func (s *Server) createGetSseHandler(cfg SSEHandlerConfig) getSseHandler {
 	return func(res http.ResponseWriter, req *http.Request) {
-		flusher, err := sseFlusher(res)
+		sseResWriter, err := sseResponseWriter(res)
 		if err != nil {
 			res.WriteHeader(400)
 			return
@@ -98,14 +124,15 @@ func (s *Server) createGetSseHandler(cfg SseHandlerConfig) getSseHandler {
 			}
 
 			wg.Add(1)
-			go s.observeChannelVariant(res, req, flusher, channel, wg)
+			go s.observeChannelVariant(sseResWriter, req, channel, wg)
 		}
 
 		wg.Wait()
+		s.outLog.Printf("all sse channels closed for %s", req.RemoteAddr)
 	}
 }
 
-func (s *Server) observeChannelVariant(res http.ResponseWriter, req *http.Request, flusher http.Flusher, channel SSEChannel, wg *sync.WaitGroup) {
+func (s *Server) observeChannelVariant(res SSEResponseWriter, req *http.Request, channel SSEChannel, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	remoteAddr := req.RemoteAddr
@@ -122,20 +149,22 @@ func (s *Server) observeChannelVariant(res http.ResponseWriter, req *http.Reques
 	s.outLog.Printf("added %s observer with addr %s\n", channel.Variant, remoteAddr)
 
 	if replaySseState(req) {
-		err := channel.ReplayHandler(res, flusher)
+		err := channel.ReplayHandler(res)
 		if err != nil {
-			s.errLog.Println(err.Error())
+			s.errLog.Println(fmt.Sprintf("could not replay data on sse: %s", err.Error()))
 		}
 	}
 
 	for {
 		select {
-		case change, ok := <-changes:
-			if !ok {
+		case change, closed := <-changes:
+			if !closed {
+				s.outLog.Printf("sse observation on channel %s done for %s due to changes channel being closed\n", channel.Variant, remoteAddr)
+
 				return
 			}
 
-			err := channel.ChangeHandler(res, flusher, change)
+			err := channel.ChangeHandler(res, change)
 			if err != nil {
 				s.errLog.Println(err.Error())
 			}

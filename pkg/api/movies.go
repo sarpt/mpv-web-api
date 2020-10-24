@@ -126,19 +126,19 @@ func (s *Server) getMoviesHandler(res http.ResponseWriter, req *http.Request) {
 }
 
 func (s *Server) createMoviesReplayHandler() sseReplayHandler {
-	return func(res http.ResponseWriter, flusher http.Flusher) error {
-		return sendMovies(s.movies.All(), res, flusher)
+	return func(res SSEResponseWriter) error {
+		return sendMovies(s.movies.All(), res)
 	}
 }
 
 func (s *Server) createMoviesChangeHandler() sseChangeHandler {
-	return func(res http.ResponseWriter, flusher http.Flusher, changes interface{}) error {
+	return func(res SSEResponseWriter, changes interface{}) error {
 		moviesChange, ok := changes.(MoviesChange)
 		if !ok {
 			return errIncorrectChangesType
 		}
 
-		return sendMovies(moviesChange.Items, res, flusher)
+		return sendMovies(moviesChange.Items, res)
 	}
 }
 
@@ -151,7 +151,7 @@ func (s *Server) moviesSSEChannel() SSEChannel {
 	}
 }
 
-func sendMovies(movies map[string]Movie, res http.ResponseWriter, flusher http.Flusher) error {
+func sendMovies(movies map[string]Movie, res SSEResponseWriter) error {
 	out, err := json.Marshal(movies)
 	if err != nil {
 		return errResponseJSONCreationFailed
@@ -159,10 +159,9 @@ func sendMovies(movies map[string]Movie, res http.ResponseWriter, flusher http.F
 
 	_, err = res.Write(formatSseEvent(string(added), out))
 	if err != nil {
-		return errClientWritingFailed
+		return fmt.Errorf("sending movies failed: %s: %w", errClientWritingFailed.Error(), err)
 	}
 
-	flusher.Flush()
 	return nil
 }
 

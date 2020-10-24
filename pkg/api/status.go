@@ -2,7 +2,7 @@ package api
 
 import (
 	"encoding/json"
-	"net/http"
+	"fmt"
 	"sync"
 )
 
@@ -108,19 +108,19 @@ func (s *Status) safeCopy() Status {
 }
 
 func (s *Server) createStatusReplayHandler() sseReplayHandler {
-	return func(res http.ResponseWriter, flusher http.Flusher) error {
-		return sendStatus(statusReplay, s.status, res, flusher)
+	return func(res SSEResponseWriter) error {
+		return sendStatus(statusReplay, s.status, res)
 	}
 }
 
 func (s *Server) createStatusChangeHandler() sseChangeHandler {
-	return func(res http.ResponseWriter, flusher http.Flusher, changes interface{}) error {
+	return func(res SSEResponseWriter, changes interface{}) error {
 		statusChange, ok := changes.(StatusChange)
 		if !ok {
 			return errIncorrectChangesType
 		}
 
-		return sendStatus(statusChange.Variant, &statusChange.Status, res, flusher)
+		return sendStatus(statusChange.Variant, &statusChange.Status, res)
 	}
 }
 
@@ -133,7 +133,7 @@ func (s *Server) statusSSEChannel() SSEChannel {
 	}
 }
 
-func sendStatus(variant StatusChangeVariant, status *Status, res http.ResponseWriter, flusher http.Flusher) error {
+func sendStatus(variant StatusChangeVariant, status *Status, res SSEResponseWriter) error {
 	out, err := status.jsonMarshal()
 	if err != nil {
 		return errResponseJSONCreationFailed
@@ -141,9 +141,8 @@ func sendStatus(variant StatusChangeVariant, status *Status, res http.ResponseWr
 
 	_, err = res.Write(formatSseEvent(string(variant), out))
 	if err != nil {
-		return errClientWritingFailed
+		return fmt.Errorf("sending status failed: %s: %w", errClientWritingFailed.Error(), err)
 	}
 
-	flusher.Flush()
 	return nil
 }
