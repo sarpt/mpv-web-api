@@ -39,17 +39,18 @@ func (s *Status) addObservingAddress(remoteAddr string, observerVariant SSEChann
 	var ok bool
 
 	s.lock.Lock()
-	defer s.lock.Unlock()
-
 	observers, ok = s.ObservingAddresses[remoteAddr]
 	if !ok {
 		observers = []SSEChannelVariant{}
 	}
 
 	s.ObservingAddresses[remoteAddr] = append(observers, observerVariant)
+	statusCopy := *s
+	s.lock.Unlock()
+
 	s.Changes <- StatusChange{
 		Variant: clientObserverAdded,
-		Status:  *s,
+		Status:  statusCopy,
 	}
 }
 
