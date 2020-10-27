@@ -58,7 +58,7 @@ func (s *Server) handlePauseEvent(res mpv.ObservePropertyResponse) error {
 }
 
 func (s *Server) handleAudioIDChangeEvent(res mpv.ObservePropertyResponse) error {
-	aid, ok := res.Data.(int)
+	aid, ok := res.Data.(string)
 	if !ok {
 		return ErrResponseDataNotInt
 	}
@@ -69,7 +69,7 @@ func (s *Server) handleAudioIDChangeEvent(res mpv.ObservePropertyResponse) error
 }
 
 func (s *Server) handleSubtitleIDChangeEvent(res mpv.ObservePropertyResponse) error {
-	sid, ok := res.Data.(int)
+	sid, ok := res.Data.(string)
 	if !ok {
 		return ErrResponseDataNotInt
 	}

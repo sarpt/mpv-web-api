@@ -10,11 +10,11 @@ const (
 	// FullscreenProperty is used to inform about state of mpv being in full screen
 	FullscreenProperty = "fullscreen"
 
-	// AudioID is an option used to change the audio track
-	AudioID = "aid"
+	// AudioIDProperty is an option used to change the audio track
+	AudioIDProperty = "aid"
 
-	// SubtitleID is an option used to change the subtitle track
-	SubtitleID = "sid"
+	// SubtitleIDProperty is an option used to change the subtitle track
+	SubtitleIDProperty = "sid"
 
 	// PathProperty is used to inform about path to file currently being played by mpv
 	PathProperty = "path"
@@ -52,6 +52,8 @@ var (
 		LoopFileProperty,
 		ABLoopAProperty,
 		ABLoopBProperty,
+		AudioIDProperty,
+		SubtitleIDProperty,
 	}
 )
 
@@ -112,12 +114,12 @@ func NewSetLoopFile(looped bool) Command {
 
 // NewSetAudioID returns the command changing the audio track to the specidifed audio id.
 func NewSetAudioID(aid string) Command {
-	return NewSetProperty(AudioID, aid)
+	return NewSetProperty(AudioIDProperty, aid)
 }
 
 // NewSetSubtitleID return the command changing the subtitle track to she specified subtitle id.
 func NewSetSubtitleID(sid string) Command {
-	return NewSetProperty(SubtitleID, sid)
+	return NewSetProperty(SubtitleIDProperty, sid)
 }
 
 // NewObserveProperty returns the command that instructs mpv to report as event changes for the specific mpv state property.

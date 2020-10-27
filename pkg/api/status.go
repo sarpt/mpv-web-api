@@ -6,9 +6,6 @@ import (
 	"sync"
 )
 
-// SSEChannelVariant specifies type of observer (movies, playback, etc.)
-type SSEChannelVariant string
-
 // StatusChangeVariant specifies what type of change to server status occurs
 type StatusChangeVariant string
 
@@ -141,7 +138,7 @@ func sendStatus(variant StatusChangeVariant, status *Status, res SSEResponseWrit
 
 	_, err = res.Write(formatSseEvent(string(variant), out))
 	if err != nil {
-		return fmt.Errorf("sending status failed: %s: %w", errClientWritingFailed.Error(), err)
+		return fmt.Errorf("sending status failed: %w: %s", errClientWritingFailed, err)
 	}
 
 	return nil

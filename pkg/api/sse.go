@@ -13,6 +13,9 @@ const (
 	sseChannelArg     = "channel"
 )
 
+// SSEChannelVariant specifies type of observer (movies, playback, etc.)
+type SSEChannelVariant string
+
 // SSEObservers represents client observers that are currently connected to this instance of api server
 type SSEObservers struct {
 	Items map[string]chan interface{}

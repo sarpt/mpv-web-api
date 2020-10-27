@@ -122,6 +122,8 @@ func (s *Server) initWatchers() error {
 		mpv.PauseProperty:        s.handlePauseEvent,
 		mpv.PathProperty:         s.handlePathEvent,
 		mpv.PlaybackTimeProperty: s.handlePlaybackTimeEvent,
+		mpv.AudioIDProperty:      s.handleAudioIDChangeEvent,
+		mpv.SubtitleIDProperty:   s.handleSubtitleIDChangeEvent,
 	}
 
 	go distributeChangesToSSEObservers(s.playback.Changes, s.playbackSSEObservers)

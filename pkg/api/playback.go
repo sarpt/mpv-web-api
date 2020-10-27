@@ -38,8 +38,8 @@ type Playback struct {
 	CurrentChapterIdx  int
 	Fullscreen         bool
 	Movie              Movie
-	SelectedAudioID    int
-	SelectedSubtitleID int
+	SelectedAudioID    string
+	SelectedSubtitleID string
 	Paused             bool
 	Loop               PlaybackLoop
 	Changes            chan interface{} `json:"-"`
@@ -154,7 +154,7 @@ func sendPlayback(playback Playback, res SSEResponseWriter) error {
 
 	_, err = res.Write(formatSseEvent(playbackAllSseEvent, out))
 	if err != nil {
-		return fmt.Errorf("sending playback failed: %s: %w", errClientWritingFailed.Error(), err)
+		return fmt.Errorf("sending playback failed: %w: %s", errClientWritingFailed, err)
 	}
 
 	return nil
