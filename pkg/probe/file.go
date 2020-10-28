@@ -33,13 +33,13 @@ type Chapter struct {
 // SubtitleStream specifies information about subtitles inluded in the file
 type SubtitleStream struct {
 	Language   string
-	SubtitleID int
+	SubtitleID string
 	Title      string
 }
 
 // AudioStream specifies information about audio the file includes
 type AudioStream struct {
-	AudioID  int
+	AudioID  string
 	Channels int
 	Language string
 	Title    string
@@ -130,14 +130,14 @@ func File(filepath string) (Result, error) {
 			})
 		case audioCodecType:
 			result.AudioStreams = append(result.AudioStreams, AudioStream{
-				AudioID:  len(result.AudioStreams) + 1,
+				AudioID:  strconv.FormatInt(int64(len(result.AudioStreams)+1), 10),
 				Language: str.Tags.Language,
 				Channels: str.Channels,
 				Title:    str.Tags.Title,
 			})
 		case subtitleCodecType:
 			result.SubtitleStreams = append(result.SubtitleStreams, SubtitleStream{
-				SubtitleID: len(result.SubtitleStreams) + 1,
+				SubtitleID: strconv.FormatInt(int64(len(result.SubtitleStreams)+1), 10),
 				Language:   str.Tags.Language,
 				Title:      str.Tags.Title,
 			})
