@@ -74,7 +74,7 @@ func (s *Server) handleSubtitleIDChangeEvent(res mpv.ObservePropertyResponse) er
 		return ErrResponseDataNotInt
 	}
 
-	s.playback.SelectedAudioID = sid
+	s.playback.SelectedSubtitleID = sid
 	s.playback.Changes <- *s.playback
 	return nil
 }
