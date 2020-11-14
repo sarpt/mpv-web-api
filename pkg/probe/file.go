@@ -25,50 +25,50 @@ const (
 
 // Chapter specifies information about chapters included in the file
 type Chapter struct {
-	StartTime float64
-	EndTime   float64
-	Title     string
+	StartTime float64 `json:"StartTime"`
+	EndTime   float64 `json:"EndTime"`
+	Title     string  `json:"Title"`
 }
 
 // SubtitleStream specifies information about subtitles inluded in the file
 type SubtitleStream struct {
-	Language   string
-	SubtitleID string
-	Title      string
+	Language   string `json:"Language"`
+	SubtitleID string `json:"SubtitleID"`
+	Title      string `json:"Title"`
 }
 
 // AudioStream specifies information about audio the file includes
 type AudioStream struct {
-	AudioID  string
-	Channels int
-	Language string
-	Title    string
+	AudioID  string `json:"AudioID"`
+	Channels int    `json:"Channels"`
+	Language string `json:"Language"`
+	Title    string `json:"Title"`
 }
 
 // VideoStream specifies information about video the file includes
 type VideoStream struct {
-	Height   int
-	Language string
-	Width    int
-	Title    string
+	Height   int    `json:"Height"`
+	Language string `json:"Language"`
+	Width    int    `json:"Width"`
+	Title    string `json:"Title"`
 }
 
 // Format specifies general information about media container file
 type Format struct {
-	Name     string
-	LongName string
-	Duration float64
-	Title    string
+	Name     string  `json:"Name"`
+	LongName string  `json:"LongName"`
+	Duration float64 `json:"Duration"`
+	Title    string  `json:"Title"`
 }
 
 // Result contains information about the file
 type Result struct {
-	Path            string
-	Format          Format
-	Chapters        []Chapter
-	VideoStreams    []VideoStream
-	AudioStreams    []AudioStream
-	SubtitleStreams []SubtitleStream
+	Path            string           `json:"Path"`
+	Format          Format           `json:"Format"`
+	Chapters        []Chapter        `json:"Chapters"`
+	VideoStreams    []VideoStream    `json:"VideoStreams"`
+	AudioStreams    []AudioStream    `json:"AudioStreams"`
+	SubtitleStreams []SubtitleStream `json:"SubtitleStreams"`
 	err             probeError
 }
 

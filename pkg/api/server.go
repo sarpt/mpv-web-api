@@ -80,7 +80,7 @@ func NewServer(cfg Config) (*Server, error) {
 			Lock:  &sync.RWMutex{},
 		},
 		&Status{
-			ObservingAddresses: map[string][]SSEChannelVariant{},
+			observingAddresses: map[string][]SSEChannelVariant{},
 			lock:               &sync.RWMutex{},
 			Changes:            make(chan interface{}),
 		},
