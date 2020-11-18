@@ -34,7 +34,7 @@ func (s *Status) sendStatus(variant StatusChangeVariant, res SSEResponseWriter) 
 		return fmt.Errorf("%w: %s", errResponseJSONCreationFailed, err)
 	}
 
-	_, err = res.Write(formatSseEvent(string(variant), out))
+	_, err = res.Write(formatSseEvent(statusSSEChannelVariant, string(variant), out))
 	if err != nil {
 		return fmt.Errorf("sending status failed: %w: %s", errClientWritingFailed, err)
 	}

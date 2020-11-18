@@ -149,10 +149,11 @@ func replaySseState(req *http.Request) bool {
 	return ok && len(replay) > 0 && replay[0] == "true"
 }
 
-func formatSseEvent(eventName string, data []byte) []byte {
+func formatSseEvent(channel SSEChannelVariant, eventName string, data []byte) []byte {
 	var out []byte
 
-	out = append(out, []byte(fmt.Sprintf("event:%s\n", eventName))...)
+	channelEvent := fmt.Sprintf("%s.%s", channel, eventName)
+	out = append(out, []byte(fmt.Sprintf("event:%s\n", channelEvent))...)
 
 	dataEntries := bytes.Split(data, []byte("\n"))
 	for _, dataEntry := range dataEntries {

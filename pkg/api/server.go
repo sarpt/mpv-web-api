@@ -73,7 +73,7 @@ func NewServer(cfg Config) (*Server, error) {
 		mpvManager,
 		cfg.MpvSocketPath,
 		&Playback{
-			Changes: make(chan interface{}),
+			changes: make(chan interface{}),
 		},
 		SSEObservers{
 			Items: map[string]chan interface{}{},
@@ -126,7 +126,7 @@ func (s *Server) initWatchers() error {
 		mpv.SubtitleIDProperty:   s.handleSubtitleIDChangeEvent,
 	}
 
-	go distributeChangesToSSEObservers(s.playback.Changes, s.playbackSSEObservers)
+	go distributeChangesToSSEObservers(s.playback.Changes(), s.playbackSSEObservers)
 	go distributeChangesToSSEObservers(s.movies.Changes, s.moviesSSEObservers)
 	go distributeChangesToSSEObservers(s.status.Changes, s.statusSSEObservers)
 	go s.watchObservePropertyResponses(observePropertyHandlers, observePropertyResponses)
@@ -165,7 +165,7 @@ func (s Server) observeProperties(observeResponses chan mpv.ObservePropertyRespo
 }
 
 // distributeChangesToSSEObservers is a fan-out dispatcher, which notifies all playback observers (subscribers from SSE etc.) when a playbackChange occurs.
-func distributeChangesToSSEObservers(changes chan interface{}, observers SSEObservers) {
+func distributeChangesToSSEObservers(changes <-chan interface{}, observers SSEObservers) {
 	for {
 		change, ok := <-changes
 		if !ok {

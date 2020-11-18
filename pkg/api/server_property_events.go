@@ -26,8 +26,7 @@ func (s *Server) handleFullscreenEvent(res mpv.ObservePropertyResponse) error {
 		return ErrResponseDataNotString
 	}
 
-	s.playback.Fullscreen = enabled == mpv.YesValue
-	s.playback.Changes <- *s.playback
+	s.playback.SetFullscreen(enabled == mpv.YesValue)
 	return nil
 }
 
@@ -37,12 +36,7 @@ func (s *Server) handleLoopFileEvent(res mpv.ObservePropertyResponse) error {
 		return ErrResponseDataNotString
 	}
 
-	if enabled != mpv.NoValue {
-		s.playback.Loop.Variant = fileLoop
-	} else {
-		s.playback.Loop.Variant = ""
-	}
-	s.playback.Changes <- *s.playback
+	s.playback.SetLoopFile(enabled != mpv.NoValue)
 	return nil
 }
 
@@ -52,8 +46,7 @@ func (s *Server) handlePauseEvent(res mpv.ObservePropertyResponse) error {
 		return ErrResponseDataNotString
 	}
 
-	s.playback.Paused = paused == mpv.YesValue
-	s.playback.Changes <- *s.playback
+	s.playback.SetPause(paused == mpv.YesValue)
 	return nil
 }
 
@@ -63,8 +56,7 @@ func (s *Server) handleAudioIDChangeEvent(res mpv.ObservePropertyResponse) error
 		return ErrResponseDataNotInt
 	}
 
-	s.playback.SelectedAudioID = aid
-	s.playback.Changes <- *s.playback
+	s.playback.SetAudioID(aid)
 	return nil
 }
 
@@ -74,8 +66,7 @@ func (s *Server) handleSubtitleIDChangeEvent(res mpv.ObservePropertyResponse) er
 		return ErrResponseDataNotInt
 	}
 
-	s.playback.SelectedSubtitleID = sid
-	s.playback.Changes <- *s.playback
+	s.playback.SetSubtitleID(sid)
 	return nil
 }
 
@@ -85,14 +76,13 @@ func (s *Server) handleChapterChangeEvent(res mpv.ObservePropertyResponse) error
 		return ErrResponseDataNotInt
 	}
 
-	s.playback.CurrentChapterIdx = chapterIdx
-	s.playback.Changes <- *s.playback
+	s.playback.SetCurrentChapter(chapterIdx)
 	return nil
 }
 
 func (s *Server) handlePathEvent(res mpv.ObservePropertyResponse) error {
 	if res.Data == nil {
-		s.playback.Movie = Movie{}
+		s.playback.SetMovie(Movie{})
 		return nil
 	}
 
@@ -106,8 +96,7 @@ func (s *Server) handlePathEvent(res mpv.ObservePropertyResponse) error {
 		return fmt.Errorf("%w:%s", ErrPlaybackPathNotServed, path)
 	}
 
-	s.playback.Movie = movie
-	s.playback.Changes <- *s.playback
+	s.playback.SetMovie(movie)
 	return nil
 }
 
@@ -126,7 +115,6 @@ func (s *Server) handlePlaybackTimeEvent(res mpv.ObservePropertyResponse) error 
 		return ErrPlaybackTimeNotFloat
 	}
 
-	s.playback.CurrentTime = currentTimeNum
-	s.playback.Changes <- *s.playback
+	s.playback.SetPlaybackTime(currentTimeNum)
 	return nil
 }

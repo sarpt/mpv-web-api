@@ -81,7 +81,7 @@ func sendMovies(movies map[string]Movie, res SSEResponseWriter) error {
 		return fmt.Errorf("%w: %s", errResponseJSONCreationFailed, err)
 	}
 
-	_, err = res.Write(formatSseEvent(string(added), out))
+	_, err = res.Write(formatSseEvent(moviesSSEChannelVariant, string(added), out))
 	if err != nil {
 		return fmt.Errorf("sending movies failed: %w: %s", errClientWritingFailed, err)
 	}

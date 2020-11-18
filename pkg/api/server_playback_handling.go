@@ -17,7 +17,8 @@ const (
 	pauseArg      = "pause"
 	loopFileArg   = "loopFile"
 
-	playbackAllSseEvent = "all"
+	playbackAllSseEvent    = "all"
+	playbackReplaySseEvent = "replay"
 )
 
 var (
@@ -98,18 +99,18 @@ func (s *Server) getPlaybackHandler(res http.ResponseWriter, req *http.Request) 
 
 func (s *Server) createPlaybackReplayHandler() sseReplayHandler {
 	return func(res SSEResponseWriter) error {
-		return sendPlayback(*s.playback, res)
+		return sendPlayback(s.playback, playbackReplaySseEvent, res)
 	}
 }
 
 func (s *Server) createPlaybackChangesHandler() sseChangeHandler {
 	return func(res SSEResponseWriter, changes interface{}) error {
-		newPlayback, ok := changes.(Playback)
+		change, ok := changes.(PlaybackChange)
 		if !ok {
 			return errIncorrectChangesType
 		}
 
-		return sendPlayback(newPlayback, res)
+		return sendPlayback(s.playback, change.Variant, res)
 	}
 }
 
@@ -164,13 +165,13 @@ func pauseHandler(res http.ResponseWriter, req *http.Request, s *Server) error {
 	return s.mpvManager.ChangePause(pause)
 }
 
-func sendPlayback(playback Playback, res SSEResponseWriter) error {
-	out, err := json.Marshal(&playback)
+func sendPlayback(playback *Playback, changeVariant PlaybackChangeVariant, res SSEResponseWriter) error {
+	out, err := json.Marshal(playback)
 	if err != nil {
 		return fmt.Errorf("%w: %s", errResponseJSONCreationFailed, err)
 	}
 
-	_, err = res.Write(formatSseEvent(playbackAllSseEvent, out))
+	_, err = res.Write(formatSseEvent(playbackSSEChannelVariant, string(changeVariant), out))
 	if err != nil {
 		return fmt.Errorf("sending playback failed: %w: %s", errClientWritingFailed, err)
 	}
