@@ -4,6 +4,7 @@ const (
 	loadfileCommand        = "loadfile"
 	setPropertyCommand     = "set_property"
 	observePropertyCommand = "observe_property_string"
+	stopCommand            = "stop"
 
 	propertyChangeEvent = "property-change"
 
@@ -60,20 +61,20 @@ var (
 // Command holds the name and value of the command to be dispatched.
 // It's a generic struct that is supposed to be properly constructed by a function.
 type Command struct {
-	name   string
-	values []interface{} // i'm not conviced about this interface{} thing. Probably should do a reflection or type assertion whether it's an int or a string
+	name     string
+	elements []interface{} // i'm not conviced about this interface{} thing. Probably should do a reflection or type assertion whether it's an int or a string
 }
 
 // JSONIPCFormat returns the representation expected by the mpv in the JSON payload.
 func (cmd Command) JSONIPCFormat() []interface{} {
-	return append([]interface{}{cmd.name}, cmd.values...)
+	return append([]interface{}{cmd.name}, cmd.elements...)
 }
 
 // NewLoadFile returns command for the mpv to load a file under the path.
 func NewLoadFile(path string) Command {
 	return Command{
-		name:   loadfileCommand,
-		values: []interface{}{path},
+		name:     loadfileCommand,
+		elements: []interface{}{path},
 	}
 }
 
@@ -81,8 +82,8 @@ func NewLoadFile(path string) Command {
 // Probably not very useful on its own, rather it's used by other Command creators eg. NewFullscreen.
 func NewSetProperty(property string, value interface{}) Command {
 	return Command{
-		name:   setPropertyCommand,
-		values: []interface{}{property, value},
+		name:     setPropertyCommand,
+		elements: []interface{}{property, value},
 	}
 }
 
@@ -117,15 +118,23 @@ func NewSetAudioID(aid string) Command {
 	return NewSetProperty(AudioIDProperty, aid)
 }
 
-// NewSetSubtitleID return the command changing the subtitle track to she specified subtitle id.
+// NewSetSubtitleID returns the command changing the subtitle track to she specified subtitle id.
 func NewSetSubtitleID(sid string) Command {
 	return NewSetProperty(SubtitleIDProperty, sid)
+}
+
+// NewStop returns a command which will stop the playback without quitting the mpv player
+func NewStop() Command {
+	return Command{
+		name:     stopCommand,
+		elements: []interface{}{},
+	}
 }
 
 // NewObserveProperty returns the command that instructs mpv to report as event changes for the specific mpv state property.
 func NewObserveProperty(id int, propertyName string) Command {
 	return Command{
-		name:   observePropertyCommand,
-		values: []interface{}{id, propertyName},
+		name:     observePropertyCommand,
+		elements: []interface{}{id, propertyName},
 	}
 }

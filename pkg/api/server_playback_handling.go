@@ -16,6 +16,7 @@ const (
 	audioIDArg    = "audioID"
 	pauseArg      = "pause"
 	loopFileArg   = "loopFile"
+	stopArg       = "stop"
 
 	playbackAllSseEvent    = "all"
 	playbackReplaySseEvent = "replay"
@@ -29,6 +30,7 @@ var (
 		subtitleIDArg: subtitleIDHandler,
 		pauseArg:      pauseHandler,
 		loopFileArg:   loopFileHandler,
+		stopArg:       stopHandler,
 	}
 )
 
@@ -165,6 +167,19 @@ func pauseHandler(res http.ResponseWriter, req *http.Request, s *Server) error {
 	return s.mpvManager.ChangePause(pause)
 }
 
+func stopHandler(res http.ResponseWriter, req *http.Request, s *Server) error {
+	stop, err := strconv.ParseBool(req.PostFormValue(stopArg))
+	if err != nil {
+		return err
+	}
+
+	if !stop {
+		return nil
+	}
+
+	s.outLog.Printf("stopping playback due to request from %s\n", req.RemoteAddr)
+	return s.mpvManager.Stop()
+}
 func sendPlayback(playback *Playback, changeVariant PlaybackChangeVariant, res SSEResponseWriter) error {
 	out, err := json.Marshal(playback)
 	if err != nil {
