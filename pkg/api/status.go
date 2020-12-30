@@ -31,7 +31,20 @@ type StatusChange struct {
 type Status struct {
 	observingAddresses map[string][]SSEChannelVariant
 	lock               *sync.RWMutex
-	Changes            chan interface{}
+	changes            chan interface{}
+}
+
+// Changes returns read-only channel notifying of status changes
+func (s *Status) Changes() <-chan interface{} {
+	return s.changes
+}
+
+// ObservingAddresses returns a mapping of a remote address to the channel variants
+func (s *Status) ObservingAddresses() map[string][]SSEChannelVariant {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	return s.observingAddresses
 }
 
 func (s *Status) addObservingAddress(remoteAddr string, observerVariant SSEChannelVariant) {
@@ -47,7 +60,7 @@ func (s *Status) addObservingAddress(remoteAddr string, observerVariant SSEChann
 	s.observingAddresses[remoteAddr] = append(observers, observerVariant)
 	s.lock.Unlock()
 
-	s.Changes <- StatusChange{
+	s.changes <- StatusChange{
 		Variant: clientObserverAdded,
 	}
 }
@@ -78,17 +91,9 @@ func (s *Status) removeObservingAddress(remoteAddr string, observerVariant SSECh
 
 	s.lock.Unlock()
 
-	s.Changes <- StatusChange{
+	s.changes <- StatusChange{
 		Variant: clientObserverRemoved,
 	}
-}
-
-// ObservingAddresses returns a mapping of a remote address to the channel variants
-func (s *Status) ObservingAddresses() map[string][]SSEChannelVariant {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-
-	return s.observingAddresses
 }
 
 func (s *Status) jsonMarshal() ([]byte, error) {

@@ -50,10 +50,16 @@ func (s *Server) postPlaybackHandler(res http.ResponseWriter, req *http.Request)
 	responsePayload := postPlaybackResponse{}
 
 	args, errors := validateFormRequest(req, postPlaybackFormArgumentsHandlers)
-	if errors.GeneralError != "" {
-		s.errLog.Printf(responsePayload.GeneralError)
-		res.WriteHeader(400)
-		res.Write([]byte(fmt.Sprintf(responsePayload.GeneralError)))
+	responsePayload.GeneralError = errors.GeneralError
+	if responsePayload.GeneralError != "" {
+		s.errLog.Printf(errors.GeneralError)
+		out, err := prepareJSONOutput(responsePayload)
+		if err != nil {
+			res.WriteHeader(400)
+		} else {
+			res.WriteHeader(500)
+		}
+		res.Write(out)
 
 		return
 	}
@@ -65,25 +71,25 @@ func (s *Server) postPlaybackHandler(res http.ResponseWriter, req *http.Request)
 		if err != nil {
 			responsePayload.GeneralError = err.Error()
 			s.errLog.Printf(responsePayload.GeneralError)
+			out, _ := prepareJSONOutput(responsePayload)
 			res.WriteHeader(500)
-			res.Write([]byte(fmt.Sprintf(responsePayload.GeneralError)))
+			res.Write(out)
 
 			return
 		}
 	}
 
-	out, err := json.Marshal(responsePayload)
-	if err != nil {
-		responsePayload.GeneralError = fmt.Sprintf("could not encode json payload: %s", err)
-		s.errLog.Printf(responsePayload.GeneralError)
+	out, err := prepareJSONOutput(responsePayload)
+	if err == nil {
+		s.errLog.Printf("%s", out)
 		res.WriteHeader(500)
-		res.Write([]byte(fmt.Sprintf(responsePayload.GeneralError)))
+		res.Write(out)
 
 		return
 	}
 
 	res.WriteHeader(200)
-	res.Write([]byte(out))
+	res.Write(out)
 }
 
 func (s *Server) getPlaybackHandler(res http.ResponseWriter, req *http.Request) {
@@ -180,6 +186,7 @@ func stopHandler(res http.ResponseWriter, req *http.Request, s *Server) error {
 	s.outLog.Printf("stopping playback due to request from %s\n", req.RemoteAddr)
 	return s.mpvManager.Stop()
 }
+
 func sendPlayback(playback *Playback, changeVariant PlaybackChangeVariant, res SSEResponseWriter) error {
 	out, err := json.Marshal(playback)
 	if err != nil {
@@ -192,4 +199,13 @@ func sendPlayback(playback *Playback, changeVariant PlaybackChangeVariant, res S
 	}
 
 	return nil
+}
+
+func prepareJSONOutput(res postPlaybackResponse) ([]byte, error) {
+	out, err := json.Marshal(res)
+	if err != nil {
+		return []byte(fmt.Sprintf("could not encode json payload: %s", err)), err
+	}
+
+	return out, nil
 }

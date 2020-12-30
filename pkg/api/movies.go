@@ -6,7 +6,7 @@ import "sync"
 // Any modification done on the state should be done by exposed methods which should guarantee goroutine access safety.
 type Movies struct {
 	items   map[string]Movie
-	Changes chan interface{}
+	changes chan interface{}
 	lock    *sync.RWMutex
 }
 
@@ -26,7 +26,7 @@ func (m *Movies) Add(movies map[string]Movie) {
 	m.lock.Unlock()
 
 	if len(addedMovies) > 0 {
-		m.Changes <- MoviesChange{
+		m.changes <- MoviesChange{
 			Variant: added,
 			Items:   addedMovies,
 		}
@@ -60,4 +60,9 @@ func (m *Movies) ByPath(path string) (Movie, error) {
 	}
 
 	return Movie{}, errNoMovieAvailable
+}
+
+// Changes returns read-only channel notifying of movies changes
+func (m *Movies) Changes() <-chan interface{} {
+	return m.changes
 }

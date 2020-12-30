@@ -63,7 +63,7 @@ func NewServer(cfg Config) (*Server, error) {
 		&sync.RWMutex{},
 		Movies{
 			items:   map[string]Movie{},
-			Changes: make(chan interface{}),
+			changes: make(chan interface{}),
 			lock:    &sync.RWMutex{},
 		},
 		SSEObservers{
@@ -82,7 +82,7 @@ func NewServer(cfg Config) (*Server, error) {
 		&Status{
 			observingAddresses: map[string][]SSEChannelVariant{},
 			lock:               &sync.RWMutex{},
-			Changes:            make(chan interface{}),
+			changes:            make(chan interface{}),
 		},
 		SSEObservers{
 			Items: map[string]chan interface{}{},
@@ -127,8 +127,8 @@ func (s *Server) initWatchers() error {
 	}
 
 	go distributeChangesToSSEObservers(s.playback.Changes(), s.playbackSSEObservers)
-	go distributeChangesToSSEObservers(s.movies.Changes, s.moviesSSEObservers)
-	go distributeChangesToSSEObservers(s.status.Changes, s.statusSSEObservers)
+	go distributeChangesToSSEObservers(s.movies.Changes(), s.moviesSSEObservers)
+	go distributeChangesToSSEObservers(s.status.Changes(), s.statusSSEObservers)
 	go s.watchObservePropertyResponses(observePropertyHandlers, observePropertyResponses)
 
 	return s.observeProperties(observePropertyResponses)
