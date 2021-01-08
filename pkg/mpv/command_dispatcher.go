@@ -16,6 +16,8 @@ const (
 	bufSize    = 512
 
 	resultSuccess = "success"
+
+	propertyChangeEvent = "property-change"
 )
 
 var (
@@ -36,8 +38,8 @@ var (
 	commandDispatcherLogPrefix = "mpv.CommandDispatcher#"
 )
 
-// CommandPayload represents command payload sent to the mpv
-type CommandPayload struct {
+// commandPayload represents command payload sent to the mpv
+type commandPayload struct {
 	Command   []interface{} `json:"command"`
 	RequestID int           `json:"request_id"`
 }
@@ -63,8 +65,8 @@ type ResponsePayload struct {
 	Data      interface{} `json:"data"`
 }
 
-// CommandDispatcher connects to the provided socket path and handles sending commands and handling results
-type CommandDispatcher struct {
+// commandDispatcher connects to the provided socket path and handles sending commands and handling results
+type commandDispatcher struct {
 	socketPath                 string
 	listeningOnSocket          bool
 	linteningOnSocketLock      *sync.RWMutex
@@ -89,10 +91,10 @@ type propertySubscriber struct {
 	done            chan bool
 }
 
-// NewCommandDispatcher returns dispatcher connected to the socket.
+// newCommandDispatcher returns dispatcher connected to the socket.
 // Error is returned when connection to the socket fails.
-func NewCommandDispatcher(socketPath string, errWriter io.Writer) *CommandDispatcher {
-	return &CommandDispatcher{
+func newCommandDispatcher(socketPath string, errWriter io.Writer) *commandDispatcher {
+	return &commandDispatcher{
 		socketPath:                 socketPath,
 		listeningOnSocket:          false,
 		linteningOnSocketLock:      &sync.RWMutex{},
@@ -107,7 +109,7 @@ func NewCommandDispatcher(socketPath string, errWriter io.Writer) *CommandDispat
 	}
 }
 
-func (cd *CommandDispatcher) connectToMpvSocket() error {
+func (cd *commandDispatcher) connectToMpvSocket() error {
 	conn, err := waitForSocketConnection(cd.socketPath)
 	if err != nil {
 		return err
@@ -119,7 +121,7 @@ func (cd *CommandDispatcher) connectToMpvSocket() error {
 	return nil
 }
 
-func (cd *CommandDispatcher) observeProperties() error {
+func (cd *commandDispatcher) observeProperties() error {
 	cd.propertyObserversLock.RLock()
 	defer cd.propertyObserversLock.RUnlock()
 
@@ -136,7 +138,7 @@ func (cd *CommandDispatcher) observeProperties() error {
 // addPropertyObserver creates a new observer for a specific property.
 // The request to observer property will not be made if the connection is not estabilished since it will fail,
 // but the observer is added to propertyObservers map which will be used during connection to start observing properties on a new connection.
-func (cd *CommandDispatcher) addPropertyObserver(propertyName string) (propertyObserver, error) {
+func (cd *commandDispatcher) addPropertyObserver(propertyName string) (propertyObserver, error) {
 	newObserver := propertyObserver{
 		responsePayloads: make(chan ResponsePayload),
 		subscriptions:    make(map[int]propertySubscriber),
@@ -155,10 +157,14 @@ func (cd *CommandDispatcher) addPropertyObserver(propertyName string) (propertyO
 	return newObserver, err
 }
 
-func (cd CommandDispatcher) observeProperty(propertyName string) error {
+func (cd commandDispatcher) observeProperty(propertyName string) error {
 	requestID := cd.reserveRequestID()
-	command := NewObserveProperty(requestID, propertyName)
-	_, err := cd.Request(command)
+	cmd := command{
+		name:     observePropertyCommand,
+		elements: []interface{}{requestID, propertyName},
+	}
+	_, err := cd.Request(cmd)
+
 	return err
 }
 
@@ -167,7 +173,7 @@ func (cd CommandDispatcher) observeProperty(propertyName string) error {
 // During the process the property observers already registered on command dispatcher are observed.
 // It's necessary since either there command dispatcher was reconnected (due to MPV instance closing or other), thus losing all observers,
 // or subscriptions occured before connection was made, resulting in no request being sent since there was no MPV instance to receive those requests.
-func (cd *CommandDispatcher) Connect() error {
+func (cd *commandDispatcher) Connect() error {
 	if cd.Connected() {
 		return ErrConnectionInProgress
 	}
@@ -181,7 +187,7 @@ func (cd *CommandDispatcher) Connect() error {
 }
 
 // Connected notifies whether CommandDispatcher is ready to make requests and observe properties.
-func (cd *CommandDispatcher) Connected() bool {
+func (cd *commandDispatcher) Connected() bool {
 	cd.linteningOnSocketLock.RLock()
 	defer cd.linteningOnSocketLock.RUnlock()
 
@@ -192,7 +198,7 @@ func (cd *CommandDispatcher) Connected() bool {
 // Returned id is used as a key to listened property mpv events. Id should be used when unsubscribing. When error is encountered id is useless.
 // The channel provided is never closed to enable aggregation from multiple observers.
 // However calling unsubscribe will ensure that command dispatcher will stop trying to send on a specified channel.
-func (cd *CommandDispatcher) SubscribeToProperty(propertyName string, out chan<- ObservePropertyResponse) (int, error) {
+func (cd *commandDispatcher) SubscribeToProperty(propertyName string, out chan<- ObservePropertyResponse) (int, error) {
 	var propertyObserver propertyObserver
 
 	done := make(chan bool)
@@ -236,7 +242,7 @@ func (cd *CommandDispatcher) SubscribeToProperty(propertyName string, out chan<-
 }
 
 // UnobserveProperty instructs command dispatcher to stop sending updates about property on specified id.
-func (cd *CommandDispatcher) UnobserveProperty(propertyName string, id int) error {
+func (cd *commandDispatcher) UnobserveProperty(propertyName string, id int) error {
 	propertyObserver, ok := cd.propertyObserver(propertyName)
 	if !ok {
 		return ErrNoPropertyObserver
@@ -251,8 +257,8 @@ func (cd *CommandDispatcher) UnobserveProperty(propertyName string, id int) erro
 	return nil
 }
 
-// Request is used to send simple request->response command that is completed after the first response from mpv comes.
-func (cd *CommandDispatcher) Request(command Command) (Response, error) {
+// Request is used to send simple Request->response command that is completed after the first response from mpv comes.
+func (cd *commandDispatcher) Request(cmd command) (Response, error) {
 	var resPayload ResponsePayload
 	var result Response
 
@@ -262,7 +268,7 @@ func (cd *CommandDispatcher) Request(command Command) (Response, error) {
 	cd.requests[requestID] = requestResult
 	defer delete(cd.requests, requestID)
 
-	err := cd.Dispatch(command, requestID)
+	err := cd.Dispatch(cmd, requestID)
 	if err != nil {
 		return result, err
 	}
@@ -279,8 +285,8 @@ func (cd *CommandDispatcher) Request(command Command) (Response, error) {
 
 // Dispatch sends a commmand with specified requestID to the mpv using socket.
 // Returns error if command was not correctly dispatched.
-func (cd *CommandDispatcher) Dispatch(command Command, requestID int) error {
-	payload, err := prepareCommandPayload(command, requestID)
+func (cd *commandDispatcher) Dispatch(cmd command, requestID int) error {
+	payload, err := prepareCommandPayload(cmd, requestID)
 	if err != nil {
 		return err
 	}
@@ -294,11 +300,11 @@ func (cd *CommandDispatcher) Dispatch(command Command, requestID int) error {
 }
 
 // Close makes connection by ipc to the mpv closed.
-func (cd CommandDispatcher) Close() {
+func (cd commandDispatcher) Close() {
 	cd.conn.Close()
 }
 
-func (cd CommandDispatcher) propertyObserver(propertyName string) (propertyObserver, bool) {
+func (cd commandDispatcher) propertyObserver(propertyName string) (propertyObserver, bool) {
 	cd.propertyObserversLock.RLock()
 	defer cd.propertyObserversLock.RUnlock()
 
@@ -306,7 +312,7 @@ func (cd CommandDispatcher) propertyObserver(propertyName string) (propertyObser
 	return propertyObserver, ok
 }
 
-func (cd *CommandDispatcher) reserveRequestID() int {
+func (cd *commandDispatcher) reserveRequestID() int {
 	cd.requestIDLock.Lock()
 	defer cd.requestIDLock.Unlock()
 
@@ -316,7 +322,7 @@ func (cd *CommandDispatcher) reserveRequestID() int {
 	return requestID
 }
 
-func (cd *CommandDispatcher) reservePropertySubscriptionID() int {
+func (cd *commandDispatcher) reservePropertySubscriptionID() int {
 	cd.propertySubscriptionIDLock.Lock()
 	defer cd.propertySubscriptionIDLock.Unlock()
 
@@ -326,7 +332,7 @@ func (cd *CommandDispatcher) reservePropertySubscriptionID() int {
 	return propertyObserverID
 }
 
-func (cd CommandDispatcher) listenOnUnixSocket() {
+func (cd commandDispatcher) listenOnUnixSocket() {
 	payloads := make(chan []byte)
 
 	go func() {
@@ -413,14 +419,14 @@ func waitForSocketConnection(socketPath string) (net.Conn, error) {
 	return conn, nil // error will be returned on timeout; TODO: add timeout
 }
 
-func prepareCommandPayload(command Command, requestID int) ([]byte, error) {
+func prepareCommandPayload(cmd command, requestID int) ([]byte, error) {
 	var payload []byte
-	cmd := CommandPayload{
-		Command:   command.JSONIPCFormat(),
+	cmdPayload := commandPayload{
+		Command:   cmd.JSONIPCFormat(),
 		RequestID: requestID,
 	}
 
-	payload, err := json.Marshal(cmd)
+	payload, err := json.Marshal(cmdPayload)
 	if err != nil {
 		return payload, err
 	}
