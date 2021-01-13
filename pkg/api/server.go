@@ -24,19 +24,20 @@ type Server struct {
 	allowCors            bool
 	directories          []string
 	directoriesLock      *sync.RWMutex
+	errLog               *log.Logger
 	movies               Movies
 	moviesSSEObservers   SSEObservers
 	mpvManager           *mpv.Manager
 	mpvSocketPath        string
+	outLog               *log.Logger
 	playback             *Playback
 	playbackSSEObservers SSEObservers
+	playlist             *Playlist
 	status               *Status
 	statusSSEObservers   SSEObservers
-	errLog               *log.Logger
-	outLog               *log.Logger
 }
 
-// Config controls behaviour of the api serve
+// Config controls behaviour of the api server.
 type Config struct {
 	Address       string
 	AllowCors     bool
@@ -61,6 +62,7 @@ func NewServer(cfg Config) (*Server, error) {
 		cfg.AllowCors,
 		[]string{},
 		&sync.RWMutex{},
+		log.New(cfg.errWriter, logPrefix, log.LstdFlags),
 		Movies{
 			items:   map[string]Movie{},
 			changes: make(chan interface{}),
@@ -72,12 +74,18 @@ func NewServer(cfg Config) (*Server, error) {
 		},
 		mpvManager,
 		cfg.MpvSocketPath,
+		log.New(cfg.outWriter, logPrefix, log.LstdFlags),
 		&Playback{
 			changes: make(chan interface{}),
 		},
 		SSEObservers{
 			Items: map[string]chan interface{}{},
 			Lock:  &sync.RWMutex{},
+		},
+		&Playlist{
+			name:    defaultName,
+			items:   []string{},
+			changes: make(chan interface{}),
 		},
 		&Status{
 			observingAddresses: map[string][]SSEChannelVariant{},
@@ -88,8 +96,6 @@ func NewServer(cfg Config) (*Server, error) {
 			Items: map[string]chan interface{}{},
 			Lock:  &sync.RWMutex{},
 		},
-		log.New(cfg.outWriter, logPrefix, log.LstdFlags),
-		log.New(cfg.errWriter, logPrefix, log.LstdFlags),
 	}, nil
 }
 

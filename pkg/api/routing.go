@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -28,6 +29,11 @@ const (
 
 type pathHandlers map[string]http.HandlerFunc
 type formArgumentHandler func(http.ResponseWriter, *http.Request, *Server) error
+type payload interface{}
+type formResponse struct {
+	handlerErrors
+	payload
+}
 
 type handlerErrors struct {
 	ArgumentErrors map[string]string `json:"argumentErrors"`
@@ -47,7 +53,7 @@ func (s *Server) mainHandler() *http.ServeMux {
 	}
 
 	playbackHandlers := map[string]http.HandlerFunc{
-		http.MethodPost: s.postPlaybackHandler,
+		http.MethodPost: s.createFormHandler(postPlaybackFormArgumentsHandlers),
 		http.MethodGet:  s.getPlaybackHandler,
 	}
 
@@ -57,7 +63,7 @@ func (s *Server) mainHandler() *http.ServeMux {
 
 	directoriesHandlers := map[string]http.HandlerFunc{
 		http.MethodGet:    s.getDirectoriesHandler,
-		http.MethodPut:    s.putDirectoriesHandler,
+		http.MethodPut:    s.createFormHandler(putDirectoriesFormArgumentsHandlers),
 		http.MethodDelete: s.deleteDirectoriesHandler,
 	}
 
@@ -127,6 +133,48 @@ func allowedMethods(handlers pathHandlers) []string {
 	}
 
 	return allowedMethods
+}
+
+func (s *Server) createFormHandler(allArgHandlers map[string]formArgumentHandler) http.HandlerFunc {
+	return func(res http.ResponseWriter, req *http.Request) {
+		responsePayload := formResponse{}
+
+		selectedArgHandlers, errors := validateFormRequest(req, allArgHandlers)
+		if errors.GeneralError != "" {
+			s.errLog.Printf(errors.GeneralError)
+			res.WriteHeader(400)
+			res.Write([]byte(fmt.Sprintf(responsePayload.GeneralError)))
+
+			return
+		}
+
+		responsePayload.ArgumentErrors = errors.ArgumentErrors
+
+		for _, handler := range selectedArgHandlers {
+			err := handler(res, req, s)
+			if err != nil {
+				responsePayload.GeneralError = err.Error()
+				s.errLog.Printf(responsePayload.GeneralError)
+				res.WriteHeader(400)
+				res.Write([]byte(fmt.Sprintf(responsePayload.GeneralError)))
+
+				return
+			}
+		}
+
+		out, err := json.Marshal(responsePayload)
+		if err != nil {
+			responsePayload.GeneralError = fmt.Sprintf("could not encode json payload: %s", err)
+			s.errLog.Printf(responsePayload.GeneralError)
+			res.WriteHeader(500)
+			res.Write([]byte(fmt.Sprintf(responsePayload.GeneralError)))
+
+			return
+		}
+
+		res.WriteHeader(200)
+		res.Write([]byte(out))
+	}
 }
 
 // validateFormRequest checks form body for arguments and their correctnes.

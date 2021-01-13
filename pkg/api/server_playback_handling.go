@@ -46,51 +46,6 @@ func (s *Server) playbackSSEChannel() SSEChannel {
 		ReplayHandler: s.createPlaybackReplayHandler(),
 	}
 }
-func (s *Server) postPlaybackHandler(res http.ResponseWriter, req *http.Request) {
-	responsePayload := postPlaybackResponse{}
-
-	args, errors := validateFormRequest(req, postPlaybackFormArgumentsHandlers)
-	responsePayload.GeneralError = errors.GeneralError
-	if responsePayload.GeneralError != "" {
-		s.errLog.Printf(errors.GeneralError)
-		out, err := prepareJSONOutput(responsePayload)
-		if err != nil {
-			res.WriteHeader(400)
-		} else {
-			res.WriteHeader(500)
-		}
-		res.Write(out)
-
-		return
-	}
-
-	responsePayload.ArgumentErrors = errors.ArgumentErrors
-
-	for _, handler := range args {
-		err := handler(res, req, s)
-		if err != nil {
-			responsePayload.GeneralError = err.Error()
-			s.errLog.Printf(responsePayload.GeneralError)
-			out, _ := prepareJSONOutput(responsePayload)
-			res.WriteHeader(500)
-			res.Write(out)
-
-			return
-		}
-	}
-
-	out, err := prepareJSONOutput(responsePayload)
-	if err == nil {
-		s.errLog.Printf("%s", out)
-		res.WriteHeader(500)
-		res.Write(out)
-
-		return
-	}
-
-	res.WriteHeader(200)
-	res.Write(out)
-}
 
 func (s *Server) getPlaybackHandler(res http.ResponseWriter, req *http.Request) {
 	json, err := json.Marshal(s.playback)
