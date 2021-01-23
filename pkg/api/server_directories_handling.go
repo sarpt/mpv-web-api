@@ -7,8 +7,10 @@ import (
 )
 
 var (
-	putDirectoriesFormArgumentsHandlers = map[string]formArgumentHandler{
-		pathArg: directoriesPathHandler,
+	putDirectoriesFormArgumentsHandlers = map[string]formArgument{
+		pathArg: {
+			handle: directoriesPathHandler,
+		},
 	}
 )
 

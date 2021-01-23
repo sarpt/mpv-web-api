@@ -24,14 +24,50 @@ const (
 )
 
 var (
-	postPlaybackFormArgumentsHandlers = map[string]formArgumentHandler{
-		pathArg:       pathHandler,
-		fullscreenArg: fullscreenHandler,
-		audioIDArg:    audioIDHandler,
-		subtitleIDArg: subtitleIDHandler,
-		pauseArg:      pauseHandler,
-		loopFileArg:   loopFileHandler,
-		stopArg:       stopHandler,
+	postPlaybackFormArgumentsHandlers = map[string]formArgument{
+		appendArg: {
+			validate: func(req *http.Request) bool {
+				_, err := strconv.ParseBool(req.PostFormValue(appendArg))
+				return err == nil
+			},
+		},
+		pathArg: {
+			handle: pathHandler,
+		},
+		fullscreenArg: {
+			handle: fullscreenHandler,
+			validate: func(req *http.Request) bool {
+				_, err := strconv.ParseBool(req.PostFormValue(fullscreenArg))
+				return err == nil
+			},
+		},
+		audioIDArg: {
+			handle: audioIDHandler,
+		},
+		subtitleIDArg: {
+			handle: subtitleIDHandler,
+		},
+		pauseArg: {
+			handle: pauseHandler,
+			validate: func(req *http.Request) bool {
+				_, err := strconv.ParseBool(req.PostFormValue(pauseArg))
+				return err == nil
+			},
+		},
+		loopFileArg: {
+			handle: loopFileHandler,
+			validate: func(req *http.Request) bool {
+				_, err := strconv.ParseBool(req.PostFormValue(loopFileArg))
+				return err == nil
+			},
+		},
+		stopArg: {
+			handle: stopHandler,
+			validate: func(req *http.Request) bool {
+				_, err := strconv.ParseBool(req.PostFormValue(stopArg))
+				return err == nil
+			},
+		},
 	}
 )
 
@@ -88,7 +124,6 @@ func pathHandler(res http.ResponseWriter, req *http.Request, s *Server) error {
 	if appendArgInForm != "" {
 		append, err = strconv.ParseBool(appendArgInForm)
 		if err != nil {
-			s.errLog.Printf("could not decode correctly '%s' argument for %s in request from %s: %s\n", appendArg, filePath, req.RemoteAddr, err)
 			return err
 		}
 	}
@@ -168,13 +203,4 @@ func sendPlayback(playback *Playback, changeVariant PlaybackChangeVariant, res S
 	}
 
 	return nil
-}
-
-func prepareJSONOutput(res postPlaybackResponse) ([]byte, error) {
-	out, err := json.Marshal(res)
-	if err != nil {
-		return []byte(fmt.Sprintf("could not encode json payload: %s", err)), err
-	}
-
-	return out, nil
 }

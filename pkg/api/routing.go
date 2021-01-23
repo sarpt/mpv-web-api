@@ -29,6 +29,11 @@ const (
 
 type pathHandlers map[string]http.HandlerFunc
 type formArgumentHandler func(http.ResponseWriter, *http.Request, *Server) error
+type formArgumentValidator func(*http.Request) bool
+type formArgument struct {
+	handle   formArgumentHandler
+	validate formArgumentValidator
+}
 type payload interface{}
 type formResponse struct {
 	handlerErrors
@@ -135,51 +140,57 @@ func allowedMethods(handlers pathHandlers) []string {
 	return allowedMethods
 }
 
-func (s *Server) createFormHandler(allArgHandlers map[string]formArgumentHandler) http.HandlerFunc {
+func (s *Server) createFormHandler(allArgHandlers map[string]formArgument) http.HandlerFunc {
 	return func(res http.ResponseWriter, req *http.Request) {
 		responsePayload := formResponse{}
 
 		selectedArgHandlers, errors := validateFormRequest(req, allArgHandlers)
-		if errors.GeneralError != "" {
-			s.errLog.Printf(errors.GeneralError)
-			res.WriteHeader(400)
-			res.Write([]byte(fmt.Sprintf(responsePayload.GeneralError)))
+		responsePayload.GeneralError = errors.GeneralError
+		responsePayload.ArgumentErrors = errors.ArgumentErrors
+
+		if responsePayload.GeneralError != "" || len(responsePayload.ArgumentErrors) != 0 {
+			s.errLog.Printf("invalid request from %s\n", req.RemoteAddr)
+			out, err := prepareJSONOutput(responsePayload)
+			if err != nil {
+				res.WriteHeader(400)
+			} else {
+				res.WriteHeader(500)
+			}
+			res.Write(out)
 
 			return
 		}
-
-		responsePayload.ArgumentErrors = errors.ArgumentErrors
 
 		for _, handler := range selectedArgHandlers {
 			err := handler(res, req, s)
 			if err != nil {
 				responsePayload.GeneralError = err.Error()
 				s.errLog.Printf(responsePayload.GeneralError)
-				res.WriteHeader(400)
-				res.Write([]byte(fmt.Sprintf(responsePayload.GeneralError)))
+				out, _ := prepareJSONOutput(responsePayload)
+				res.WriteHeader(500)
+				res.Write(out)
 
 				return
 			}
 		}
 
-		out, err := json.Marshal(responsePayload)
+		out, err := prepareJSONOutput(responsePayload)
 		if err != nil {
-			responsePayload.GeneralError = fmt.Sprintf("could not encode json payload: %s", err)
-			s.errLog.Printf(responsePayload.GeneralError)
+			s.errLog.Printf("%s", out)
 			res.WriteHeader(500)
-			res.Write([]byte(fmt.Sprintf(responsePayload.GeneralError)))
+			res.Write(out)
 
 			return
 		}
 
 		res.WriteHeader(200)
-		res.Write([]byte(out))
+		res.Write(out)
 	}
 }
 
 // validateFormRequest checks form body for arguments and their correctnes.
 // Result of validation is an array of arguments that have handlers associated and handlerErrors (if any occured).
-func validateFormRequest(req *http.Request, handlers map[string]formArgumentHandler) ([]formArgumentHandler, handlerErrors) {
+func validateFormRequest(req *http.Request, arguments map[string]formArgument) ([]formArgumentHandler, handlerErrors) {
 	correctHandlers := []formArgumentHandler{}
 	handlerErrors := handlerErrors{
 		ArgumentErrors: map[string]string{},
@@ -198,14 +209,23 @@ func validateFormRequest(req *http.Request, handlers map[string]formArgumentHand
 		return correctHandlers, handlerErrors
 	}
 
-	for arg := range req.PostForm {
-		handler, ok := handlers[arg]
+	for argName := range req.PostForm {
+		argument, ok := arguments[argName]
 		if !ok {
-			handlerErrors.ArgumentErrors[arg] = fmt.Sprintf("the %s argument is invalid", arg)
+			handlerErrors.ArgumentErrors[argName] = fmt.Sprintf("the %s argument is not defined", argName)
 			continue
-		} else {
-			correctHandlers = append(correctHandlers, handler)
 		}
+
+		if argument.validate != nil && !argument.validate(req) {
+			handlerErrors.ArgumentErrors[argName] = fmt.Sprintf("the %s argument is invalid", argName)
+			continue
+		}
+
+		if argument.handle == nil {
+			continue
+		}
+
+		correctHandlers = append(correctHandlers, argument.handle)
 	}
 
 	return correctHandlers, handlerErrors
@@ -215,4 +235,13 @@ func multipartFormRequest(req *http.Request) bool {
 	contentType, ok := req.Header[contentTypeHeader]
 
 	return ok && len(contentType) > 0 && strings.Contains(contentType[0], multiPartFormContentType)
+}
+
+func prepareJSONOutput(res formResponse) ([]byte, error) {
+	out, err := json.Marshal(res)
+	if err != nil {
+		return []byte(fmt.Sprintf("could not encode json payload: %s", err)), err
+	}
+
+	return out, nil
 }
