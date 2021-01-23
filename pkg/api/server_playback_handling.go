@@ -10,13 +10,14 @@ import (
 const (
 	playbackSSEChannelVariant SSEChannelVariant = "playback"
 
-	pathArg       = "path"
-	fullscreenArg = "fullscreen"
-	subtitleIDArg = "subtitleID"
+	appendArg     = "append"
 	audioIDArg    = "audioID"
-	pauseArg      = "pause"
+	fullscreenArg = "fullscreen"
 	loopFileArg   = "loopFile"
+	pathArg       = "path"
+	pauseArg      = "pause"
 	stopArg       = "stop"
+	subtitleIDArg = "subtitleID"
 
 	playbackAllSseEvent    = "all"
 	playbackReplaySseEvent = "replay"
@@ -78,10 +79,23 @@ func (s *Server) createPlaybackChangesHandler() sseChangeHandler {
 }
 
 func pathHandler(res http.ResponseWriter, req *http.Request, s *Server) error {
-	filePath := req.PostFormValue(pathArg)
-	s.outLog.Printf("playing file '%s' due to request from %s\n", filePath, req.RemoteAddr)
+	var append bool = false
+	var err error
 
-	return s.mpvManager.LoadFile(filePath)
+	filePath := req.PostFormValue(pathArg)
+
+	appendArgInForm := req.PostFormValue(appendArg)
+	if appendArgInForm != "" {
+		append, err = strconv.ParseBool(appendArgInForm)
+		if err != nil {
+			s.errLog.Printf("could not decode correctly '%s' argument for %s in request from %s: %s\n", appendArg, filePath, req.RemoteAddr, err)
+			return err
+		}
+	}
+
+	s.outLog.Printf("loading file '%s' with '%t' argument due to request from %s\n", filePath, append, req.RemoteAddr)
+
+	return s.mpvManager.LoadFile(filePath, append)
 }
 
 func fullscreenHandler(res http.ResponseWriter, req *http.Request, s *Server) error {

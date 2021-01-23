@@ -4,6 +4,7 @@ const (
 	defaultName string = "default"
 )
 
+// Playlist holds state about currently playing playlist.
 type Playlist struct {
 	name       string
 	currentIdx int

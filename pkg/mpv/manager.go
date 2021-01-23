@@ -80,10 +80,18 @@ func (m Manager) Close() {
 }
 
 // LoadFile instructs mpv to start playing the file from provided filepath.
-func (m Manager) LoadFile(filePath string) error {
+// Second argument (append) controls whether filepath playback should be appended to the current playlist (instead of playback replacement).
+func (m Manager) LoadFile(filePath string, append bool) error {
+	var loadFileArg string
+	if append {
+		loadFileArg = AppendValue
+	} else {
+		loadFileArg = ReplaceValue
+	}
+
 	cmd := command{
 		name:     loadfileCommand,
-		elements: []interface{}{filePath},
+		elements: []interface{}{filePath, loadFileArg},
 	}
 	_, err := m.cd.Request(cmd)
 
