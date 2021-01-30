@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+
+	"github.com/sarpt/mpv-web-api/internal/state"
 )
 
 const (
-	playbackSSEChannelVariant SSEChannelVariant = "playback"
+	playbackSSEChannelVariant state.SSEChannelVariant = "playback"
 
 	appendArg     = "append"
 	audioIDArg    = "audioID"
@@ -105,7 +107,7 @@ func (s *Server) createPlaybackReplayHandler() sseReplayHandler {
 
 func (s *Server) createPlaybackChangesHandler() sseChangeHandler {
 	return func(res SSEResponseWriter, changes interface{}) error {
-		change, ok := changes.(PlaybackChange)
+		change, ok := changes.(state.PlaybackChange)
 		if !ok {
 			return errIncorrectChangesType
 		}
@@ -191,7 +193,7 @@ func stopHandler(res http.ResponseWriter, req *http.Request, s *Server) error {
 	return s.mpvManager.Stop()
 }
 
-func sendPlayback(playback *Playback, changeVariant PlaybackChangeVariant, res SSEResponseWriter) error {
+func sendPlayback(playback *state.Playback, changeVariant state.PlaybackChangeVariant, res SSEResponseWriter) error {
 	out, err := json.Marshal(playback)
 	if err != nil {
 		return fmt.Errorf("%w: %s", errResponseJSONCreationFailed, err)

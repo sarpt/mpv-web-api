@@ -2,34 +2,18 @@ package api
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
-)
 
-// MoviesChangeVariant specifies what type of change to movies list items belong to in a MoviesChange type.
-type MoviesChangeVariant string
-
-var (
-	errNoMovieAvailable = errors.New("movie with specified path does not exist")
+	"github.com/sarpt/mpv-web-api/internal/state"
 )
 
 const (
-	moviesSSEChannelVariant SSEChannelVariant = "movies"
-
-	added   MoviesChangeVariant = "added"
-	updated MoviesChangeVariant = "updated"
-	removed MoviesChangeVariant = "removed"
+	moviesSSEChannelVariant state.SSEChannelVariant = "movies"
 )
 
-// MoviesChange holds information about changes to the list of movies being served.
-type MoviesChange struct {
-	Variant MoviesChangeVariant
-	Items   map[string]Movie
-}
-
 type getMoviesRespone struct {
-	Movies map[string]Movie `json:"movies"`
+	Movies map[string]state.Movie `json:"movies"`
 }
 
 func (s *Server) getMoviesHandler(res http.ResponseWriter, req *http.Request) {
@@ -57,7 +41,7 @@ func (s *Server) createMoviesReplayHandler() sseReplayHandler {
 
 func (s *Server) createMoviesChangeHandler() sseChangeHandler {
 	return func(res SSEResponseWriter, changes interface{}) error {
-		moviesChange, ok := changes.(MoviesChange)
+		moviesChange, ok := changes.(state.MoviesChange)
 		if !ok {
 			return errIncorrectChangesType
 		}
@@ -75,13 +59,13 @@ func (s *Server) moviesSSEChannel() SSEChannel {
 	}
 }
 
-func sendMovies(movies map[string]Movie, res SSEResponseWriter) error {
+func sendMovies(movies map[string]state.Movie, res SSEResponseWriter) error {
 	out, err := json.Marshal(movies)
 	if err != nil {
 		return fmt.Errorf("%w: %s", errResponseJSONCreationFailed, err)
 	}
 
-	_, err = res.Write(formatSseEvent(moviesSSEChannelVariant, string(added), out))
+	_, err = res.Write(formatSseEvent(moviesSSEChannelVariant, string(state.AddedMoviesChange), out))
 	if err != nil {
 		return fmt.Errorf("sending movies failed: %w: %s", errClientWritingFailed, err)
 	}

@@ -1,4 +1,4 @@
-package api
+package state
 
 const (
 	defaultName string = "default"
@@ -16,4 +16,13 @@ type playlistJSON struct {
 	Name       string   `json:"Name"`
 	CurrentIdx int      `json:"CurrentIdx"`
 	Items      []string `json:"Items"`
+}
+
+// NewPlaylist constructs Playlist state.
+func NewPlaylist() *Playlist {
+	return &Playlist{
+		name:    defaultName,
+		items:   []string{},
+		changes: make(chan interface{}),
+	}
 }

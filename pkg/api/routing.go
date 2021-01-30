@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+
+	"github.com/sarpt/mpv-web-api/internal/state"
 )
 
 const (
@@ -47,7 +49,7 @@ type handlerErrors struct {
 
 func (s *Server) mainHandler() *http.ServeMux {
 	sseCfg := SSEHandlerConfig{
-		Channels: map[SSEChannelVariant]SSEChannel{
+		Channels: map[state.SSEChannelVariant]SSEChannel{
 			playbackSSEChannelVariant: s.playbackSSEChannel(),
 			moviesSSEChannelVariant:   s.moviesSSEChannel(),
 			statusSSEChannelVariant:   s.statusSSEChannel(),

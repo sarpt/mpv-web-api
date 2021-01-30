@@ -1,21 +1,30 @@
 package api
 
-import "fmt"
+import (
+	"encoding/json"
+	"fmt"
+
+	"github.com/sarpt/mpv-web-api/internal/state"
+)
+
+var (
+	statusSSEChannelVariant state.SSEChannelVariant = "status"
+)
 
 func (s *Server) createStatusReplayHandler() sseReplayHandler {
 	return func(res SSEResponseWriter) error {
-		return s.status.sendStatus(statusReplay, res)
+		return sendStatus(s.status, state.StatusReplay, res)
 	}
 }
 
 func (s *Server) createStatusChangeHandler() sseChangeHandler {
 	return func(res SSEResponseWriter, changes interface{}) error {
-		statusChange, ok := changes.(StatusChange)
+		statusChange, ok := changes.(state.StatusChange)
 		if !ok {
 			return errIncorrectChangesType
 		}
 
-		return s.status.sendStatus(statusChange.Variant, res)
+		return sendStatus(s.status, statusChange.Variant, res)
 	}
 }
 
@@ -28,8 +37,8 @@ func (s *Server) statusSSEChannel() SSEChannel {
 	}
 }
 
-func (s *Status) sendStatus(variant StatusChangeVariant, res SSEResponseWriter) error {
-	out, err := s.jsonMarshal()
+func sendStatus(status *state.Status, variant state.StatusChangeVariant, res SSEResponseWriter) error {
+	out, err := json.Marshal(status)
 	if err != nil {
 		return fmt.Errorf("%w: %s", errResponseJSONCreationFailed, err)
 	}

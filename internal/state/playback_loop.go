@@ -1,4 +1,4 @@
-package api
+package state
 
 import "encoding/json"
 
@@ -11,9 +11,9 @@ type loopVariant string
 
 // PlaybackLoop contains information about playback loop
 type PlaybackLoop struct {
-	Variant loopVariant
-	ATime   int
-	BTime   int
+	variant loopVariant
+	aTime   int
+	bTime   int
 }
 
 type playbackLoopJSON struct {
@@ -25,9 +25,9 @@ type playbackLoopJSON struct {
 // MarshalJSON satisifes json.Marshaller
 func (pl *PlaybackLoop) MarshalJSON() ([]byte, error) {
 	plJSON := playbackLoopJSON{
-		Variant: pl.Variant,
-		ATime:   pl.ATime,
-		BTime:   pl.BTime,
+		Variant: pl.variant,
+		ATime:   pl.aTime,
+		BTime:   pl.bTime,
 	}
 
 	return json.Marshal(plJSON)

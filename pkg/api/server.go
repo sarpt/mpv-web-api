@@ -9,6 +9,7 @@ import (
 	"os"
 	"sync"
 
+	"github.com/sarpt/mpv-web-api/internal/state"
 	"github.com/sarpt/mpv-web-api/pkg/mpv"
 )
 
@@ -25,15 +26,15 @@ type Server struct {
 	directories          []string
 	directoriesLock      *sync.RWMutex
 	errLog               *log.Logger
-	movies               Movies
+	movies               *state.Movies
 	moviesSSEObservers   SSEObservers
 	mpvManager           *mpv.Manager
 	mpvSocketPath        string
 	outLog               *log.Logger
-	playback             *Playback
+	playback             *state.Playback
 	playbackSSEObservers SSEObservers
-	playlist             *Playlist
-	status               *Status
+	playlist             *state.Playlist
+	status               *state.Status
 	statusSSEObservers   SSEObservers
 }
 
@@ -63,11 +64,7 @@ func NewServer(cfg Config) (*Server, error) {
 		[]string{},
 		&sync.RWMutex{},
 		log.New(cfg.errWriter, logPrefix, log.LstdFlags),
-		Movies{
-			items:   map[string]Movie{},
-			changes: make(chan interface{}),
-			lock:    &sync.RWMutex{},
-		},
+		state.NewMovies(),
 		SSEObservers{
 			Items: map[string]chan interface{}{},
 			Lock:  &sync.RWMutex{},
@@ -75,23 +72,13 @@ func NewServer(cfg Config) (*Server, error) {
 		mpvManager,
 		cfg.MpvSocketPath,
 		log.New(cfg.outWriter, logPrefix, log.LstdFlags),
-		&Playback{
-			changes: make(chan interface{}),
-		},
+		state.NewPlayback(),
 		SSEObservers{
 			Items: map[string]chan interface{}{},
 			Lock:  &sync.RWMutex{},
 		},
-		&Playlist{
-			name:    defaultName,
-			items:   []string{},
-			changes: make(chan interface{}),
-		},
-		&Status{
-			observingAddresses: map[string][]SSEChannelVariant{},
-			lock:               &sync.RWMutex{},
-			changes:            make(chan interface{}),
-		},
+		state.NewPlaylist(),
+		state.NewStatus(),
 		SSEObservers{
 			Items: map[string]chan interface{}{},
 			Lock:  &sync.RWMutex{},

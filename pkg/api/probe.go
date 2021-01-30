@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 
+	"github.com/sarpt/mpv-web-api/internal/state"
 	"github.com/sarpt/mpv-web-api/pkg/probe"
 )
 
@@ -12,7 +13,7 @@ var (
 )
 
 func (s *Server) probeDirectory(directory string) []probe.SkippedFile {
-	movies := map[string]Movie{}
+	movies := map[string]state.Movie{}
 	s.outLog.Printf("probing directory %s\n", directory)
 
 	probeResults, skippedFiles := probe.Directory(directory)
@@ -21,8 +22,8 @@ func (s *Server) probeDirectory(directory string) []probe.SkippedFile {
 			continue
 		}
 
-		movie := mapProbeResultToMovie(probeResult)
-		movies[movie.Path] = movie
+		movie := state.MapProbeResultToMovie(probeResult)
+		movies[movie.Path()] = movie
 	}
 
 	s.movies.Add(movies)

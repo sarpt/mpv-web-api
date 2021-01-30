@@ -1,6 +1,33 @@
-package api
+package state
 
-import "sync"
+import (
+	"errors"
+	"sync"
+)
+
+var (
+	errNoMovieAvailable = errors.New("movie with specified path does not exist")
+)
+
+const (
+	// AddedMoviesChange notifies about addition of movies to the list of movies handled by the application.
+	AddedMoviesChange MoviesChangeVariant = "added"
+
+	// UpdatedMoviesChange notifies about updates to the list of movies.
+	UpdatedMoviesChange MoviesChangeVariant = "updated"
+
+	// RemovedMoviesChange notifies about removal of movies from the list.
+	RemovedMoviesChange MoviesChangeVariant = "removed"
+)
+
+// MoviesChange holds information about changes to the list of movies being served.
+type MoviesChange struct {
+	Variant MoviesChangeVariant
+	Items   map[string]Movie
+}
+
+// MoviesChangeVariant specifies what type of change to movies list items belong to in a MoviesChange type.
+type MoviesChangeVariant string
 
 // Movies is an aggregate state of the movies being served by the server instance.
 // Any modification done on the state should be done by exposed methods which should guarantee goroutine access safety.
@@ -10,7 +37,16 @@ type Movies struct {
 	lock    *sync.RWMutex
 }
 
-// Add appends movies to the list of movies served on current server instance
+// NewMovies counstructs Movies state.
+func NewMovies() *Movies {
+	return &Movies{
+		items:   map[string]Movie{},
+		changes: make(chan interface{}),
+		lock:    &sync.RWMutex{},
+	}
+}
+
+// Add appends movies to the list of movies served on current server instance.
 func (m *Movies) Add(movies map[string]Movie) {
 	addedMovies := map[string]Movie{}
 
@@ -27,7 +63,7 @@ func (m *Movies) Add(movies map[string]Movie) {
 
 	if len(addedMovies) > 0 {
 		m.changes <- MoviesChange{
-			Variant: added,
+			Variant: AddedMoviesChange,
 			Items:   addedMovies,
 		}
 	}
@@ -54,7 +90,7 @@ func (m *Movies) ByPath(path string) (Movie, error) {
 	defer m.lock.RUnlock()
 
 	for _, movie := range m.items {
-		if movie.Path == path {
+		if movie.path == path {
 			return movie, nil
 		}
 	}
@@ -62,7 +98,7 @@ func (m *Movies) ByPath(path string) (Movie, error) {
 	return Movie{}, errNoMovieAvailable
 }
 
-// Changes returns read-only channel notifying of movies changes
+// Changes returns read-only channel notifying of movies changes.
 func (m *Movies) Changes() <-chan interface{} {
 	return m.changes
 }

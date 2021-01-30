@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+
+	"github.com/sarpt/mpv-web-api/internal/state"
 )
 
 var (
@@ -22,9 +24,6 @@ const (
 	sseChannelArg     = "channel"
 )
 
-// SSEChannelVariant specifies type of observer (movies, playback, etc.)
-type SSEChannelVariant string
-
 // SSEObservers represents client observers that are currently connected to this instance of api server
 type SSEObservers struct {
 	Items map[string]chan interface{}
@@ -38,14 +37,14 @@ type sseChangeHandler = func(res SSEResponseWriter, change interface{}) error
 // SSEChannel is used to construct channel on which subscribers can listen to on a mutexed on a single SSE keep-alive connection
 type SSEChannel struct {
 	Observers     SSEObservers
-	Variant       SSEChannelVariant
+	Variant       state.SSEChannelVariant
 	ChangeHandler sseChangeHandler
 	ReplayHandler sseReplayHandler
 }
 
 // SSEHandlerConfig is used to control creation of SSE handler for Server
 type SSEHandlerConfig struct {
-	Channels map[SSEChannelVariant]SSEChannel
+	Channels map[state.SSEChannelVariant]SSEChannel
 }
 
 func (s *Server) createGetSseHandler(cfg SSEHandlerConfig) getSseHandler {
@@ -60,7 +59,7 @@ func (s *Server) createGetSseHandler(cfg SSEHandlerConfig) getSseHandler {
 
 		channelVariants := req.URL.Query()[sseChannelArg]
 		for _, reqChannel := range channelVariants {
-			channelVariant := SSEChannelVariant(reqChannel)
+			channelVariant := state.SSEChannelVariant(reqChannel)
 
 			channel, ok := cfg.Channels[channelVariant]
 			if !ok {
@@ -84,12 +83,17 @@ func (s *Server) observeChannelVariant(res SSEResponseWriter, req *http.Request,
 	// The dispatcher will expect for the select below to receive the message but the Context().Done() already waits to acquire a write lock acquired by the dispatcher in order to send on a channel.
 	// So the buffer of 1 ensures that one message will be buffered, dispatcher will not be blocked, and write lock will be obtained.
 	// When the write lock is obtained to remove from the set, even if a new playback will be received, read lock will wait until Context().Done() finishes.
+	// TODO: create a separate goroutine that does not block select in waiting for the Context().Done().
+	// When that goroutine ends, it should emit on done channel that is present in select, which is used for finishing the "for" looping.
+	// By waiting in the separate goroutine, the Select below will not choose at random which chan should be handled, eliminating possiblity that Context().Done()
+	// is chosen during looping in "for" in fanout dispatcher which has already acquired lock. Context().Done() will still have to wait for unlock, but will not block
+	// next iteration of "for" in fanout dispatcher waiting for Select case to (randomly) decide it's turn.
 	changes := make(chan interface{}, 1)
 	channel.Observers.Lock.Lock()
 	channel.Observers.Items[remoteAddr] = changes
 	channel.Observers.Lock.Unlock()
 
-	s.status.addObservingAddress(req.RemoteAddr, channel.Variant)
+	s.status.AddObservingAddress(req.RemoteAddr, channel.Variant)
 	s.outLog.Printf("added %s observer with addr %s\n", channel.Variant, remoteAddr)
 
 	if replaySseState(req) {
@@ -117,7 +121,7 @@ func (s *Server) observeChannelVariant(res SSEResponseWriter, req *http.Request,
 			delete(channel.Observers.Items, remoteAddr)
 			channel.Observers.Lock.Unlock()
 
-			s.status.removeObservingAddress(req.RemoteAddr, channel.Variant)
+			s.status.RemoveObservingAddress(req.RemoteAddr, channel.Variant)
 			s.outLog.Printf("removing %s observer with addr %s\n", channel.Variant, remoteAddr)
 
 			return
@@ -149,7 +153,7 @@ func replaySseState(req *http.Request) bool {
 	return ok && len(replay) > 0 && replay[0] == "true"
 }
 
-func formatSseEvent(channel SSEChannelVariant, eventName string, data []byte) []byte {
+func formatSseEvent(channel state.SSEChannelVariant, eventName string, data []byte) []byte {
 	var out []byte
 
 	channelEvent := fmt.Sprintf("%s.%s", channel, eventName)
