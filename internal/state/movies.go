@@ -1,6 +1,7 @@
 package state
 
 import (
+	"encoding/json"
 	"errors"
 	"sync"
 )
@@ -22,8 +23,13 @@ const (
 
 // MoviesChange holds information about changes to the list of movies being served.
 type MoviesChange struct {
-	Variant MoviesChangeVariant
-	Items   map[string]Movie
+	variant MoviesChangeVariant
+	items   map[string]Movie
+}
+
+// MarshalJSON returns change items in JSON format. Satisfies json.Marshaller.
+func (mc MoviesChange) MarshalJSON() ([]byte, error) {
+	return json.Marshal(mc.items)
 }
 
 // MoviesChangeVariant specifies what type of change to movies list items belong to in a MoviesChange type.
@@ -63,8 +69,8 @@ func (m *Movies) Add(movies map[string]Movie) {
 
 	if len(addedMovies) > 0 {
 		m.changes <- MoviesChange{
-			Variant: AddedMoviesChange,
-			Items:   addedMovies,
+			variant: AddedMoviesChange,
+			items:   addedMovies,
 		}
 	}
 }

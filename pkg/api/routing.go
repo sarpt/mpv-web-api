@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-
-	"github.com/sarpt/mpv-web-api/internal/state"
 )
 
 const (
@@ -48,16 +46,7 @@ type handlerErrors struct {
 }
 
 func (s *Server) mainHandler() *http.ServeMux {
-	sseCfg := SSEHandlerConfig{
-		Channels: map[state.SSEChannelVariant]SSEChannel{
-			playbackSSEChannelVariant: s.playbackSSEChannel(),
-			moviesSSEChannelVariant:   s.moviesSSEChannel(),
-			statusSSEChannelVariant:   s.statusSSEChannel(),
-		},
-	}
-	sseHandlers := map[string]http.HandlerFunc{
-		http.MethodGet: s.createGetSseHandler(sseCfg),
-	}
+	sseHandlers := s.sseServer.Handlers()
 
 	playbackHandlers := map[string]http.HandlerFunc{
 		http.MethodPost: s.createFormHandler(postPlaybackFormArgumentsHandlers),

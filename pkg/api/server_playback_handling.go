@@ -5,13 +5,9 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-
-	"github.com/sarpt/mpv-web-api/internal/state"
 )
 
 const (
-	playbackSSEChannelVariant state.SSEChannelVariant = "playback"
-
 	appendArg     = "append"
 	audioIDArg    = "audioID"
 	fullscreenArg = "fullscreen"
@@ -20,9 +16,6 @@ const (
 	pauseArg      = "pause"
 	stopArg       = "stop"
 	subtitleIDArg = "subtitleID"
-
-	playbackAllSseEvent    = "all"
-	playbackReplaySseEvent = "replay"
 )
 
 var (
@@ -77,15 +70,6 @@ type postPlaybackResponse struct {
 	handlerErrors
 }
 
-func (s *Server) playbackSSEChannel() SSEChannel {
-	return SSEChannel{
-		Variant:       playbackSSEChannelVariant,
-		Observers:     s.playbackSSEObservers,
-		ChangeHandler: s.createPlaybackChangesHandler(),
-		ReplayHandler: s.createPlaybackReplayHandler(),
-	}
-}
-
 func (s *Server) getPlaybackHandler(res http.ResponseWriter, req *http.Request) {
 	json, err := json.Marshal(s.playback)
 	if err != nil {
@@ -97,23 +81,6 @@ func (s *Server) getPlaybackHandler(res http.ResponseWriter, req *http.Request) 
 
 	res.WriteHeader(200)
 	res.Write(json)
-}
-
-func (s *Server) createPlaybackReplayHandler() sseReplayHandler {
-	return func(res SSEResponseWriter) error {
-		return sendPlayback(s.playback, playbackReplaySseEvent, res)
-	}
-}
-
-func (s *Server) createPlaybackChangesHandler() sseChangeHandler {
-	return func(res SSEResponseWriter, changes interface{}) error {
-		change, ok := changes.(state.PlaybackChange)
-		if !ok {
-			return errIncorrectChangesType
-		}
-
-		return sendPlayback(s.playback, change.Variant, res)
-	}
 }
 
 func pathHandler(res http.ResponseWriter, req *http.Request, s *Server) error {
@@ -191,18 +158,4 @@ func stopHandler(res http.ResponseWriter, req *http.Request, s *Server) error {
 
 	s.outLog.Printf("stopping playback due to request from %s\n", req.RemoteAddr)
 	return s.mpvManager.Stop()
-}
-
-func sendPlayback(playback *state.Playback, changeVariant state.PlaybackChangeVariant, res SSEResponseWriter) error {
-	out, err := json.Marshal(playback)
-	if err != nil {
-		return fmt.Errorf("%w: %s", errResponseJSONCreationFailed, err)
-	}
-
-	_, err = res.Write(formatSseEvent(playbackSSEChannelVariant, string(changeVariant), out))
-	if err != nil {
-		return fmt.Errorf("sending playback failed: %w: %s", errClientWritingFailed, err)
-	}
-
-	return nil
 }

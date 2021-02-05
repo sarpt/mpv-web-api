@@ -6,7 +6,7 @@ import (
 	"github.com/sarpt/mpv-web-api/pkg/probe"
 )
 
-// Movie specifies information about a movie file that can be played
+// Movie specifies information about a movie file that can be played.
 type Movie struct {
 	title           string
 	formatName      string
@@ -31,8 +31,8 @@ type movieJSON struct {
 	VideoStreams    []probe.VideoStream    `json:"VideoStreams"`
 }
 
-// MarshalJSON satisifes json.Marshaller
-func (m *Movie) MarshalJSON() ([]byte, error) {
+// MarshalJSON satisifes json.Marshaller.
+func (m Movie) MarshalJSON() ([]byte, error) {
 	mJSON := movieJSON{
 		Title:           m.title,
 		FormatName:      m.formatName,

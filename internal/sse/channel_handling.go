@@ -1,4 +1,4 @@
-package api
+package sse
 
 import (
 	"bytes"
@@ -22,32 +22,48 @@ var (
 const (
 	replaySseStateArg = "replay"
 	sseChannelArg     = "channel"
+
+	// ObserverAdded informs about new observer being added to the SSE server.
+	ObserverAdded ObserverChangeVariant = "observer-added"
+
+	// ObserverRemoved informs about new observer being removed from the SSE server.
+	ObserverRemoved ObserverChangeVariant = "observer-removed"
 )
 
-// SSEObservers represents client observers that are currently connected to this instance of api server
-type SSEObservers struct {
-	Items map[string]chan interface{}
-	Lock  *sync.RWMutex
+// observers represents client observers that are currently connected to this instance of api server
+type observers struct {
+	items map[string]chan interface{}
+	lock  *sync.RWMutex
+}
+
+// ObserverChangeVariant specifies what change to the state the specified observers change specifies (addition, removal, etc.).
+type ObserverChangeVariant string
+
+// ObserversChange informs about changes to the SSE observers list.
+type ObserversChange struct {
+	ChangeVariant  ObserverChangeVariant
+	RemoteAddr     string
+	ChannelVariant state.SSEChannelVariant
 }
 
 type getSseHandler = func(res http.ResponseWriter, req *http.Request)
-type sseReplayHandler = func(res SSEResponseWriter) error
-type sseChangeHandler = func(res SSEResponseWriter, change interface{}) error
+type sseReplayHandler = func(res ResponseWriter) error
+type sseChangeHandler = func(res ResponseWriter, change interface{}) error
 
-// SSEChannel is used to construct channel on which subscribers can listen to on a mutexed on a single SSE keep-alive connection
-type SSEChannel struct {
-	Observers     SSEObservers
-	Variant       state.SSEChannelVariant
-	ChangeHandler sseChangeHandler
-	ReplayHandler sseReplayHandler
+// channel is used to construct channel on which subscribers can listen to on a mutexed on a single SSE keep-alive connection
+type channel struct {
+	observers     observers
+	variant       state.SSEChannelVariant
+	changeHandler sseChangeHandler
+	replayHandler sseReplayHandler
 }
 
-// SSEHandlerConfig is used to control creation of SSE handler for Server
-type SSEHandlerConfig struct {
-	Channels map[state.SSEChannelVariant]SSEChannel
+// handlerConfig is used to control creation of SSE handler for Server
+type handlerConfig struct {
+	Channels map[state.SSEChannelVariant]channel
 }
 
-func (s *Server) createGetSseHandler(cfg SSEHandlerConfig) getSseHandler {
+func (s *Server) createGetSseHandler(cfg handlerConfig) getSseHandler {
 	return func(res http.ResponseWriter, req *http.Request) {
 		sseResWriter, err := sseResponseWriter(res)
 		if err != nil {
@@ -75,7 +91,7 @@ func (s *Server) createGetSseHandler(cfg SSEHandlerConfig) getSseHandler {
 	}
 }
 
-func (s *Server) observeChannelVariant(res SSEResponseWriter, req *http.Request, channel SSEChannel, wg *sync.WaitGroup) {
+func (s *Server) observeChannelVariant(res ResponseWriter, req *http.Request, sseChannel channel, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	remoteAddr := req.RemoteAddr
@@ -89,15 +105,21 @@ func (s *Server) observeChannelVariant(res SSEResponseWriter, req *http.Request,
 	// is chosen during looping in "for" in fanout dispatcher which has already acquired lock. Context().Done() will still have to wait for unlock, but will not block
 	// next iteration of "for" in fanout dispatcher waiting for Select case to (randomly) decide it's turn.
 	changes := make(chan interface{}, 1)
-	channel.Observers.Lock.Lock()
-	channel.Observers.Items[remoteAddr] = changes
-	channel.Observers.Lock.Unlock()
+	sseChannel.observers.lock.Lock()
+	sseChannel.observers.items[remoteAddr] = changes
+	sseChannel.observers.lock.Unlock()
 
-	s.status.AddObservingAddress(req.RemoteAddr, channel.Variant)
-	s.outLog.Printf("added %s observer with addr %s\n", channel.Variant, remoteAddr)
+	if s.observersChange != nil {
+		s.observersChange <- ObserversChange{
+			ChangeVariant:  ObserverAdded,
+			RemoteAddr:     req.RemoteAddr,
+			ChannelVariant: sseChannel.variant,
+		}
+	}
+	s.outLog.Printf("added %s observer with addr %s\n", sseChannel.variant, remoteAddr)
 
 	if replaySseState(req) {
-		err := channel.ReplayHandler(res)
+		err := sseChannel.replayHandler(res)
 		if err != nil {
 			s.errLog.Println(fmt.Sprintf("could not replay data on sse: %s", err.Error()))
 		}
@@ -107,39 +129,45 @@ func (s *Server) observeChannelVariant(res SSEResponseWriter, req *http.Request,
 		select {
 		case change, closed := <-changes:
 			if !closed {
-				s.outLog.Printf("sse observation on channel %s done for %s due to changes channel being closed\n", channel.Variant, remoteAddr)
+				s.outLog.Printf("sse observation on channel %s done for %s due to changes channel being closed\n", sseChannel.variant, remoteAddr)
 
 				return
 			}
 
-			err := channel.ChangeHandler(res, change)
+			err := sseChannel.changeHandler(res, change)
 			if err != nil {
 				s.errLog.Println(err.Error())
 			}
 		case <-req.Context().Done():
-			channel.Observers.Lock.Lock()
-			delete(channel.Observers.Items, remoteAddr)
-			channel.Observers.Lock.Unlock()
+			sseChannel.observers.lock.Lock()
+			delete(sseChannel.observers.items, remoteAddr)
+			sseChannel.observers.lock.Unlock()
 
-			s.status.RemoveObservingAddress(req.RemoteAddr, channel.Variant)
-			s.outLog.Printf("removing %s observer with addr %s\n", channel.Variant, remoteAddr)
+			if s.observersChange != nil {
+				s.observersChange <- ObserversChange{
+					ChangeVariant:  ObserverRemoved,
+					RemoteAddr:     req.RemoteAddr,
+					ChannelVariant: sseChannel.variant,
+				}
+			}
+			s.outLog.Printf("removing %s observer with addr %s\n", sseChannel.variant, remoteAddr)
 
 			return
 		}
 	}
 }
 
-func sseResponseWriter(res http.ResponseWriter) (SSEResponseWriter, error) {
+func sseResponseWriter(res http.ResponseWriter) (ResponseWriter, error) {
 	flusher, ok := res.(http.Flusher)
 	if !ok {
-		return SSEResponseWriter{}, errConvertToFlusherFailed
+		return ResponseWriter{}, errConvertToFlusherFailed
 	}
 
 	res.Header().Set("Connection", "keep-alive")
 	res.Header().Set("Content-Type", "text/event-stream")
 	res.Header().Set("Access-Control-Allow-Origin", "*")
 
-	sseFlusher := SSEResponseWriter{
+	sseFlusher := ResponseWriter{
 		res:     res,
 		flusher: flusher,
 		lock:    &sync.Mutex{},
@@ -166,4 +194,20 @@ func formatSseEvent(channel state.SSEChannelVariant, eventName string, data []by
 
 	out = append(out, sseEventEnd...)
 	return out
+}
+
+// distributeChangesToChannelObservers is a fan-out dispatcher, which notifies all playback observers (subscribers from SSE etc.) when a playbackChange occurs.
+func distributeChangesToChannelObservers(channelChanges <-chan interface{}, channelObservers observers) {
+	for {
+		change, ok := <-channelChanges
+		if !ok {
+			return
+		}
+
+		channelObservers.lock.RLock()
+		for _, observer := range channelObservers.items {
+			observer <- change
+		}
+		channelObservers.lock.RUnlock()
+	}
 }

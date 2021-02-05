@@ -9,6 +9,7 @@ import (
 	"os"
 	"sync"
 
+	"github.com/sarpt/mpv-web-api/internal/sse"
 	"github.com/sarpt/mpv-web-api/internal/state"
 	"github.com/sarpt/mpv-web-api/pkg/mpv"
 )
@@ -19,23 +20,22 @@ const (
 
 type observePropertyHandler = func(res mpv.ObservePropertyResponse) error
 
-// Server is used to serve API and hold state accessible to the API
+// Server is used to serve API and hold state accessible to the API.
 type Server struct {
-	address              string
-	allowCors            bool
-	directories          []string
-	directoriesLock      *sync.RWMutex
-	errLog               *log.Logger
-	movies               *state.Movies
-	moviesSSEObservers   SSEObservers
-	mpvManager           *mpv.Manager
-	mpvSocketPath        string
-	outLog               *log.Logger
-	playback             *state.Playback
-	playbackSSEObservers SSEObservers
-	playlist             *state.Playlist
-	status               *state.Status
-	statusSSEObservers   SSEObservers
+	address            string
+	allowCors          bool
+	directories        []string
+	directoriesLock    *sync.RWMutex
+	errLog             *log.Logger
+	movies             *state.Movies
+	mpvManager         *mpv.Manager
+	mpvSocketPath      string
+	outLog             *log.Logger
+	playback           *state.Playback
+	playlist           *state.Playlist
+	sseObserverChanges chan sse.ObserversChange
+	sseServer          *sse.Server
+	status             *state.Status
 }
 
 // Config controls behaviour of the api server.
@@ -43,50 +43,54 @@ type Config struct {
 	Address       string
 	AllowCors     bool
 	MpvSocketPath string
-	outWriter     io.Writer
-	errWriter     io.Writer
+	OutWriter     io.Writer
+	ErrWriter     io.Writer
 }
 
-// NewServer prepares and returns a server that can be used to handle API
+// NewServer prepares and returns a server that can be used to handle API calls.
 func NewServer(cfg Config) (*Server, error) {
-	if cfg.outWriter == nil {
-		cfg.outWriter = os.Stdout
+	if cfg.OutWriter == nil {
+		cfg.OutWriter = os.Stdout
 	}
-	if cfg.errWriter == nil {
-		cfg.errWriter = os.Stderr
+	if cfg.ErrWriter == nil {
+		cfg.ErrWriter = os.Stderr
 	}
 
-	mpvManager := mpv.NewManager(cfg.MpvSocketPath, cfg.outWriter, cfg.errWriter)
+	mpvManager := mpv.NewManager(cfg.MpvSocketPath, cfg.OutWriter, cfg.ErrWriter)
+
+	movies := state.NewMovies()
+	playback := state.NewPlayback()
+	status := state.NewStatus()
+
+	sseObserversChanges := make(chan sse.ObserversChange)
+	sseCfg := sse.Config{
+		ErrWriter:        cfg.ErrWriter,
+		Movies:           movies,
+		OutWriter:        cfg.OutWriter,
+		ObserversChanges: sseObserversChanges,
+		Playback:         playback,
+		Status:           status,
+	}
 
 	return &Server{
 		cfg.Address,
 		cfg.AllowCors,
 		[]string{},
 		&sync.RWMutex{},
-		log.New(cfg.errWriter, logPrefix, log.LstdFlags),
-		state.NewMovies(),
-		SSEObservers{
-			Items: map[string]chan interface{}{},
-			Lock:  &sync.RWMutex{},
-		},
+		log.New(cfg.ErrWriter, logPrefix, log.LstdFlags),
+		movies,
 		mpvManager,
 		cfg.MpvSocketPath,
-		log.New(cfg.outWriter, logPrefix, log.LstdFlags),
-		state.NewPlayback(),
-		SSEObservers{
-			Items: map[string]chan interface{}{},
-			Lock:  &sync.RWMutex{},
-		},
+		log.New(cfg.OutWriter, logPrefix, log.LstdFlags),
+		playback,
 		state.NewPlaylist(),
-		state.NewStatus(),
-		SSEObservers{
-			Items: map[string]chan interface{}{},
-			Lock:  &sync.RWMutex{},
-		},
+		sseObserversChanges,
+		sse.NewServer(sseCfg),
+		status,
 	}, nil
 }
 
-// Serve starts handling requests to the API endpoints. Blocks until canceled
+// Serve starts handling requests to the API endpoints. Blocks until closed.
 func (s *Server) Serve() error {
 	serv := http.Server{
 		Addr:    s.address,
@@ -102,7 +106,8 @@ func (s *Server) Serve() error {
 	return serv.ListenAndServe()
 }
 
-// Close closes server, along with closing necessary helpers
+// Close closes server, along with closing necessary helpers.
+// TODO: this can be done on defer inside Serve - does it make sense?
 func (s Server) Close() {
 	s.mpvManager.Close()
 }
@@ -119,9 +124,8 @@ func (s *Server) initWatchers() error {
 		mpv.SubtitleIDProperty:   s.handleSubtitleIDChangeEvent,
 	}
 
-	go distributeChangesToSSEObservers(s.playback.Changes(), s.playbackSSEObservers)
-	go distributeChangesToSSEObservers(s.movies.Changes(), s.moviesSSEObservers)
-	go distributeChangesToSSEObservers(s.status.Changes(), s.statusSSEObservers)
+	go s.watchSSEObserversChanges()
+	s.sseServer.InitDispatchers()
 	go s.watchObservePropertyResponses(observePropertyHandlers, observePropertyResponses)
 
 	return s.observeProperties(observePropertyResponses)
@@ -146,6 +150,22 @@ func (s Server) watchObservePropertyResponses(handlers map[string]observePropert
 	}
 }
 
+func (s Server) watchSSEObserversChanges() {
+	for {
+		change, open := <-s.sseObserverChanges
+		if !open {
+			return
+		}
+
+		switch change.ChangeVariant {
+		case sse.ObserverAdded:
+			s.status.AddObservingAddress(change.RemoteAddr, change.ChannelVariant)
+		case sse.ObserverRemoved:
+			s.status.RemoveObservingAddress(change.RemoteAddr, change.ChannelVariant)
+		}
+	}
+}
+
 func (s Server) observeProperties(observeResponses chan mpv.ObservePropertyResponse) error {
 	for _, propertyName := range mpv.ObservableProperties {
 		_, err := s.mpvManager.SubscribeToProperty(propertyName, observeResponses)
@@ -155,20 +175,4 @@ func (s Server) observeProperties(observeResponses chan mpv.ObservePropertyRespo
 	}
 
 	return nil
-}
-
-// distributeChangesToSSEObservers is a fan-out dispatcher, which notifies all playback observers (subscribers from SSE etc.) when a playbackChange occurs.
-func distributeChangesToSSEObservers(changes <-chan interface{}, observers SSEObservers) {
-	for {
-		change, ok := <-changes
-		if !ok {
-			return
-		}
-
-		observers.Lock.RLock()
-		for _, observer := range observers.Items {
-			observer <- change
-		}
-		observers.Lock.RUnlock()
-	}
 }

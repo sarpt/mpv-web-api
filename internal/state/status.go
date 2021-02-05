@@ -64,6 +64,7 @@ func (s *Status) ObservingAddresses() map[string][]SSEChannelVariant {
 	return s.observingAddresses
 }
 
+// AddObservingAddress adds remote address listening on specific channel variant to the status state.
 func (s *Status) AddObservingAddress(remoteAddr string, observerVariant SSEChannelVariant) {
 	var observers []SSEChannelVariant
 	var ok bool
@@ -82,6 +83,7 @@ func (s *Status) AddObservingAddress(remoteAddr string, observerVariant SSEChann
 	}
 }
 
+// RemoveObservingAddress removes remote address listening on specific channel variant from the state.
 func (s *Status) RemoveObservingAddress(remoteAddr string, observerVariant SSEChannelVariant) {
 	var observers []SSEChannelVariant
 	var ok bool
