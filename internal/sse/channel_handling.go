@@ -63,7 +63,7 @@ type handlerConfig struct {
 	Channels map[state.SSEChannelVariant]channel
 }
 
-func (s *Server) createGetSseHandler(cfg handlerConfig) getSseHandler {
+func (s *Server) createGetSseRegisterHandler(cfg handlerConfig) getSseHandler {
 	return func(res http.ResponseWriter, req *http.Request) {
 		sseResWriter, err := sseResponseWriter(res)
 		if err != nil {

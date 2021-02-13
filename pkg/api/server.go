@@ -9,6 +9,7 @@ import (
 	"os"
 	"sync"
 
+	"github.com/sarpt/mpv-web-api/internal/rest"
 	"github.com/sarpt/mpv-web-api/internal/sse"
 	"github.com/sarpt/mpv-web-api/internal/state"
 	"github.com/sarpt/mpv-web-api/pkg/mpv"
@@ -23,7 +24,6 @@ type observePropertyHandler = func(res mpv.ObservePropertyResponse) error
 // Server is used to serve API and hold state accessible to the API.
 type Server struct {
 	address            string
-	allowCors          bool
 	directories        []string
 	directoriesLock    *sync.RWMutex
 	errLog             *log.Logger
@@ -33,6 +33,7 @@ type Server struct {
 	outLog             *log.Logger
 	playback           *state.Playback
 	playlist           *state.Playlist
+	restServer         *rest.Server
 	sseObserverChanges chan sse.ObserversChange
 	sseServer          *sse.Server
 	status             *state.Status
@@ -41,7 +42,7 @@ type Server struct {
 // Config controls behaviour of the api server.
 type Config struct {
 	Address       string
-	AllowCors     bool
+	AllowCORS     bool
 	MpvSocketPath string
 	OutWriter     io.Writer
 	ErrWriter     io.Writer
@@ -71,10 +72,21 @@ func NewServer(cfg Config) (*Server, error) {
 		Playback:         playback,
 		Status:           status,
 	}
+	sseServer := sse.NewServer(sseCfg)
 
-	return &Server{
+	restCfg := rest.Config{
+		AllowCORS: cfg.AllowCORS,
+		ErrWriter: cfg.ErrWriter,
+		Movies:    movies,
+		MPVManger: mpvManager,
+		OutWriter: cfg.OutWriter,
+		Playback:  playback,
+		Status:    status,
+	}
+	restServer := rest.NewServer(restCfg)
+
+	server := &Server{
 		cfg.Address,
-		cfg.AllowCors,
 		[]string{},
 		&sync.RWMutex{},
 		log.New(cfg.ErrWriter, logPrefix, log.LstdFlags),
@@ -84,10 +96,15 @@ func NewServer(cfg Config) (*Server, error) {
 		log.New(cfg.OutWriter, logPrefix, log.LstdFlags),
 		playback,
 		state.NewPlaylist(),
+		restServer,
 		sseObserversChanges,
-		sse.NewServer(sseCfg),
+		sseServer,
 		status,
-	}, nil
+	}
+
+	restServer.SetAddDirectoriesHandler(server.AddDirectories)
+
+	return server, nil
 }
 
 // Serve starts handling requests to the API endpoints. Blocks until closed.

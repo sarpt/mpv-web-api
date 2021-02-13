@@ -11,6 +11,8 @@ import (
 
 const (
 	logPrefix = "sse.Server#"
+
+	registerPath = "/sse/register"
 )
 
 // Server holds information about handled SSE connections and their observers.
@@ -70,9 +72,9 @@ func (s *Server) InitDispatchers() {
 	go distributeChangesToChannelObservers(s.status.Changes(), s.statusObservers)
 }
 
-// Handlers returns map of HTTPs methods and their handlers.
+// Handler returns map of HTTPs methods and their handlers.
 // TODO: This should return ideally a http.Handler for a subtree, to be done when refactoring routing and separating REST handling.
-func (s *Server) Handlers() map[string]http.HandlerFunc {
+func (s *Server) Handler() http.Handler {
 	sseCfg := handlerConfig{
 		Channels: map[state.SSEChannelVariant]channel{
 			playbackSSEChannelVariant: s.playbackSSEChannel(),
@@ -80,7 +82,9 @@ func (s *Server) Handlers() map[string]http.HandlerFunc {
 			statusSSEChannelVariant:   s.statusSSEChannel(),
 		},
 	}
-	return map[string]http.HandlerFunc{
-		http.MethodGet: s.createGetSseHandler(sseCfg),
-	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc(registerPath, s.createGetSseRegisterHandler(sseCfg))
+
+	return mux
 }

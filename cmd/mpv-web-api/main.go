@@ -22,7 +22,7 @@ const (
 
 var (
 	dir       *listflag.StringList
-	allowCors *bool
+	allowCORS *bool
 	address   *string
 )
 
@@ -30,7 +30,7 @@ func init() {
 	dir = listflag.NewStringList([]string{})
 
 	flag.Var(dir, dirFlag, "directory containing movies. when left empty, current working directory will be used")
-	allowCors = flag.Bool(allowCorsFlag, false, "when not provided, Cross Origin Site Requests will be rejected")
+	allowCORS = flag.Bool(allowCorsFlag, false, "when not provided, Cross Origin Site Requests will be rejected")
 	address = flag.String(addrFlag, defaultAddress, "address on which server should listen on. default is localhost:3001")
 
 	flag.Parse()
@@ -40,7 +40,7 @@ func main() {
 	cfg := api.Config{
 		MpvSocketPath: mpvSocketPath,
 		Address:       *address,
-		AllowCors:     *allowCors,
+		AllowCORS:     *allowCORS,
 	}
 	server, err := api.NewServer(cfg)
 	if err != nil {
