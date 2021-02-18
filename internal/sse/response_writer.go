@@ -30,7 +30,8 @@ func (f *ResponseWriter) Write(data []byte) (int, error) {
 	return n, err
 }
 
-func (f *ResponseWriter) sendChange(changePayload json.Marshaler, channelVariant state.SSEChannelVariant, changeVariant string) error {
+// SendChange is responsible for propgating change payload through SSE connection.
+func (f *ResponseWriter) SendChange(changePayload json.Marshaler, channelVariant state.SSEChannelVariant, changeVariant string) error {
 	out, err := json.Marshal(changePayload)
 	if err != nil {
 		return fmt.Errorf("%w: %s", errResponseJSONCreationFailed, err)

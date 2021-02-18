@@ -20,7 +20,7 @@ func (mmc moviesMapChange) MarshalJSON() ([]byte, error) {
 
 func (s *Server) createMoviesReplayHandler() sseReplayHandler {
 	return func(res ResponseWriter) error {
-		return res.sendChange(moviesMapChange{Movies: s.movies.All()}, moviesSSEChannelVariant, string(state.AddedMoviesChange))
+		return res.SendChange(moviesMapChange{Movies: s.movies.All()}, moviesSSEChannelVariant, string(state.AddedMoviesChange))
 	}
 }
 
@@ -31,7 +31,7 @@ func (s *Server) createMoviesChangeHandler() sseChangeHandler {
 			return errIncorrectChangesType
 		}
 
-		return res.sendChange(moviesChange, moviesSSEChannelVariant, string(state.AddedMoviesChange))
+		return res.SendChange(moviesChange, moviesSSEChannelVariant, string(state.AddedMoviesChange))
 	}
 }
 

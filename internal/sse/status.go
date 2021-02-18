@@ -10,7 +10,7 @@ const (
 
 func (s *Server) createStatusReplayHandler() sseReplayHandler {
 	return func(res ResponseWriter) error {
-		return res.sendChange(s.status, statusSSEChannelVariant, string(state.StatusReplay))
+		return res.SendChange(s.status, statusSSEChannelVariant, string(state.StatusReplay))
 	}
 }
 
@@ -21,7 +21,7 @@ func (s *Server) createStatusChangeHandler() sseChangeHandler {
 			return errIncorrectChangesType
 		}
 
-		return res.sendChange(s.status, statusSSEChannelVariant, string(statusChange.Variant))
+		return res.SendChange(s.status, statusSSEChannelVariant, string(statusChange.Variant))
 	}
 }
 

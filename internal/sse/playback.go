@@ -13,7 +13,7 @@ const (
 
 func (s *Server) createPlaybackReplayHandler() sseReplayHandler {
 	return func(res ResponseWriter) error {
-		return res.sendChange(s.playback, playbackSSEChannelVariant, playbackReplaySseEvent)
+		return res.SendChange(s.playback, playbackSSEChannelVariant, playbackReplaySseEvent)
 	}
 }
 
@@ -24,7 +24,7 @@ func (s *Server) createPlaybackChangesHandler() sseChangeHandler {
 			return errIncorrectChangesType
 		}
 
-		return res.sendChange(s.playback, playbackSSEChannelVariant, string(change.Variant))
+		return res.SendChange(s.playback, playbackSSEChannelVariant, string(change.Variant))
 	}
 }
 

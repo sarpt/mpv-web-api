@@ -95,16 +95,7 @@ func (s *Server) observeChannelVariant(res ResponseWriter, req *http.Request, ss
 	defer wg.Done()
 
 	remoteAddr := req.RemoteAddr
-	// Buffer of 1 in case connection is closed after playbackObservers fan-out dispatcher already acquired read lock (blocking the write lock).
-	// The dispatcher will expect for the select below to receive the message but the Context().Done() already waits to acquire a write lock acquired by the dispatcher in order to send on a channel.
-	// So the buffer of 1 ensures that one message will be buffered, dispatcher will not be blocked, and write lock will be obtained.
-	// When the write lock is obtained to remove from the set, even if a new playback will be received, read lock will wait until Context().Done() finishes.
-	// TODO: create a separate goroutine that does not block select in waiting for the Context().Done().
-	// When that goroutine ends, it should emit on done channel that is present in select, which is used for finishing the "for" looping.
-	// By waiting in the separate goroutine, the Select below will not choose at random which chan should be handled, eliminating possiblity that Context().Done()
-	// is chosen during looping in "for" in fanout dispatcher which has already acquired lock. Context().Done() will still have to wait for unlock, but will not block
-	// next iteration of "for" in fanout dispatcher waiting for Select case to (randomly) decide it's turn.
-	changes := make(chan interface{}, 1)
+	changes := make(chan interface{})
 	sseChannel.observers.lock.Lock()
 	sseChannel.observers.items[remoteAddr] = changes
 	sseChannel.observers.lock.Unlock()
@@ -112,7 +103,7 @@ func (s *Server) observeChannelVariant(res ResponseWriter, req *http.Request, ss
 	if s.observersChange != nil {
 		s.observersChange <- ObserversChange{
 			ChangeVariant:  ObserverAdded,
-			RemoteAddr:     req.RemoteAddr,
+			RemoteAddr:     remoteAddr,
 			ChannelVariant: sseChannel.variant,
 		}
 	}
@@ -124,6 +115,9 @@ func (s *Server) observeChannelVariant(res ResponseWriter, req *http.Request, ss
 			s.errLog.Println(fmt.Sprintf("could not replay data on sse: %s", err.Error()))
 		}
 	}
+
+	connectionDone := make(chan bool)
+	go s.waitForConnectionClosure(req, connectionDone, sseChannel)
 
 	for {
 		select {
@@ -138,23 +132,34 @@ func (s *Server) observeChannelVariant(res ResponseWriter, req *http.Request, ss
 			if err != nil {
 				s.errLog.Println(err.Error())
 			}
-		case <-req.Context().Done():
-			sseChannel.observers.lock.Lock()
-			delete(sseChannel.observers.items, remoteAddr)
-			sseChannel.observers.lock.Unlock()
-
-			if s.observersChange != nil {
-				s.observersChange <- ObserversChange{
-					ChangeVariant:  ObserverRemoved,
-					RemoteAddr:     req.RemoteAddr,
-					ChannelVariant: sseChannel.variant,
-				}
-			}
-			s.outLog.Printf("removing %s observer with addr %s\n", sseChannel.variant, remoteAddr)
-
+		case <-connectionDone:
 			return
 		}
 	}
+}
+
+// waitForConnectionClosure handles waiting for the sse SSE connection closure, handling the mutex and observers management afterwards.
+// It should be run in a separate goroutine in-case change to the list of sse observers triggered by dispatcher is not handled due to Context().Done()
+// being (randomly) selected first - since after the disconnect the lock should be obtained for the list of observers, it may happen that
+// the dispatcher already acquired this lock and will deadlock below code. Running this method in a goroutine ensures that dispatcher will manage to go through
+// the loop of channel observers and unlock the mutex.
+func (s *Server) waitForConnectionClosure(req *http.Request, done chan<- bool, sseChannel channel) {
+	<-req.Context().Done()
+	sseChannel.observers.lock.Lock()
+	delete(sseChannel.observers.items, req.RemoteAddr)
+	sseChannel.observers.lock.Unlock()
+
+	if s.observersChange != nil {
+		s.observersChange <- ObserversChange{
+			ChangeVariant:  ObserverRemoved,
+			RemoteAddr:     req.RemoteAddr,
+			ChannelVariant: sseChannel.variant,
+		}
+	}
+	s.outLog.Printf("removing %s observer with addr %s\n", sseChannel.variant, req.RemoteAddr)
+
+	done <- true
+	close(done)
 }
 
 func sseResponseWriter(res http.ResponseWriter) (ResponseWriter, error) {
