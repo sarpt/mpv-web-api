@@ -13,11 +13,12 @@ type SkippedFile struct {
 }
 
 // Directory takes a single directory path that should be checked for media files.
-func Directory(path string) ([]Result, []SkippedFile) {
-	var results []Result
+// TODO: Add error handling and some form of returning what files are skipped.
+func Directory(path string, results chan<- Result) {
+	defer close(results)
 	var skippedFiles []SkippedFile
 
-	filepath.Walk(path, func(path string, info os.FileInfo, err error) error { // TODO: add some kind of error handling
+	filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			skippedFiles = append(skippedFiles, SkippedFile{
 				Path: path,
@@ -39,9 +40,7 @@ func Directory(path string) ([]Result, []SkippedFile) {
 			return nil
 		}
 
-		results = append(results, result)
+		results <- result
 		return nil
 	})
-
-	return results, skippedFiles
 }

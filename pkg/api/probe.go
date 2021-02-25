@@ -12,22 +12,20 @@ var (
 	ErrPathNotDirectory = errors.New("path does not point to a directory")
 )
 
-func (s *Server) probeDirectory(directory string) []probe.SkippedFile {
-	movies := map[string]state.Movie{}
+func (s *Server) probeDirectory(directory string) {
 	s.outLog.Printf("probing directory %s\n", directory)
 
-	probeResults, skippedFiles := probe.Directory(directory)
-	for _, probeResult := range probeResults {
+	results := make(chan probe.Result)
+
+	go probe.Directory(directory, results)
+	for probeResult := range results {
 		if !probeResult.IsMovieFile() {
 			continue
 		}
 
 		movie := state.MapProbeResultToMovie(probeResult)
-		movies[movie.Path()] = movie
+		s.movies.Add(movie)
 	}
 
-	s.movies.Add(movies)
-
 	s.outLog.Printf("finished probing directory %s\n", directory)
-	return skippedFiles
 }

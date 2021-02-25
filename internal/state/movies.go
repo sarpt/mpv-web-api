@@ -52,26 +52,23 @@ func NewMovies() *Movies {
 	}
 }
 
-// Add appends movies to the list of movies served on current server instance.
-func (m *Movies) Add(movies map[string]Movie) {
+// Add appends a movie to the list of movies served on current server instance.
+func (m *Movies) Add(movie Movie) {
 	addedMovies := map[string]Movie{}
+	path := movie.path
 
 	m.lock.Lock()
-	for path, movie := range movies {
-		if _, ok := m.items[path]; ok {
-			continue
-		}
-
-		m.items[path] = movie
-		addedMovies[path] = movie
+	if _, ok := m.items[path]; ok {
+		return
 	}
+
+	m.items[path] = movie
 	m.lock.Unlock()
 
-	if len(addedMovies) > 0 {
-		m.changes <- MoviesChange{
-			variant: AddedMoviesChange,
-			items:   addedMovies,
-		}
+	addedMovies[path] = movie
+	m.changes <- MoviesChange{
+		variant: AddedMoviesChange,
+		items:   addedMovies,
 	}
 }
 
