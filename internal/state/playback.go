@@ -103,7 +103,7 @@ func (p *Playback) SetLoopFile(enabled bool) {
 	if enabled {
 		p.loop.variant = fileLoop
 	} else {
-		p.loop.variant = ""
+		p.loop.variant = offLoop
 	}
 	p.changes <- PlaybackChange{
 		Variant: LoopFileChange,

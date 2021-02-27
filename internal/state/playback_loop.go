@@ -3,8 +3,9 @@ package state
 import "encoding/json"
 
 const (
-	fileLoop loopVariant = "file"
 	abLoop   loopVariant = "ab"
+	fileLoop loopVariant = "file"
+	offLoop  loopVariant = "off"
 )
 
 type loopVariant string
