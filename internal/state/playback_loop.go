@@ -23,7 +23,7 @@ type playbackLoopJSON struct {
 }
 
 // MarshalJSON satisifes json.Marshaller
-func (pl *PlaybackLoop) MarshalJSON() ([]byte, error) {
+func (pl PlaybackLoop) MarshalJSON() ([]byte, error) {
 	plJSON := playbackLoopJSON{
 		Variant: pl.variant,
 		ATime:   pl.aTime,
