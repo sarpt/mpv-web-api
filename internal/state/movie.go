@@ -7,6 +7,10 @@ import (
 )
 
 // Movie specifies information about a movie file that can be played.
+// TODO: Add id to movie - currently "path" is assumed to be unique,
+// but in case in future mutliple mpv-web-api servers are serving from different
+// machines, the path may not be unique from the api user pov
+// (either randomly generate one or sth else)
 type Movie struct {
 	title           string
 	formatName      string

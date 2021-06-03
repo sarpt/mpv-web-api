@@ -44,7 +44,7 @@ type Playback struct {
 	currentTime        float64
 	currentChapterIdx  int
 	fullscreen         bool
-	movie              Movie
+	moviePath          string
 	selectedAudioID    string
 	selectedSubtitleID string
 	paused             bool
@@ -56,7 +56,7 @@ type playbackJSON struct {
 	CurrentTime        float64      `json:"CurrentTime"`
 	CurrentChapterIdx  int          `json:"CurrentChapterIdx"`
 	Fullscreen         bool         `json:"Fullscreen"`
-	Movie              Movie        `json:"Movie"`
+	MoviePath          string       `json:"MoviePath"`
 	SelectedAudioID    string       `json:"SelectedAudioID"`
 	SelectedSubtitleID string       `json:"SelectedSubtitleID"`
 	Paused             bool         `json:"Paused"`
@@ -76,7 +76,7 @@ func (p *Playback) MarshalJSON() ([]byte, error) {
 		CurrentTime:        p.currentTime,
 		CurrentChapterIdx:  p.currentChapterIdx,
 		Fullscreen:         p.fullscreen,
-		Movie:              p.movie,
+		MoviePath:          p.moviePath,
 		SelectedAudioID:    p.selectedAudioID,
 		SelectedSubtitleID: p.selectedSubtitleID,
 		Paused:             p.paused,
@@ -142,9 +142,9 @@ func (p *Playback) SetCurrentChapter(idx int) {
 	}
 }
 
-// SetMovie changes currently played movie..
+// SetMovie changes currently played movie.
 func (p *Playback) SetMovie(movie Movie) {
-	p.movie = movie
+	p.moviePath = movie.path
 	p.changes <- PlaybackChange{
 		Variant: MovieChange,
 	}
