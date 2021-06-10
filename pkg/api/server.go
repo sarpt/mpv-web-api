@@ -133,6 +133,7 @@ func (s *Server) initWatchers() error {
 	observePropertyResponses := make(chan mpv.ObservePropertyResponse)
 	observePropertyHandlers := map[string]observePropertyHandler{
 		mpv.FullscreenProperty:   s.handleFullscreenEvent,
+		mpv.ChapterProperty:      s.handleChapterChangeEvent,
 		mpv.LoopFileProperty:     s.handleLoopFileEvent,
 		mpv.PauseProperty:        s.handlePauseEvent,
 		mpv.PathProperty:         s.handlePathEvent,

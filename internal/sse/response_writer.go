@@ -44,3 +44,13 @@ func (f *ResponseWriter) SendChange(changePayload json.Marshaler, channelVariant
 
 	return nil
 }
+
+// SendEmptyChange is responsible for propagating change without any payload (without "data") through SSE connection.
+func (f *ResponseWriter) SendEmptyChange(channelVariant state.SSEChannelVariant, changeVariant string) error {
+	_, err := f.Write(formatSseEvent(channelVariant, string(changeVariant), []byte{}))
+	if err != nil {
+		return fmt.Errorf("sending change %s on %s channel failed: %w: %s", changeVariant, channelVariant, errClientWritingFailed, err)
+	}
+
+	return nil
+}

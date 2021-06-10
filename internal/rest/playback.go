@@ -12,6 +12,7 @@ import (
 const (
 	appendArg     = "append"
 	audioIDArg    = "audioID"
+	chapterArg    = "chapter"
 	fullscreenArg = "fullscreen"
 	loopFileArg   = "loopFile"
 	pathArg       = "path"
@@ -69,6 +70,16 @@ func (s *Server) audioIDHandler(res http.ResponseWriter, req *http.Request) erro
 	return s.mpvManager.ChangeAudio(audioID)
 }
 
+func (s *Server) chapterHandler(res http.ResponseWriter, req *http.Request) error {
+	chapterIdx, err := strconv.ParseInt(req.PostFormValue(chapterArg), 10, 64)
+	if err != nil {
+		return err
+	}
+
+	s.outLog.Printf("changing chapter id to %d due to request from %s\n", chapterIdx, req.RemoteAddr)
+	return s.mpvManager.ChangeChapter(chapterIdx)
+}
+
 func (s *Server) subtitleIDHandler(res http.ResponseWriter, req *http.Request) error {
 	subtitleID := req.PostFormValue(subtitleIDArg)
 
@@ -117,6 +128,9 @@ func (s *Server) postPlaybackFormArgumentsHandlers() map[string]common.FormArgum
 				_, err := strconv.ParseBool(req.PostFormValue(appendArg))
 				return err == nil
 			},
+		},
+		chapterArg: {
+			Handle: s.chapterHandler,
 		},
 		pathArg: {
 			Handle: s.pathHandler,

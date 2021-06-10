@@ -20,6 +20,9 @@ const (
 	// AudioIDChange notifies about change of currently played audio.
 	AudioIDChange PlaybackChangeVariant = "audioIdChange"
 
+	// PlaybackStoppedChange notifies about playbck being stopped completely.
+	PlaybackStoppedChange PlaybackChangeVariant = "playbackStoppedChange"
+
 	// SubtitleIDChange notifies about change of currently shown subtitles.
 	SubtitleIDChange PlaybackChangeVariant = "subtitleIdChange"
 
@@ -41,32 +44,50 @@ type PlaybackChange struct {
 
 // Playback contains information about currently played movie file.
 type Playback struct {
+	changes            chan interface{}
 	currentTime        float64
-	currentChapterIdx  int
+	currentChapterIdx  int64
 	fullscreen         bool
+	loop               PlaybackLoop
 	moviePath          string
+	paused             bool
 	selectedAudioID    string
 	selectedSubtitleID string
-	paused             bool
-	loop               PlaybackLoop
-	changes            chan interface{}
+	Stopped            bool
 }
 
 type playbackJSON struct {
 	CurrentTime        float64      `json:"CurrentTime"`
-	CurrentChapterIdx  int          `json:"CurrentChapterIdx"`
+	CurrentChapterIdx  int64        `json:"CurrentChapterIdx"`
 	Fullscreen         bool         `json:"Fullscreen"`
+	Loop               PlaybackLoop `json:"Loop"`
 	MoviePath          string       `json:"MoviePath"`
+	Paused             bool         `json:"Paused"`
 	SelectedAudioID    string       `json:"SelectedAudioID"`
 	SelectedSubtitleID string       `json:"SelectedSubtitleID"`
-	Paused             bool         `json:"Paused"`
-	Loop               PlaybackLoop `json:"Loop"`
 }
 
 // NewPlayback constructs Playback state.
 func NewPlayback() *Playback {
 	return &Playback{
+		Stopped: true,
 		changes: make(chan interface{}),
+	}
+}
+
+// Changes returns read-only channel notifying of playback changes.
+func (p *Playback) Changes() <-chan interface{} {
+	return p.changes
+}
+
+// Clear sets playback to stopped and clears outdated playback information.
+func (p *Playback) Clear() {
+	*p = Playback{
+		Stopped: true,
+		changes: p.changes,
+	}
+	p.changes <- PlaybackChange{
+		Variant: PlaybackStoppedChange,
 	}
 }
 
@@ -85,9 +106,20 @@ func (p *Playback) MarshalJSON() ([]byte, error) {
 	return json.Marshal(pJSON)
 }
 
-// Changes returns read-only channel notifying of playback changes.
-func (p *Playback) Changes() <-chan interface{} {
-	return p.changes
+// SetAudioID changes played audio id.
+func (p *Playback) SetAudioID(aid string) {
+	p.selectedAudioID = aid
+	p.changes <- PlaybackChange{
+		Variant: AudioIDChange,
+	}
+}
+
+// SetCurrentChapter changes currently played chapter index.
+func (p *Playback) SetCurrentChapter(idx int64) {
+	p.currentChapterIdx = idx
+	p.changes <- PlaybackChange{
+		Variant: CurrentChapterIdxChange,
+	}
 }
 
 // SetFullscreen changes state of the fullscreen in playback.
@@ -110,6 +142,15 @@ func (p *Playback) SetLoopFile(enabled bool) {
 	}
 }
 
+// SetMovie changes currently played movie, changing playback to not stopped.
+func (p *Playback) SetMovie(movie Movie) {
+	p.moviePath = movie.path
+	p.Stopped = false
+	p.changes <- PlaybackChange{
+		Variant: MovieChange,
+	}
+}
+
 // SetPause changes whether playback should paused.
 func (p *Playback) SetPause(paused bool) {
 	p.paused = paused
@@ -118,11 +159,11 @@ func (p *Playback) SetPause(paused bool) {
 	}
 }
 
-// SetAudioID changes played audio id.
-func (p *Playback) SetAudioID(aid string) {
-	p.selectedAudioID = aid
+// SetPlaybackTime changes current time of a playback.
+func (p *Playback) SetPlaybackTime(time float64) {
+	p.currentTime = time
 	p.changes <- PlaybackChange{
-		Variant: AudioIDChange,
+		Variant: PlaybackTimeChange,
 	}
 }
 
@@ -131,29 +172,5 @@ func (p *Playback) SetSubtitleID(sid string) {
 	p.selectedSubtitleID = sid
 	p.changes <- PlaybackChange{
 		Variant: SubtitleIDChange,
-	}
-}
-
-// SetCurrentChapter changes currently played chapter index.
-func (p *Playback) SetCurrentChapter(idx int) {
-	p.currentChapterIdx = idx
-	p.changes <- PlaybackChange{
-		Variant: CurrentChapterIdxChange,
-	}
-}
-
-// SetMovie changes currently played movie.
-func (p *Playback) SetMovie(movie Movie) {
-	p.moviePath = movie.path
-	p.changes <- PlaybackChange{
-		Variant: MovieChange,
-	}
-}
-
-// SetPlaybackTime changes current time of a playback.
-func (p *Playback) SetPlaybackTime(time float64) {
-	p.currentTime = time
-	p.changes <- PlaybackChange{
-		Variant: PlaybackTimeChange,
 	}
 }

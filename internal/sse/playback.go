@@ -24,6 +24,10 @@ func (s *Server) createPlaybackChangesHandler() sseChangeHandler {
 			return errIncorrectChangesType
 		}
 
+		if s.playback.Stopped { // TODO: the changes are shot by state.Playback even after the moviePath is cleared, as such it may be wasteful to push further changes through SSE. to think of a way to reduce number of those blank data calls after closing stopping playback
+			return res.SendEmptyChange(playbackSSEChannelVariant, string(change.Variant))
+		}
+
 		return res.SendChange(s.playback, playbackSSEChannelVariant, string(change.Variant))
 	}
 }

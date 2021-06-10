@@ -66,6 +66,13 @@ func (m Manager) ChangeAudio(audioID string) error {
 	return err
 }
 
+// ChangeChapter instructs mpv to change the chapter to the one with specified idx.
+func (m Manager) ChangeChapter(idx int64) error {
+	_, err := m.SetProperty(ChapterProperty, idx)
+
+	return err
+}
+
 // ChangePause instructs mpv to change the pause state.
 // Paused argument specifies whether playback should be paused or unpaused.
 func (m Manager) ChangePause(paused bool) error {

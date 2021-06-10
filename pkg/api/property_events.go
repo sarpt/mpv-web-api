@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/sarpt/mpv-web-api/internal/state"
 	"github.com/sarpt/mpv-web-api/pkg/mpv"
 )
 
@@ -72,7 +71,7 @@ func (s *Server) handleSubtitleIDChangeEvent(res mpv.ObservePropertyResponse) er
 }
 
 func (s *Server) handleChapterChangeEvent(res mpv.ObservePropertyResponse) error {
-	chapterIdx, ok := res.Data.(int)
+	chapterIdx, ok := res.Data.(int64)
 	if !ok {
 		return ErrResponseDataNotInt
 	}
@@ -83,7 +82,7 @@ func (s *Server) handleChapterChangeEvent(res mpv.ObservePropertyResponse) error
 
 func (s *Server) handlePathEvent(res mpv.ObservePropertyResponse) error {
 	if res.Data == nil {
-		s.playback.SetMovie(state.Movie{})
+		s.playback.Clear()
 		return nil
 	}
 

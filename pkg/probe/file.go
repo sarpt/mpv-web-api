@@ -25,8 +25,9 @@ const (
 
 // Chapter specifies information about chapters included in the file
 type Chapter struct {
-	StartTime float64 `json:"StartTime"`
+	ChapterID string  `json:"ChapterID"`
 	EndTime   float64 `json:"EndTime"`
+	StartTime float64 `json:"StartTime"`
 	Title     string  `json:"Title"`
 }
 
@@ -113,9 +114,10 @@ func File(filepath string) (Result, error) {
 		}
 
 		result.Chapters = append(result.Chapters, Chapter{
-			Title:     chapter.Tags.Title,
-			StartTime: startTime,
+			ChapterID: strconv.FormatInt(int64(len(result.Chapters)+1), 10),
 			EndTime:   endTime,
+			StartTime: startTime,
+			Title:     chapter.Tags.Title,
 		})
 	}
 
