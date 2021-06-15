@@ -37,20 +37,21 @@ func (f *ResponseWriter) SendChange(changePayload json.Marshaler, channelVariant
 		return fmt.Errorf("%w: %s", errResponseJSONCreationFailed, err)
 	}
 
-	_, err = f.Write(formatSseEvent(channelVariant, string(changeVariant), out))
-	if err != nil {
-		return fmt.Errorf("sending change %s on %s channel failed: %w: %s", changeVariant, channelVariant, errClientWritingFailed, err)
-	}
-
-	return nil
+	_, err = f.writeChange(out, channelVariant, changeVariant)
+	return err
 }
 
 // SendEmptyChange is responsible for propagating change without any payload (without "data") through SSE connection.
 func (f *ResponseWriter) SendEmptyChange(channelVariant state.SSEChannelVariant, changeVariant string) error {
-	_, err := f.Write(formatSseEvent(channelVariant, string(changeVariant), []byte{}))
+	_, err := f.writeChange([]byte{}, channelVariant, changeVariant)
+	return err
+}
+
+func (f *ResponseWriter) writeChange(out []byte, channelVariant state.SSEChannelVariant, changeVariant string) (int, error) {
+	n, err := f.Write(formatSseEvent(channelVariant, string(changeVariant), out))
 	if err != nil {
-		return fmt.Errorf("sending change %s on %s channel failed: %w: %s", changeVariant, channelVariant, errClientWritingFailed, err)
+		return n, fmt.Errorf("writing change %s on %s channel failed: %w: %s", changeVariant, channelVariant, errClientWritingFailed, err)
 	}
 
-	return nil
+	return n, nil
 }

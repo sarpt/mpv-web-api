@@ -19,9 +19,6 @@ const (
 	// LoopFileProperty is used for looping currently played file.
 	LoopFileProperty = "loop-file"
 
-	// SubtitleIDProperty is an option used to change the subtitle track.
-	SubtitleIDProperty = "sid"
-
 	// PathProperty is used to inform about path to file currently being played by mpv.
 	PathProperty = "path"
 
@@ -30,6 +27,15 @@ const (
 
 	// PlaybackTimeProperty is used for reading and setting current time of playback in seconds.
 	PlaybackTimeProperty = "playback-time"
+
+	// PlaylistProperty is used for reading state of the playlist.
+	PlaylistProperty = "playlist"
+
+	// PlaylistPlayingPosProperty is used for reading currently playing position of playlist.
+	PlaylistPlayingPosProperty = "playlist-playing-pos"
+
+	// SubtitleIDProperty is an option used to change the subtitle track.
+	SubtitleIDProperty = "sid"
 )
 
 var (
@@ -43,7 +49,9 @@ var (
 		LoopFileProperty,
 		PathProperty,
 		PauseProperty,
+		PlaylistProperty,
 		PlaybackTimeProperty,
+		PlaylistPlayingPosProperty,
 		SubtitleIDProperty,
 	}
 )

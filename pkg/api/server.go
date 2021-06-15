@@ -61,6 +61,7 @@ func NewServer(cfg Config) (*Server, error) {
 
 	movies := state.NewMovies()
 	playback := state.NewPlayback()
+	playlist := state.NewPlaylist(state.PlaylistConfig{})
 	status := state.NewStatus()
 
 	sseObserversChanges := make(chan sse.ObserversChange)
@@ -70,6 +71,7 @@ func NewServer(cfg Config) (*Server, error) {
 		OutWriter:        cfg.OutWriter,
 		ObserversChanges: sseObserversChanges,
 		Playback:         playback,
+		Playlist:         playlist,
 		Status:           status,
 	}
 	sseServer := sse.NewServer(sseCfg)
@@ -95,7 +97,7 @@ func NewServer(cfg Config) (*Server, error) {
 		cfg.MpvSocketPath,
 		log.New(cfg.OutWriter, logPrefix, log.LstdFlags),
 		playback,
-		state.NewPlaylist(),
+		playlist,
 		restServer,
 		sseObserversChanges,
 		sseServer,
@@ -132,14 +134,16 @@ func (s Server) Close() {
 func (s *Server) initWatchers() error {
 	observePropertyResponses := make(chan mpv.ObservePropertyResponse)
 	observePropertyHandlers := map[string]observePropertyHandler{
-		mpv.FullscreenProperty:   s.handleFullscreenEvent,
-		mpv.ChapterProperty:      s.handleChapterChangeEvent,
-		mpv.LoopFileProperty:     s.handleLoopFileEvent,
-		mpv.PauseProperty:        s.handlePauseEvent,
-		mpv.PathProperty:         s.handlePathEvent,
-		mpv.PlaybackTimeProperty: s.handlePlaybackTimeEvent,
-		mpv.AudioIDProperty:      s.handleAudioIDChangeEvent,
-		mpv.SubtitleIDProperty:   s.handleSubtitleIDChangeEvent,
+		mpv.AudioIDProperty:            s.handleAudioIDChangeEvent,
+		mpv.ChapterProperty:            s.handleChapterChangeEvent,
+		mpv.FullscreenProperty:         s.handleFullscreenEvent,
+		mpv.LoopFileProperty:           s.handleLoopFileEvent,
+		mpv.PathProperty:               s.handlePathEvent,
+		mpv.PauseProperty:              s.handlePauseEvent,
+		mpv.PlaybackTimeProperty:       s.handlePlaybackTimeEvent,
+		mpv.PlaylistProperty:           s.handlePlaylistProperty,
+		mpv.PlaylistPlayingPosProperty: s.handlePlaylistPlayingPosEvent,
+		mpv.SubtitleIDProperty:         s.handleSubtitleIDChangeEvent,
 	}
 
 	go s.watchSSEObserversChanges()

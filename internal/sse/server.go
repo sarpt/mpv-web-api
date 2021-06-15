@@ -24,6 +24,8 @@ type Server struct {
 	outLog            *log.Logger
 	playback          *state.Playback
 	playbackObservers observers
+	playlist          *state.Playlist
+	playlistObservers observers
 	status            *state.Status
 	statusObservers   observers
 }
@@ -35,6 +37,7 @@ type Config struct {
 	ObserversChanges chan<- ObserversChange
 	OutWriter        io.Writer
 	Playback         *state.Playback
+	Playlist         *state.Playlist
 	Status           *state.Status
 }
 
@@ -54,6 +57,11 @@ func NewServer(cfg Config) *Server {
 			items: map[string]chan interface{}{},
 			lock:  &sync.RWMutex{},
 		},
+		playlist: cfg.Playlist,
+		playlistObservers: observers{
+			items: map[string]chan interface{}{},
+			lock:  &sync.RWMutex{},
+		},
 		status: cfg.Status,
 		statusObservers: observers{
 			items: map[string]chan interface{}{},
@@ -68,6 +76,7 @@ func NewServer(cfg Config) *Server {
 // (maybe channels are unsuitable in this situation at all - what else is there to consider?).
 func (s *Server) InitDispatchers() {
 	go distributeChangesToChannelObservers(s.playback.Changes(), s.playbackObservers)
+	go distributeChangesToChannelObservers(s.playlist.Changes(), s.playlistObservers)
 	go distributeChangesToChannelObservers(s.movies.Changes(), s.moviesObservers)
 	go distributeChangesToChannelObservers(s.status.Changes(), s.statusObservers)
 }
@@ -78,6 +87,7 @@ func (s *Server) Handler() http.Handler {
 	sseCfg := handlerConfig{
 		Channels: map[state.SSEChannelVariant]channel{
 			playbackSSEChannelVariant: s.playbackSSEChannel(),
+			playlistSSEChannelVariant: s.playlistSSEChannel(),
 			moviesSSEChannelVariant:   s.moviesSSEChannel(),
 			statusSSEChannelVariant:   s.statusSSEChannel(),
 		},

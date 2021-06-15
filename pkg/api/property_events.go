@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -18,6 +19,9 @@ var (
 	ErrPlaybackTimeNotFloat = errors.New("playback time could not be converted to a float number")
 	// ErrPlaybackPathNotServed occurs when playback path is set to file that is not being served by api.
 	ErrPlaybackPathNotServed = errors.New("playback path is not served")
+
+	// ErrPlaylistMapDataNotParsable occurs when data being sent during observation of MPV's "playlist" property is not a correct JSON.
+	ErrPlaylistMapDataNotParsable = errors.New("could not parse playlist map data as JSON")
 )
 
 func (s *Server) handleFullscreenEvent(res mpv.ObservePropertyResponse) error {
@@ -53,17 +57,56 @@ func (s *Server) handlePauseEvent(res mpv.ObservePropertyResponse) error {
 func (s *Server) handleAudioIDChangeEvent(res mpv.ObservePropertyResponse) error {
 	aid, ok := res.Data.(string)
 	if !ok {
-		return ErrResponseDataNotInt
+		return ErrResponseDataNotString
 	}
 
 	s.playback.SetAudioID(aid)
 	return nil
 }
 
+func (s *Server) handlePlaylistProperty(res mpv.ObservePropertyResponse) error {
+	playlistMapStr, ok := res.Data.(string)
+	if !ok {
+		return ErrResponseDataNotString
+	}
+
+	var playlistMap []mpv.PlaylistMap
+	err := json.Unmarshal([]byte(playlistMapStr), &playlistMap)
+	if err != nil {
+		return ErrPlaylistMapDataNotParsable
+	}
+
+	// TODO: below should be used something resembling a set - the playlist will fire at every possible change to the MPV map type,
+	// which due to having flag specifying which of the item is currently played will result in firing with the same items array,
+	// even though the list did not change.
+	items := []string{}
+	for _, playlistItemMap := range playlistMap {
+		items = append(items, playlistItemMap.Filename)
+	}
+
+	s.playlist.SetItems(items)
+	return nil
+}
+
+func (s *Server) handlePlaylistPlayingPosEvent(res mpv.ObservePropertyResponse) error {
+	idxStr, ok := res.Data.(string)
+	if !ok {
+		return ErrResponseDataNotString
+	}
+
+	idx, err := strconv.Atoi(idxStr)
+	if err != nil {
+		return ErrResponseDataNotInt
+	}
+
+	s.playlist.SetCurrentIdx(idx)
+	return nil
+}
+
 func (s *Server) handleSubtitleIDChangeEvent(res mpv.ObservePropertyResponse) error {
 	sid, ok := res.Data.(string)
 	if !ok {
-		return ErrResponseDataNotInt
+		return ErrResponseDataNotString
 	}
 
 	s.playback.SetSubtitleID(sid)

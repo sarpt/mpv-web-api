@@ -91,7 +91,7 @@ func (p *Playback) Clear() {
 	}
 }
 
-// MarshalJSON satisifes json.Marshaller
+// MarshalJSON satisifes json.Marshaller.
 func (p *Playback) MarshalJSON() ([]byte, error) {
 	pJSON := playbackJSON{
 		CurrentTime:        p.currentTime,

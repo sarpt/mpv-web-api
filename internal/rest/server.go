@@ -19,6 +19,7 @@ type Config struct {
 	Movies    *state.Movies
 	MPVManger *mpv.Manager
 	Playback  *state.Playback
+	Playlist  *state.Playlist
 	OutWriter io.Writer
 	Status    *state.Status
 }
@@ -35,6 +36,7 @@ type Server struct {
 	movies                *state.Movies
 	mpvManager            *mpv.Manager
 	playback              *state.Playback
+	playlist              *state.Playlist
 	outLog                *log.Logger
 	status                *state.Status
 }
@@ -47,6 +49,7 @@ func NewServer(cfg Config) *Server {
 		movies:     cfg.Movies,
 		mpvManager: cfg.MPVManger,
 		playback:   cfg.Playback,
+		playlist:   cfg.Playlist,
 		outLog:     log.New(cfg.OutWriter, logPrefix, log.LstdFlags),
 		status:     cfg.Status,
 	}
