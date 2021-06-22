@@ -34,6 +34,12 @@ const (
 
 	// PlaybackTimeChange notifies about current timestamp change.
 	PlaybackTimeChange PlaybackChangeVariant = "playbackTimeChange"
+
+	// PlaylistSelectionChange notifies about change of currently played playlist.
+	PlaylistSelectionChange PlaybackChangeVariant = "playlistSelectionChange"
+
+	// PlaylistCurrentIdxChange notifies about change of currently played entry in a selected playlist.
+	PlaylistCurrentIdxChange PlaybackChangeVariant = "playlistCurrentIdxChange"
 )
 
 // PlaybackChange is used to inform about changes to the Playback.
@@ -51,6 +57,8 @@ type Playback struct {
 	loop               PlaybackLoop
 	moviePath          string
 	paused             bool
+	playlistCurrentIdx int
+	playlistUUID       string
 	selectedAudioID    string
 	selectedSubtitleID string
 	Stopped            bool
@@ -63,6 +71,8 @@ type playbackJSON struct {
 	Loop               PlaybackLoop `json:"Loop"`
 	MoviePath          string       `json:"MoviePath"`
 	Paused             bool         `json:"Paused"`
+	PlaylistCurrentIdx int          `json:"PlaylistCurrentIdx"`
+	PlaylistUUID       string       `json:"PlaylistUUID"`
 	SelectedAudioID    string       `json:"SelectedAudioID"`
 	SelectedSubtitleID string       `json:"SelectedSubtitleID"`
 }
@@ -70,8 +80,9 @@ type playbackJSON struct {
 // NewPlayback constructs Playback state.
 func NewPlayback() *Playback {
 	return &Playback{
-		Stopped: true,
-		changes: make(chan interface{}),
+		playlistCurrentIdx: -1,
+		Stopped:            true,
+		changes:            make(chan interface{}),
 	}
 }
 
@@ -80,14 +91,10 @@ func (p *Playback) Changes() <-chan interface{} {
 	return p.changes
 }
 
-// Clear sets playback to stopped and clears outdated playback information.
+// Clear clears all playback information.
 func (p *Playback) Clear() {
 	*p = Playback{
-		Stopped: true,
 		changes: p.changes,
-	}
-	p.changes <- PlaybackChange{
-		Variant: PlaybackStoppedChange,
 	}
 }
 
@@ -100,10 +107,20 @@ func (p *Playback) MarshalJSON() ([]byte, error) {
 		MoviePath:          p.moviePath,
 		SelectedAudioID:    p.selectedAudioID,
 		SelectedSubtitleID: p.selectedSubtitleID,
+		PlaylistCurrentIdx: p.playlistCurrentIdx,
+		PlaylistUUID:       p.playlistUUID,
 		Paused:             p.paused,
 		Loop:               p.loop,
 	}
 	return json.Marshal(pJSON)
+}
+
+func (p *Playback) PlaylistUUID() string {
+	return p.playlistUUID
+}
+
+func (p *Playback) PlaylistSelected() bool {
+	return p.PlaylistUUID() != ""
 }
 
 // SetAudioID changes played audio id.
@@ -159,6 +176,24 @@ func (p *Playback) SetPause(paused bool) {
 	}
 }
 
+// SelectPlaylist sets currently played uuid of a playlist.
+func (p *Playback) SelectPlaylist(uuid string) {
+	p.playlistUUID = uuid
+
+	p.changes <- PlaybackChange{
+		Variant: PlaylistSelectionChange,
+	}
+}
+
+// SelectPlaylistCurrentIdx sets currently played idx of a selected playlist.
+func (p *Playback) SelectPlaylistCurrentIdx(idx int) {
+	p.playlistCurrentIdx = idx
+
+	p.changes <- PlaybackChange{
+		Variant: PlaylistCurrentIdxChange,
+	}
+}
+
 // SetPlaybackTime changes current time of a playback.
 func (p *Playback) SetPlaybackTime(time float64) {
 	p.currentTime = time
@@ -173,4 +208,25 @@ func (p *Playback) SetSubtitleID(sid string) {
 	p.changes <- PlaybackChange{
 		Variant: SubtitleIDChange,
 	}
+}
+
+// Stop clears outdated playback information related to played movie and sets playback to stopped.
+// The method preservers information about played playlist, since the playlist might not have been saved for a default (unnamed) playlist.
+// Change is being propagated before setting the state of Stopped, to inform observers about clear state of the playback,
+// and before suppressing further changes playback changes to stopped playback.
+// TODO: to consider not clearing the outdated information, since it will be updated after new media playback change,
+// as such the clearing of playback method seems redundant, and the result potentialy unwanted
+// (the payload will not be sent when Stopped is true, so the outdated information will not be sent on changes chan).
+func (p *Playback) Stop() {
+	playlistUUID := p.playlistUUID
+
+	p.Clear()
+	p.playlistCurrentIdx = -1
+	p.playlistUUID = playlistUUID
+
+	p.changes <- PlaybackChange{
+		Variant: PlaybackStoppedChange,
+	}
+
+	p.Stopped = true
 }

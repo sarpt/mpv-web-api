@@ -1,2 +1,4 @@
+github.com/google/uuid v1.2.0 h1:qJYtXnJRWmpe7m/3XlyhrsLrEURqHRM2kxzoxXqyUDs=
+github.com/google/uuid v1.2.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
 github.com/sarpt/goutils v0.0.3 h1:DDGxTu37nO0Oio2017P0I/QscfApYdd9wpT+dXwoGkU=
 github.com/sarpt/goutils v0.0.3/go.mod h1:1KXi0bhZPyJNbb57xMhtd9XOLSt8dIfAIe4kliNiCE0=

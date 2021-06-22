@@ -17,17 +17,17 @@ const (
 
 // Server holds information about handled SSE connections and their observers.
 type Server struct {
-	errLog            *log.Logger
-	movies            *state.Movies // TODO: this state passing from the user is very iffy - consider using either callbacks or builder pattern.
-	moviesObservers   observers
-	observersChange   chan<- ObserversChange
-	outLog            *log.Logger
-	playback          *state.Playback
-	playbackObservers observers
-	playlist          *state.Playlist
-	playlistObservers observers
-	status            *state.Status
-	statusObservers   observers
+	errLog             *log.Logger
+	movies             *state.Movies // TODO: this state passing from the user is very iffy - consider using either callbacks or builder pattern.
+	moviesObservers    observers
+	observersChange    chan<- ObserversChange
+	outLog             *log.Logger
+	playback           *state.Playback
+	playbackObservers  observers
+	playlists          *state.Playlists
+	playlistsObservers observers
+	status             *state.Status
+	statusObservers    observers
 }
 
 // Config controls behaviour of the SSE server.
@@ -37,7 +37,7 @@ type Config struct {
 	ObserversChanges chan<- ObserversChange
 	OutWriter        io.Writer
 	Playback         *state.Playback
-	Playlist         *state.Playlist
+	Playlists        *state.Playlists
 	Status           *state.Status
 }
 
@@ -57,8 +57,8 @@ func NewServer(cfg Config) *Server {
 			items: map[string]chan interface{}{},
 			lock:  &sync.RWMutex{},
 		},
-		playlist: cfg.Playlist,
-		playlistObservers: observers{
+		playlists: cfg.Playlists,
+		playlistsObservers: observers{
 			items: map[string]chan interface{}{},
 			lock:  &sync.RWMutex{},
 		},
@@ -76,7 +76,7 @@ func NewServer(cfg Config) *Server {
 // (maybe channels are unsuitable in this situation at all - what else is there to consider?).
 func (s *Server) InitDispatchers() {
 	go distributeChangesToChannelObservers(s.playback.Changes(), s.playbackObservers)
-	go distributeChangesToChannelObservers(s.playlist.Changes(), s.playlistObservers)
+	go distributeChangesToChannelObservers(s.playlists.Changes(), s.playlistsObservers)
 	go distributeChangesToChannelObservers(s.movies.Changes(), s.moviesObservers)
 	go distributeChangesToChannelObservers(s.status.Changes(), s.statusObservers)
 }
@@ -86,10 +86,10 @@ func (s *Server) InitDispatchers() {
 func (s *Server) Handler() http.Handler {
 	sseCfg := handlerConfig{
 		Channels: map[state.SSEChannelVariant]channel{
-			playbackSSEChannelVariant: s.playbackSSEChannel(),
-			playlistSSEChannelVariant: s.playlistSSEChannel(),
-			moviesSSEChannelVariant:   s.moviesSSEChannel(),
-			statusSSEChannelVariant:   s.statusSSEChannel(),
+			playbackSSEChannelVariant:  s.playbackSSEChannel(),
+			playlistsSSEChannelVariant: s.playlistsSSEChannel(),
+			moviesSSEChannelVariant:    s.moviesSSEChannel(),
+			statusSSEChannelVariant:    s.statusSSEChannel(),
 		},
 	}
 

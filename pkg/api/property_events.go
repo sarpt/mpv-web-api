@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/sarpt/mpv-web-api/internal/state"
 	"github.com/sarpt/mpv-web-api/pkg/mpv"
 )
 
@@ -84,8 +85,15 @@ func (s *Server) handlePlaylistProperty(res mpv.ObservePropertyResponse) error {
 		items = append(items, playlistItemMap.Filename)
 	}
 
-	s.playlist.SetItems(items)
-	return nil
+	if !s.playback.PlaylistSelected() {
+		newPlaylist := state.NewPlaylist(state.PlaylistConfig{})
+		s.playlists.AddPlaylist(newPlaylist)
+		s.playback.SelectPlaylist(newPlaylist.UUID())
+	}
+
+	err = s.playlists.SetPlaylistItems(s.playback.PlaylistUUID(), items)
+
+	return err
 }
 
 func (s *Server) handlePlaylistPlayingPosEvent(res mpv.ObservePropertyResponse) error {
@@ -99,7 +107,7 @@ func (s *Server) handlePlaylistPlayingPosEvent(res mpv.ObservePropertyResponse) 
 		return ErrResponseDataNotInt
 	}
 
-	s.playlist.SetCurrentIdx(idx)
+	s.playback.SelectPlaylistCurrentIdx(idx)
 	return nil
 }
 
@@ -125,7 +133,8 @@ func (s *Server) handleChapterChangeEvent(res mpv.ObservePropertyResponse) error
 
 func (s *Server) handlePathEvent(res mpv.ObservePropertyResponse) error {
 	if res.Data == nil {
-		s.playback.Clear()
+		s.playback.Stop()
+
 		return nil
 	}
 

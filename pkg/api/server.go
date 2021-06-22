@@ -32,7 +32,7 @@ type Server struct {
 	mpvSocketPath      string
 	outLog             *log.Logger
 	playback           *state.Playback
-	playlist           *state.Playlist
+	playlists          *state.Playlists
 	restServer         *rest.Server
 	sseObserverChanges chan sse.ObserversChange
 	sseServer          *sse.Server
@@ -61,7 +61,7 @@ func NewServer(cfg Config) (*Server, error) {
 
 	movies := state.NewMovies()
 	playback := state.NewPlayback()
-	playlist := state.NewPlaylist(state.PlaylistConfig{})
+	playlists := state.NewPlaylists()
 	status := state.NewStatus()
 
 	sseObserversChanges := make(chan sse.ObserversChange)
@@ -71,7 +71,7 @@ func NewServer(cfg Config) (*Server, error) {
 		OutWriter:        cfg.OutWriter,
 		ObserversChanges: sseObserversChanges,
 		Playback:         playback,
-		Playlist:         playlist,
+		Playlists:        playlists,
 		Status:           status,
 	}
 	sseServer := sse.NewServer(sseCfg)
@@ -97,7 +97,7 @@ func NewServer(cfg Config) (*Server, error) {
 		cfg.MpvSocketPath,
 		log.New(cfg.OutWriter, logPrefix, log.LstdFlags),
 		playback,
-		playlist,
+		playlists,
 		restServer,
 		sseObserversChanges,
 		sseServer,
