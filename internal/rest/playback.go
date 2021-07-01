@@ -17,6 +17,8 @@ const (
 	loopFileArg   = "loopFile"
 	pathArg       = "path"
 	pauseArg      = "pause"
+	playlistIdx   = "playlistIdx"
+	playlistUUID  = "playlistUUID"
 	stopArg       = "stop"
 	subtitleIDArg = "subtitleID"
 )
@@ -107,6 +109,16 @@ func (s *Server) pauseHandler(res http.ResponseWriter, req *http.Request) error 
 	return s.mpvManager.ChangePause(pause)
 }
 
+func (s *Server) playlistIdxHandler(res http.ResponseWriter, req *http.Request) error {
+	idx, err := strconv.Atoi(req.PostFormValue(playlistIdx))
+	if err != nil {
+		return err
+	}
+
+	s.outLog.Printf("changing playlist idx to %d due to request from %s\n", idx, req.RemoteAddr)
+	return s.mpvManager.PlaylistPlayIndex(idx)
+}
+
 func (s *Server) stopHandler(res http.ResponseWriter, req *http.Request) error {
 	stop, err := strconv.ParseBool(req.PostFormValue(stopArg))
 	if err != nil {
@@ -124,49 +136,63 @@ func (s *Server) stopHandler(res http.ResponseWriter, req *http.Request) error {
 func (s *Server) postPlaybackFormArgumentsHandlers() map[string]common.FormArgument {
 	return map[string]common.FormArgument{
 		appendArg: {
-			Validate: func(req *http.Request) bool {
+			Validate: func(req *http.Request) error {
 				_, err := strconv.ParseBool(req.PostFormValue(appendArg))
-				return err == nil
-			},
-		},
-		chapterArg: {
-			Handle: s.chapterHandler,
-		},
-		pathArg: {
-			Handle: s.pathHandler,
-		},
-		fullscreenArg: {
-			Handle: s.fullscreenHandler,
-			Validate: func(req *http.Request) bool {
-				_, err := strconv.ParseBool(req.PostFormValue(fullscreenArg))
-				return err == nil
+				return err
 			},
 		},
 		audioIDArg: {
 			Handle: s.audioIDHandler,
 		},
-		subtitleIDArg: {
-			Handle: s.subtitleIDHandler,
+		chapterArg: {
+			Handle: s.chapterHandler,
 		},
-		pauseArg: {
-			Handle: s.pauseHandler,
-			Validate: func(req *http.Request) bool {
-				_, err := strconv.ParseBool(req.PostFormValue(pauseArg))
-				return err == nil
+		fullscreenArg: {
+			Handle: s.fullscreenHandler,
+			Validate: func(req *http.Request) error {
+				_, err := strconv.ParseBool(req.PostFormValue(fullscreenArg))
+				return err
 			},
 		},
 		loopFileArg: {
 			Handle: s.loopFileHandler,
-			Validate: func(req *http.Request) bool {
+			Validate: func(req *http.Request) error {
 				_, err := strconv.ParseBool(req.PostFormValue(loopFileArg))
-				return err == nil
+				return err
 			},
+		},
+		pathArg: {
+			Handle: s.pathHandler,
+		},
+		pauseArg: {
+			Handle: s.pauseHandler,
+			Validate: func(req *http.Request) error {
+				_, err := strconv.ParseBool(req.PostFormValue(pauseArg))
+				return err
+			},
+		},
+		playlistIdx: {
+			Handle: s.playlistIdxHandler,
+			Validate: func(req *http.Request) error {
+				_, err := strconv.Atoi(req.PostFormValue(playlistIdx))
+				return err
+			},
+		},
+		// TODO: to be implemented. Prereqs: api server should handle reading/storing user-defined playlists.
+		// The handler should also take into account possibility that with the same POST both playlistIdx and playlistUUID will be passed -
+		// in such case, playlistIdx handler should not be called/handled on it's own, but by this playlistUUID handler. This requires
+		// implementation of some form of a "ShouldHandle" callback (in the vein of "Validate") which will check whether specific handler should be called.
+		// playlistUUID: {
+		// 	Handle: s.playlistUUIDHandler,
+		// },
+		subtitleIDArg: {
+			Handle: s.subtitleIDHandler,
 		},
 		stopArg: {
 			Handle: s.stopHandler,
-			Validate: func(req *http.Request) bool {
+			Validate: func(req *http.Request) error {
 				_, err := strconv.ParseBool(req.PostFormValue(stopArg))
-				return err == nil
+				return err
 			},
 		},
 	}

@@ -146,7 +146,7 @@ func (m Manager) PlaylistNext(force bool) error {
 }
 
 // PlaylistPlayIndex changes playback to the playlist item under the provided index.
-func (m Manager) PlaylistPlayIndex(idx uint) error {
+func (m Manager) PlaylistPlayIndex(idx int) error {
 	cmd := command{
 		name:     playlistPlayIdxCommand,
 		elements: []interface{}{idx},

@@ -23,7 +23,7 @@ const (
 )
 
 type FormArgumentHandler func(http.ResponseWriter, *http.Request) error
-type FormArgumentValidator func(*http.Request) bool
+type FormArgumentValidator func(*http.Request) error
 type FormArgument struct {
 	Handle   FormArgumentHandler
 	Validate FormArgumentValidator
@@ -173,12 +173,17 @@ func validateFormRequest(req *http.Request, arguments map[string]FormArgument) (
 	for argName := range req.PostForm {
 		argument, ok := arguments[argName]
 		if !ok {
-			handlerErrors.ArgumentErrors[argName] = fmt.Sprintf("the %s argument is not defined", argName)
+			handlerErrors.ArgumentErrors[argName] = fmt.Sprintf("the %s argument handler is not defined", argName)
 			continue
 		}
 
-		if argument.Validate != nil && !argument.Validate(req) {
-			handlerErrors.ArgumentErrors[argName] = fmt.Sprintf("the %s argument is invalid", argName)
+		var validateErr error = nil
+		if argument.Validate != nil {
+			validateErr = argument.Validate(req)
+		}
+
+		if validateErr != nil {
+			handlerErrors.ArgumentErrors[argName] = fmt.Sprintf("the %s argument is invalid: %s", argName, validateErr)
 			continue
 		}
 
