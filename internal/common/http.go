@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 )
 
@@ -26,6 +27,7 @@ type FormArgumentHandler func(http.ResponseWriter, *http.Request) error
 type FormArgumentValidator func(*http.Request) error
 type FormArgument struct {
 	Handle   FormArgumentHandler
+	Priority int
 	Validate FormArgumentValidator
 }
 type FormResponse struct {
@@ -105,6 +107,8 @@ func allowedMethods(handlers MethodHandlers) []string {
 
 // CreateFormHandler returns handler function responsible for correct validation and routing of arguments to their handlers.
 func CreateFormHandler(allArgHandlers map[string]FormArgument) http.HandlerFunc {
+	argumentNamesByPriority := sortArgumentHandlersByPriority(allArgHandlers)
+
 	return func(res http.ResponseWriter, req *http.Request) {
 		responsePayload := FormResponse{}
 
@@ -124,7 +128,12 @@ func CreateFormHandler(allArgHandlers map[string]FormArgument) http.HandlerFunc 
 			return
 		}
 
-		for _, handler := range selectedArgHandlers {
+		for _, argName := range argumentNamesByPriority {
+			handler, ok := selectedArgHandlers[argName]
+			if !ok {
+				continue
+			}
+
 			err := handler(res, req)
 			if err != nil {
 				responsePayload.GeneralError = err.Error()
@@ -151,8 +160,8 @@ func CreateFormHandler(allArgHandlers map[string]FormArgument) http.HandlerFunc 
 
 // validateFormRequest checks form body for arguments and their correctnes.
 // Result of validation is an array of arguments that have handlers associated and handlerErrors (if any occured).
-func validateFormRequest(req *http.Request, arguments map[string]FormArgument) ([]FormArgumentHandler, HandlerErrors) {
-	correctHandlers := []FormArgumentHandler{}
+func validateFormRequest(req *http.Request, arguments map[string]FormArgument) (map[string]FormArgumentHandler, HandlerErrors) {
+	correctHandlers := map[string]FormArgumentHandler{}
 	handlerErrors := HandlerErrors{
 		ArgumentErrors: map[string]string{},
 	}
@@ -191,7 +200,7 @@ func validateFormRequest(req *http.Request, arguments map[string]FormArgument) (
 			continue
 		}
 
-		correctHandlers = append(correctHandlers, argument.Handle)
+		correctHandlers[argName] = argument.Handle
 	}
 
 	return correctHandlers, handlerErrors
@@ -210,4 +219,17 @@ func prepareJSONOutput(res FormResponse) ([]byte, error) {
 	}
 
 	return out, nil
+}
+
+func sortArgumentHandlersByPriority(allArgHandlers map[string]FormArgument) []string {
+	var argumentNames []string
+	for argumentName := range allArgHandlers {
+		argumentNames = append(argumentNames, argumentName)
+	}
+
+	sort.Slice(argumentNames, func(i, j int) bool {
+		return allArgHandlers[argumentNames[i]].Priority > allArgHandlers[argumentNames[j]].Priority
+	})
+
+	return argumentNames
 }

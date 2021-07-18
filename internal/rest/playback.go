@@ -162,7 +162,8 @@ func (s *Server) postPlaybackFormArgumentsHandlers() map[string]common.FormArgum
 			},
 		},
 		pathArg: {
-			Handle: s.pathHandler,
+			Handle:   s.pathHandler,
+			Priority: 1,
 		},
 		pauseArg: {
 			Handle: s.pauseHandler,
