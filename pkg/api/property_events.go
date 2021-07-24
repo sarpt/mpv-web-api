@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -15,6 +14,8 @@ var (
 	ErrResponseDataNotString = errors.New("response data is not a string")
 	// ErrResponseDataNotInt occurs when observe response data is not an integer.
 	ErrResponseDataNotInt = errors.New("response data is not an integer")
+	// ErrResponseDataNotExpectedFormatNode occurs when observe response data is not expected MPV_FORMAT_NODE type.
+	ErrResponseDataNotExpectedFormatNode = errors.New("response data is not of expected MPV_FORMAT_NODE type")
 
 	// ErrPlaybackTimeNotFloat occurs when playback time is not a correct decimal number.
 	ErrPlaybackTimeNotFloat = errors.New("playback time could not be converted to a float number")
@@ -66,23 +67,17 @@ func (s *Server) handleAudioIDChangeEvent(res mpv.ObservePropertyResponse) error
 }
 
 func (s *Server) handlePlaylistProperty(res mpv.ObservePropertyResponse) error {
-	playlistMapStr, ok := res.Data.(string)
+	playlistItems, ok := res.Data.(mpv.PlaylistFormatNodeArray)
 	if !ok {
-		return ErrResponseDataNotString
-	}
-
-	var playlistMap []mpv.PlaylistMap
-	err := json.Unmarshal([]byte(playlistMapStr), &playlistMap)
-	if err != nil {
-		return ErrPlaylistMapDataNotParsable
+		return ErrResponseDataNotExpectedFormatNode
 	}
 
 	// TODO: below should be used something resembling a set - the playlist will fire at every possible change to the MPV map type,
 	// which due to having flag specifying which of the item is currently played will result in firing with the same items array,
 	// even though the list did not change.
 	items := []string{}
-	for _, playlistItemMap := range playlistMap {
-		items = append(items, playlistItemMap.Filename)
+	for _, playlistItem := range playlistItems {
+		items = append(items, playlistItem.Filename)
 	}
 
 	if !s.playback.PlaylistSelected() {
@@ -91,9 +86,7 @@ func (s *Server) handlePlaylistProperty(res mpv.ObservePropertyResponse) error {
 		s.playback.SelectPlaylist(newPlaylist.UUID())
 	}
 
-	err = s.playlists.SetPlaylistItems(s.playback.PlaylistUUID(), items)
-
-	return err
+	return s.playlists.SetPlaylistItems(s.playback.PlaylistUUID(), items)
 }
 
 func (s *Server) handlePlaylistPlayingPosEvent(res mpv.ObservePropertyResponse) error {

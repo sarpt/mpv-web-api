@@ -69,7 +69,7 @@ type ResponsePayload struct {
 type commandDispatcher struct {
 	socketPath                 string
 	listeningOnSocket          bool
-	linteningOnSocketLock      *sync.RWMutex
+	listeningOnSocketLock      *sync.RWMutex
 	conn                       net.Conn
 	requests                   map[int]chan ResponsePayload
 	requestID                  int
@@ -97,7 +97,7 @@ func newCommandDispatcher(socketPath string, errWriter io.Writer) *commandDispat
 	return &commandDispatcher{
 		socketPath:                 socketPath,
 		listeningOnSocket:          false,
-		linteningOnSocketLock:      &sync.RWMutex{},
+		listeningOnSocketLock:      &sync.RWMutex{},
 		requests:                   make(map[int]chan ResponsePayload),
 		requestID:                  1,
 		requestIDLock:              &sync.Mutex{},
@@ -186,10 +186,10 @@ func (cd *commandDispatcher) Connect() error {
 	return cd.observeProperties()
 }
 
-// Connected notifies whether CommandDispatcher is ready to make requests and observe properties.
+// Connected informs whether CommandDispatcher is ready to make requests and observe properties.
 func (cd *commandDispatcher) Connected() bool {
-	cd.linteningOnSocketLock.RLock()
-	defer cd.linteningOnSocketLock.RUnlock()
+	cd.listeningOnSocketLock.RLock()
+	defer cd.listeningOnSocketLock.RUnlock()
 
 	return cd.listeningOnSocket
 }
@@ -332,7 +332,7 @@ func (cd *commandDispatcher) reservePropertySubscriptionID() int {
 	return propertyObserverID
 }
 
-func (cd commandDispatcher) listenOnUnixSocket() {
+func (cd *commandDispatcher) listenOnUnixSocket() {
 	payloads := make(chan []byte)
 
 	go func() {
@@ -364,6 +364,16 @@ func (cd commandDispatcher) listenOnUnixSocket() {
 				continue
 			}
 
+			formatNodeConverter, ok := FormatNodeConverters[result.Name]
+			if ok {
+				convertedData, err := formatNodeConverter(result.Data)
+				if err != nil {
+					cd.errLog.Printf("could not parse the format node data for the response: %s\npayload: %s\n", err, payload)
+					continue
+				}
+				result.Data = convertedData
+			}
+
 			if result.Event == propertyChangeEvent {
 				propertyObserver, ok := cd.propertyObserver(result.Name)
 				if !ok {
@@ -388,14 +398,17 @@ func (cd commandDispatcher) listenOnUnixSocket() {
 			}
 		}
 
-		cd.linteningOnSocketLock.Lock()
-		cd.listeningOnSocket = false
-		cd.linteningOnSocketLock.Unlock()
+		cd.setListeningOnSocket(false)
 	}()
 
-	cd.linteningOnSocketLock.Lock()
-	cd.listeningOnSocket = true
-	cd.linteningOnSocketLock.Unlock()
+	cd.setListeningOnSocket(true)
+}
+
+func (cd *commandDispatcher) setListeningOnSocket(listening bool) {
+	cd.listeningOnSocketLock.Lock()
+	defer cd.listeningOnSocketLock.Unlock()
+
+	cd.listeningOnSocket = listening
 }
 
 // IsResultSuccess return whether returned result specifies successful command execution

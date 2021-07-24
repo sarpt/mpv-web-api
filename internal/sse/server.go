@@ -82,7 +82,6 @@ func (s *Server) InitDispatchers() {
 }
 
 // Handler returns map of HTTPs methods and their handlers.
-// TODO: This should return ideally a http.Handler for a subtree, to be done when refactoring routing and separating REST handling.
 func (s *Server) Handler() http.Handler {
 	sseCfg := handlerConfig{
 		Channels: map[state.SSEChannelVariant]channel{
