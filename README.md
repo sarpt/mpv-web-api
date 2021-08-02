@@ -54,6 +54,9 @@ Many REST endpoints are not implemented yet, since `mpv-web-front` mostly uses S
   - `stop` - bool (default: `false`) - stops mpv playback, clearing the playback state and instructing mpv instance to go into idle.
   - `subtitleID` - string - selects subtitle stream with the provided id. Although a string, mpv indexes its subtitle streams, so it will have numerical form.
 - `GET "/playback"` - returns the state of mpv current playback.
+- `GET "/sse/register"` - registers client to the SSE channels, estabilishing long running connection.
+  - `channel` - string[] - names of channels client wishes to be subscribed to. In URI it takes the form of `/sse/register?channel=name1&channel=name2&channel... etc`.
+  - `replay` - bool (default: `false`) - when set to `true`, the first emitted event will be of `replay` type. More info on types of SSE events in a related section below.
 
 ### Server Sent Events
 SSE is used by server to notify reactively of changes to it's various states, eg. change of currently played media file in playback, new movies added, new directories added, changes to the current playlist etc. SSE communication is optional and the idea is to have all states queryable by REST API endpoints with `GET`, but since this is a constant WIP it may not always be the case - SSE takes priority in implementation since `mpv-web-front` uses it primarily to get updates without polling the server constantly.
