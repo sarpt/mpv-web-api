@@ -2,6 +2,7 @@ package mpv
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -67,18 +68,20 @@ type ResponsePayload struct {
 
 // commandDispatcher connects to the provided socket path and handles sending commands and handling results
 type commandDispatcher struct {
-	socketPath                 string
+	conn                       net.Conn
+	connectionTimeout          time.Duration
+	errLog                     *log.Logger
 	listeningOnSocket          bool
 	listeningOnSocketLock      *sync.RWMutex
-	conn                       net.Conn
-	requests                   map[int]chan ResponsePayload
-	requestID                  int
-	requestIDLock              *sync.Mutex
+	outLog                     *log.Logger
 	propertyObservers          map[string]propertyObserver
 	propertyObserversLock      *sync.RWMutex
 	propertySubscriptionID     int
 	propertySubscriptionIDLock *sync.Mutex
-	errLog                     *log.Logger
+	requests                   map[int]chan ResponsePayload
+	requestID                  int
+	requestIDLock              *sync.Mutex
+	socketPath                 string
 }
 
 type propertyObserver struct {
@@ -91,26 +94,34 @@ type propertySubscriber struct {
 	done            chan bool
 }
 
+type commandDispatcherConfig struct {
+	connectionTimeout time.Duration
+	errWriter         io.Writer
+	socketPath        string
+	outWriter         io.Writer
+}
+
 // newCommandDispatcher returns dispatcher connected to the socket.
-// Error is returned when connection to the socket fails.
-func newCommandDispatcher(socketPath string, errWriter io.Writer) *commandDispatcher {
+func newCommandDispatcher(cfg commandDispatcherConfig) *commandDispatcher {
 	return &commandDispatcher{
-		socketPath:                 socketPath,
+		connectionTimeout:          cfg.connectionTimeout,
+		errLog:                     log.New(cfg.errWriter, commandDispatcherLogPrefix, log.LstdFlags),
 		listeningOnSocket:          false,
 		listeningOnSocketLock:      &sync.RWMutex{},
-		requests:                   make(map[int]chan ResponsePayload),
-		requestID:                  1,
-		requestIDLock:              &sync.Mutex{},
+		outLog:                     log.New(cfg.outWriter, commandDispatcherLogPrefix, log.LstdFlags),
 		propertyObservers:          make(map[string]propertyObserver),
 		propertyObserversLock:      &sync.RWMutex{},
 		propertySubscriptionID:     1,
 		propertySubscriptionIDLock: &sync.Mutex{},
-		errLog:                     log.New(errWriter, commandDispatcherLogPrefix, log.LstdFlags),
+		requests:                   make(map[int]chan ResponsePayload),
+		requestID:                  1,
+		requestIDLock:              &sync.Mutex{},
+		socketPath:                 cfg.socketPath,
 	}
 }
 
 func (cd *commandDispatcher) connectToMpvSocket() error {
-	conn, err := waitForSocketConnection(cd.socketPath)
+	conn, err := waitForSocketConnection(cd.socketPath, cd.connectionTimeout)
 	if err != nil {
 		return err
 	}
@@ -178,10 +189,13 @@ func (cd *commandDispatcher) Connect() error {
 		return ErrConnectionInProgress
 	}
 
+	cd.outLog.Printf("trying to connect to mpv socket at '%s' with timeout: %f seconds\n", cd.socketPath, cd.connectionTimeout.Seconds())
 	err := cd.connectToMpvSocket()
 	if err != nil {
+		cd.errLog.Printf("could not connect to socket due to error: %s\n", err)
 		return err
 	}
+	cd.outLog.Printf("connected to socket at '%s'\n", cd.socketPath)
 
 	return cd.observeProperties()
 }
@@ -411,25 +425,37 @@ func (cd *commandDispatcher) setListeningOnSocket(listening bool) {
 	cd.listeningOnSocket = listening
 }
 
-// IsResultSuccess return whether returned result specifies successful command execution
+// IsResultSuccess return whether returned result specifies successful command execution.
 func IsResultSuccess(result ResponsePayload) bool {
 	return result.Err == resultSuccess
 }
 
-func waitForSocketConnection(socketPath string) (net.Conn, error) {
+func waitForSocketConnection(socketPath string, timeout time.Duration) (net.Conn, error) {
 	var conn net.Conn
-	var err error
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
 
+	connection := make(chan net.Conn)
+	go dialSocket(socketType, socketPath, connection)
+
+	select {
+	case conn = <-connection:
+		return conn, nil
+	case <-ctx.Done():
+		return conn, ctx.Err()
+	}
+}
+
+func dialSocket(socketType string, socketPath string, done chan<- net.Conn) {
 	for {
-		conn, err = net.Dial(socketType, socketPath)
+		conn, err := net.Dial(socketType, socketPath)
 		if err == nil {
-			break
+			done <- conn
 		}
 
-		time.Sleep(1 * time.Second) // mpv takes a longer moment to start listening on the socket, repeat until connection succesful; TODO: add timeout
+		// mpv takes a moment (up to a few seconds) to start listening on the socket, repeat until connection successful.
+		time.Sleep(1 * time.Second)
 	}
-
-	return conn, nil // error will be returned on timeout; TODO: add timeout
 }
 
 func prepareCommandPayload(cmd command, requestID int) ([]byte, error) {

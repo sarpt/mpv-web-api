@@ -1,28 +1,98 @@
-# mpv web api
+# MPV Web API
 
-remote mpv control through rest api proof of concept
+Remote MPV control through REST API with state notifications carried by Server Sent Events.
 
-### dependencies for running
+The server is a proof of concept/toy project and as such it sometimes works, and sometimes doesn't - it's a constant Work In Progress until it's not (if ever...).
+
+It's main use is to be a backend for [mpv-web-front](https://github.com/sarpt/mpv-web-front), which is also a toy project and is in the same constant state of being Work In Progress - the compatibility between the two of them is not ensured yet, however I try to ensure that HEADs from both repos work with each other. If they don't, then the best bet is to try using HEAD^ from either one of them and check if they work with each other.
+
+### Dependencies for running
 
 - `mpv` - used for playback
 - `ffprobe` (part of ffmpeg/libav collection of programs) - used for media files probing
 
-### dependencies for builidng
+### Dependencies for builidng
 
-- `go` (tested on 1.14, might build on earlier versions)
+- `go` (tested on 1.14, might build on earlier versions, recommended 1.16.5 and up because of the bomb-ass improvements to the arguments help display)
 
-### endpoints
+### Arguments
 
-- `GET "/movies"` - returns information about the movies: their paths and video, audio & subtitles streams. Media files without video stream will not be returned here
-- `POST "/playback"` - with `"path"` key and value as a string path to the file will play the file on the started by the api server mpv binary
-- `GET "/playback"` - returns the state of mpv current playback. At the moment only information on the movie being played and it's filepath are present
-
-### arguments
-
-- `dir` - []string - directories that should be scanned for media files
 - `allow-cors` - bool - (default: false) whether Cross Origin Requests should be allowed
-- `addr` - string - (default: localhost:3001) which address should be used to host the server
+- `addr` - string - (default: localhost:3001) address used to host the server
+- `dir` - []string - directories that should be scanned for media files. To specify more than one directory to be handled, multiple `--dir=<path>` arguments can be specified eg. `--dir=/path1 --dir=/path2`. The server will only handle paths provided by clients that start with one of the paths provided to `dir`.
+- `mpv-socket-path` - string - (default: /tmp/mpvsocket) path to socket file used by MPV instance
+- `socket-timeout` - int - (defualt: 15) maximum allowed time in seconds for retrying connection to MPV socket
+- `start-mpv-instance` - bool - (default: true) when set to true, `mpv-web-api` will create it's own MPV process. When set to false, `mpv-web-api` will only try to connect to MPV using file at `mpv-socket-path`. Particularly useful when trying to run `mpv-web-api` in docker and connecting to local MPV instance
 
-### proof of concept execution
+### Building & Execution
 
-After building the the binary `mpv-web-api` simply run it. to check if it's working: `curl --data "path=/path/to/file.ext" http://localhost:3001/playback`
+<sub>Don't.</sub>
+
+But seriously: to build and install the application, in terminal navigate to `<repo-root>/cmd/mpv-web-api` and run `go build && go install`. 
+
+After building the the binary `mpv-web-api` simply run it. To check if it's working: `curl --data "path=/path/to/file.ext" http://localhost:3001/playback` - the invocation should return current state of the playback (if anything's playing).
+
+In case the server is ran to serve as a backend to `mpv-web-front` on a local machine it is recommended to pass `--allow-cors` argument, otherwise the communication might be blocked.
+
+### REST endpoints
+
+Many REST endpoints are not implemented yet, since `mpv-web-front` mostly uses SSEs to sync it's state (REST would require some kind of polling), while using REST mainly for sending instructions to server (and by extension, mpv). Target implementation however has whole REST/SSE parity planned when it comes to information fetching (`GET`s).
+
+- `PUT "/directories"` - add directory with media files for server to handle
+  - `path` - string - path to a directory to be added (recursive) 
+- `GET "/movies"` - returns information about the movies: their paths and video, audio & subtitles streams. Media files without video stream will not be returned here (the endpoint will stay, however sooner or later server will differentiate between movie/music/media files)
+- `POST "/playback"` - change current playback. Playback is a state which determines current file, playlist position, media timeline position, selection of subtitle and audio streams, etc.
+  - `append` - bool (default: `false`) - when set to `true` with `path`, it append path as a next entry in currently played playlist (whether named/saved or not). When set to `false`, file under `path` will be played immediately, basically creating a new unnamed/empty playlist with only one item in it.
+  - `audioID` - string - selects audio stream with the provided id. Although a string, mpv indexes its audio streams, so it will have numerical form.
+  - `chapter` - int - selects chapter.
+  - `fullscreen` - bool (default: `false`) - selects fullscreen state to enabled/disabled.
+  - `loopFile` - bool (default: `false`) - selects looping of currently played file to enabled/disabled.
+  - `path` - string - path of the currently played media. The `mpv-web-api` has to have access to this directory and the directory needs to be probed for media files.
+  - `pause` - bool (default: `false`) - selects paused state of playback. It need to be noted that playback being `paused` is not equal to being `stopped` - the former will keep playback state, which means the mpv will pause the playback and will still show everything, while latter will just trigger idle mode in the mpv instance.
+  - `playlistIdx` - int - changes currently played entry in a playlist.
+  - `playlistUUID` - string - selects currently played playlist. UUID is a server-generated identifier and is transparent to an mpv instance.
+  - `stop` - bool (default: `false`) - stops mpv playback, clearing the playback state and instructing mpv instance to go into idle.
+  - `subtitleID` - string - selects subtitle stream with the provided id. Although a string, mpv indexes its subtitle streams, so it will have numerical form.
+- `GET "/playback"` - returns the state of mpv current playback.
+
+### Server Sent Events
+SSE is used by server to notify reactively of changes to it's various states, eg. change of currently played media file in playback, new movies added, new directories added, changes to the current playlist etc. SSE communication is optional and the idea is to have all states queryable by REST API endpoints with `GET`, but since this is a constant WIP it may not always be the case - SSE takes priority in implementation since `mpv-web-front` uses it primarily to get updates without polling the server constantly.
+
+Events are aggregated into channels, to which client subscribes. Due to limits of simultaneous connections count to a singular target, client should have only one open SSE connection that receives updates to all of the subscribed channels (that's how `mpv-web-front` does it). Since a standard Server Sent Event has "name" and "data" fields, the grouping has to be incorporated into one of them. For transparency of mechanism and ease of use, `mpv-web-api` uses name field with a `"."` separator to specify on which channel event was broadcasted, eg. `movies.added` is an `added` event on a `movies` channel etc.
+
+In order to subsrcibe to channel(s), `/sse` REST endpoint should be used - how to use it is explained in the related REST endpoints section above.
+
+Some notes about weird/unexpected behavior that will at some point be changed/solved/cleared:
+- `replay` event is a special one, which is used to replay the whole state. It will be changed to `all` or something else - it's a legacy name that outlived it's temporary meaning and it's temporary solution implementation. It's used by `mpv-web-front` to "get a replay" of all data when connecting fresh or after a reconnect, instead of getting only chunks of data (get all movies to have possibility to handle added movies or updated movies additively). Since most of the events provide whole state anyway, it's usefullness and name are highly debatable. Although redundant, it's mentioned in all channels below (because why not).
+- some events provide diferential state changes, while some always emit the whole state. Target behavior will be to have differential changes sent in all cases except for the currently ill-named `replay` events. That however will require a rewrite which I'm more willing to take when generics land in go (even if that means being dependent on the beta `go` release, like expected `go1.18 beta`). While generics clearly aren't "necessary" for rewrite, my intuition is telling me that resulting code will be easier on the eyes and soul rather than whatever form it will take without them (future will tell whether my intuition is right, exciting!).
+- events that have ~~strikethrough~~ are to be implmented "soon-ish" - as soon as I find ~~interest~~ ~~energy~~ ~~faith~~ use for them...
+- overall, server's implementation of SSEs is a chaotic mess right now and there's no guarantee for their behavior and contents. This section will be updated (hopefully) as soon as they are more "stable" ~~(or I find another cool way of providing updates to clients - I'm looking at you GraphQL)~~
+
+Channels and their events:
+- `movies` - events fire in response to changes in watched movies
+  - `replay` - list of all movies 
+  - `added` - list of added movies
+  - ~~`updated` - list of added movies~~ 
+  - ~~`removed` - list of removed movies~~
+- `playback` (all events provide whole playback state) - events fire mostly in response to mpv changing it's playback-related properties
+  - `replay` - whole playback state
+  - `fullscreenChange` -  mpv changed it's `fullscreen` property
+  - `loopFileChange` - mpv changed it's `loop-file` property
+  - `pauseChange` - mpv changed it's `pause` property
+  - `audioIdChange` - mpv changed it's `aid` property
+  - `playbackStoppedChange` - mpv changed it's `path` property but did not provide a new path (path is empty) 
+  - `subtitleIdChange` - mpv changed it's `sid` property
+  - ~~`currentChapterIndexChange` - mpv changed it's `chapter` property~~
+  - `movieChange` - mpv changed it's `path` property. Name of the event is ill-named, will be changed either to `pathChanged` or `fileChanged`
+  - `playbackTimeChange` - mpv changed it's `playback-time` property
+  - `playlistSelectionChange` - mpv changed it's `playlist` format node property - currently played playlist changed. This event is only partially mapped to mpv behavior, since playlists management is partially managed by the server.
+  - `playlistCurrentIdxChange` - mpv changed it's `playlist-playing-pos` format node property - currently played entry in a playlist changed
+- `playlists` (all events privde whole playlist state) - events fire in response to external (and internal) requests to server related to playlists handling
+  - `replay` - list of all playlists
+  - `playlistAdded` - a new playlist was added either by server itself (default/unnamed playlist) or an external client (`playlist` redundant in name, will be changed)
+  - `playlistItemsChange` - set of playlist entries/items changed (`playlist` redundant in name, will be changed)
+- `status` - (all events provide whole status state) -events fire in response to changes in server's runtime state
+  - `replay` - whole status state
+  - `client-observer-added` - a new SSE client observer was added
+  - `client-observer-removed` - SSE client observer was removed (most probably disconnected on it's own, but not guarenteed)
+  - ~~`mpv-process-changed` - when server manages it's own mpv process, this event fires when server creates mpv process (changed not necesarilly means that a process existed beforehand)~~

@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"os/exec"
+	"time"
 )
 
 const (
@@ -15,29 +16,65 @@ const (
 	managerLogPrefix = "mpv.Manager#"
 )
 
+type ManagerConfig struct {
+	MpvSocketPath           string
+	ErrWriter               io.Writer
+	OutWriter               io.Writer
+	SocketConnectionTimeout time.Duration
+	StartMpvInstance        bool
+}
+
 // Manager handles dispatching of commands, while exposing MPV command API as a facade.
 type Manager struct {
-	mpvCmd     *exec.Cmd
-	socketPath string
-	cd         *commandDispatcher
-	outLog     *log.Logger
-	errLog     *log.Logger
+	cd               *commandDispatcher
+	errLog           *log.Logger
+	mpvCmd           *exec.Cmd
+	outLog           *log.Logger
+	socketPath       string
+	startMpvInstance bool
 }
 
 // NewManager starts mpv process and instantiates new command dispatcher, preparing new Manager for use.
-func NewManager(mpvSocketPath string, outWriter io.Writer, errWriter io.Writer) *Manager {
-	errLog := log.New(errWriter, managerLogPrefix, log.LstdFlags)
+func NewManager(cfg ManagerConfig) (*Manager, error) {
+	errLog := log.New(cfg.ErrWriter, managerLogPrefix, log.LstdFlags)
+	outLog := log.New(cfg.OutWriter, managerLogPrefix, log.LstdFlags)
 
+	cdCfg := commandDispatcherConfig{
+		connectionTimeout: cfg.SocketConnectionTimeout,
+		errWriter:         errLog.Writer(),
+		socketPath:        cfg.MpvSocketPath,
+		outWriter:         outLog.Writer(),
+	}
 	m := &Manager{
-		socketPath: mpvSocketPath,
-		outLog:     log.New(outWriter, managerLogPrefix, log.LstdFlags),
-		errLog:     errLog,
-		cd:         newCommandDispatcher(mpvSocketPath, errLog.Writer()),
+		cd:               newCommandDispatcher(cdCfg),
+		errLog:           errLog,
+		outLog:           outLog,
+		socketPath:       cfg.MpvSocketPath,
+		startMpvInstance: cfg.StartMpvInstance,
 	}
 
-	go m.watchMpvProcess()
+	// TODO: all of the below should be handled be a separate method instead of doing it in NewManager.
+	// A proper error management from both mpv process management and command dispatcher
+	// command loop managmenet should be used to give client (API server in this case)
+	// a control over how Manager should behave in case of any errors.
+	// The issue - in case of own mpv process managment any issue related to crash/closure
+	// of mpv instance should be autonatic when possible - trying to restart the instance and reconnect.
+	// In case of connection to existing unmanaged instance restart is impossible, only reconnect.
+	// In case of unmanaged instance there is also an issue that command dispatch loop will crash instead
+	// of process management loop, which complicates a little the issue - there needs to be a single point of error handling
+	// and a method of a graceful shutdown instead of just loosing connection or endless restart cycle.
+	if m.startMpvInstance {
+		go m.manageOwnMpvProcess()
 
-	return m
+		return m, nil
+	}
+
+	err := m.cd.Connect()
+	if err != nil {
+		return m, err // TODO: add some handling of errors on the manager instance
+	}
+
+	return m, nil
 }
 
 // ChangeFullscreen instructs mpv to change the fullscreen state.
@@ -245,7 +282,7 @@ func (m *Manager) startMpv() error {
 	return nil
 }
 
-func (m *Manager) watchMpvProcess() {
+func (m *Manager) manageOwnMpvProcess() {
 	var err error
 	for {
 		if m.mpvCmd != nil {
@@ -271,9 +308,7 @@ func (m *Manager) watchMpvProcess() {
 
 		err = m.cd.Connect()
 		if err != nil {
-			m.errLog.Printf("command dispatcher could not connect to socket due to error: %s\n", err)
 			return // TODO: add some handling of errors on the manager instance
 		}
-		m.outLog.Println("command dispatcher connected to socket")
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/sarpt/mpv-web-api/internal/rest"
 	"github.com/sarpt/mpv-web-api/internal/sse"
@@ -41,11 +42,13 @@ type Server struct {
 
 // Config controls behaviour of the api server.
 type Config struct {
-	Address       string
-	AllowCORS     bool
-	MpvSocketPath string
-	OutWriter     io.Writer
-	ErrWriter     io.Writer
+	Address                 string
+	AllowCORS               bool
+	ErrWriter               io.Writer
+	MpvSocketPath           string
+	OutWriter               io.Writer
+	SocketConnectionTimeout time.Duration
+	StartMpvInstance        bool
 }
 
 // NewServer prepares and returns a server that can be used to handle API calls.
@@ -57,7 +60,17 @@ func NewServer(cfg Config) (*Server, error) {
 		cfg.ErrWriter = os.Stderr
 	}
 
-	mpvManager := mpv.NewManager(cfg.MpvSocketPath, cfg.OutWriter, cfg.ErrWriter)
+	managerCfg := mpv.ManagerConfig{
+		ErrWriter:               cfg.ErrWriter,
+		MpvSocketPath:           cfg.MpvSocketPath,
+		OutWriter:               cfg.OutWriter,
+		SocketConnectionTimeout: cfg.SocketConnectionTimeout,
+		StartMpvInstance:        cfg.StartMpvInstance,
+	}
+	mpvManager, err := mpv.NewManager(managerCfg)
+	if err != nil {
+		return nil, err
+	}
 
 	movies := state.NewMovies()
 	playback := state.NewPlayback()
