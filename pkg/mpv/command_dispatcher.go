@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net"
@@ -120,70 +121,14 @@ func newCommandDispatcher(cfg commandDispatcherConfig) *commandDispatcher {
 	}
 }
 
-func (cd *commandDispatcher) connectToMpvSocket() error {
-	conn, err := waitForSocketConnection(cd.socketPath, cd.connectionTimeout)
-	if err != nil {
-		return err
-	}
-
-	cd.conn = conn
-	cd.listenOnUnixSocket()
-
-	return nil
-}
-
-func (cd *commandDispatcher) observeProperties() error {
-	cd.propertyObserversLock.RLock()
-	defer cd.propertyObserversLock.RUnlock()
-
-	for propertyName := range cd.propertyObservers {
-		err := cd.observeProperty(propertyName)
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// addPropertyObserver creates a new observer for a specific property.
-// The request to observer property will not be made if the connection is not estabilished since it will fail,
-// but the observer is added to propertyObservers map which will be used during connection to start observing properties on a new connection.
-func (cd *commandDispatcher) addPropertyObserver(propertyName string) (propertyObserver, error) {
-	newObserver := propertyObserver{
-		responsePayloads: make(chan ResponsePayload),
-		subscriptions:    make(map[int]propertySubscriber),
-	}
-
-	cd.propertyObserversLock.Lock()
-	cd.propertyObservers[propertyName] = newObserver
-	cd.propertyObserversLock.Unlock()
-
-	// Do not try to send a request when dispatcher is not connected to the MPV instance through the socket.
-	if !cd.Connected() {
-		return newObserver, nil
-	}
-
-	err := cd.observeProperty(propertyName)
-	return newObserver, err
-}
-
-func (cd commandDispatcher) observeProperty(propertyName string) error {
-	requestID := cd.reserveRequestID()
-	cmd := command{
-		name:     observePropertyCommand,
-		elements: []interface{}{requestID, propertyName},
-	}
-	_, err := cd.Request(cmd)
-
-	return err
+// Close makes connection by ipc to the mpv closed.
+func (cd commandDispatcher) Close() {
+	cd.conn.Close()
 }
 
 // Connect attempts to connect to the unix socket through which dispatcher will communicate with MPV.
-// When connection is already estabilished, ErrConnectionInProgress will be returned as connection is an invalid operation while dispatcher is already connected.
-// During the process the property observers already registered on command dispatcher are observed.
-// It's necessary since either there command dispatcher was reconnected (due to MPV instance closing or other), thus losing all observers,
-// or subscriptions occured before connection was made, resulting in no request being sent since there was no MPV instance to receive those requests.
+// When connection is already estabilished, ErrConnectionInProgress will be returned,
+// as connection is an invalid operation while dispatcher is already connected.
 func (cd *commandDispatcher) Connect() error {
 	if cd.Connected() {
 		return ErrConnectionInProgress
@@ -197,7 +142,7 @@ func (cd *commandDispatcher) Connect() error {
 	}
 	cd.outLog.Printf("connected to socket at '%s'\n", cd.socketPath)
 
-	return cd.observeProperties()
+	return nil
 }
 
 // Connected informs whether CommandDispatcher is ready to make requests and observe properties.
@@ -206,6 +151,61 @@ func (cd *commandDispatcher) Connected() bool {
 	defer cd.listeningOnSocketLock.RUnlock()
 
 	return cd.listeningOnSocket
+}
+
+// Dispatch sends a commmand with specified requestID to the mpv using socket.
+// Returns error if command was not correctly dispatched.
+func (cd *commandDispatcher) Dispatch(cmd command, requestID int) error {
+	payload, err := prepareCommandPayload(cmd, requestID)
+	if err != nil {
+		return err
+	}
+
+	written, err := cd.conn.Write(payload)
+	if err != nil || len(payload) != written {
+		return err
+	}
+
+	return nil
+}
+
+// Request is used to send simple Request->response command that is completed after the first response from mpv comes.
+func (cd *commandDispatcher) Request(cmd command) (Response, error) {
+	var resPayload ResponsePayload
+	var result Response
+
+	requestResult := make(chan ResponsePayload)
+
+	requestID := cd.reserveRequestID()
+	cd.requests[requestID] = requestResult
+	defer delete(cd.requests, requestID)
+
+	err := cd.Dispatch(cmd, requestID)
+	if err != nil {
+		return result, err
+	}
+
+	resPayload = <-requestResult
+	if !IsResultSuccess(resPayload) {
+		return result, ErrCommandFailedResponse
+	}
+
+	return Response{
+		Data: resPayload.Data,
+	}, nil
+}
+
+// Serve instructs command dispatcher to serve communication handling with mpv through the socket -
+// this involves dispatching requests and property observing.
+// During the process property observers already registered on command dispatcher are observed.
+// It's necessary since either command dispatcher could be reconnected (due to MPV instance closing etc.), thus losing all observers,
+// or subscriptions occured before connection was made, resulting in no request being sent since there was no MPV instance to receive those requests.
+// Property observing errors are non fatal to serving of CommandDispatcher, as such no errors interecepting is done on "observerProperties".
+func (cd *commandDispatcher) Serve() error {
+	go cd.observeProperties()
+	cd.outLog.Printf("listening on unix socket at '%s'\n", cd.socketPath)
+
+	return cd.listenOnUnixSocket()
 }
 
 // SubscribeToProperty listens to property mpv events.
@@ -271,51 +271,130 @@ func (cd *commandDispatcher) UnobserveProperty(propertyName string, id int) erro
 	return nil
 }
 
-// Request is used to send simple Request->response command that is completed after the first response from mpv comes.
-func (cd *commandDispatcher) Request(cmd command) (Response, error) {
-	var resPayload ResponsePayload
-	var result Response
-
-	requestResult := make(chan ResponsePayload)
-
-	requestID := cd.reserveRequestID()
-	cd.requests[requestID] = requestResult
-	defer delete(cd.requests, requestID)
-
-	err := cd.Dispatch(cmd, requestID)
-	if err != nil {
-		return result, err
+// addPropertyObserver creates a new observer for a specific property.
+// The request to observer property will not be made if the connection is not estabilished since it will fail,
+// but the observer is added to propertyObservers map which will be used during connection to start observing properties on a new connection.
+func (cd *commandDispatcher) addPropertyObserver(propertyName string) (propertyObserver, error) {
+	newObserver := propertyObserver{
+		responsePayloads: make(chan ResponsePayload),
+		subscriptions:    make(map[int]propertySubscriber),
 	}
 
-	resPayload = <-requestResult
-	if !IsResultSuccess(resPayload) {
-		return result, ErrCommandFailedResponse
+	cd.propertyObserversLock.Lock()
+	cd.propertyObservers[propertyName] = newObserver
+	cd.propertyObserversLock.Unlock()
+
+	// Do not try to send a request when dispatcher is not connected to the MPV instance through the socket.
+	if !cd.Connected() {
+		return newObserver, nil
 	}
 
-	return Response{
-		Data: resPayload.Data,
-	}, nil
+	err := cd.observeProperty(propertyName)
+	return newObserver, err
 }
 
-// Dispatch sends a commmand with specified requestID to the mpv using socket.
-// Returns error if command was not correctly dispatched.
-func (cd *commandDispatcher) Dispatch(cmd command, requestID int) error {
-	payload, err := prepareCommandPayload(cmd, requestID)
+func (cd *commandDispatcher) connectToMpvSocket() error {
+	conn, err := waitForSocketConnection(cd.socketPath, cd.connectionTimeout)
 	if err != nil {
 		return err
 	}
 
-	written, err := cd.conn.Write(payload)
-	if err != nil || len(payload) != written {
-		return err
+	cd.conn = conn
+
+	return nil
+}
+
+func (cd *commandDispatcher) distributeResponse(payload []byte) error {
+	result, err := getResponsePayload(payload)
+	if err != nil {
+		return fmt.Errorf("could not parse payload '%s' as ResponsePayload: %w", payload, err)
+	}
+
+	if result.Event == propertyChangeEvent {
+		propertyObserver, ok := cd.propertyObserver(result.Name)
+		if !ok {
+			return fmt.Errorf("observe property event provided to not observed property %s", result.Name)
+		}
+
+		propertyObserver.responsePayloads <- result
+	} else {
+		if result.RequestID == 0 {
+			return fmt.Errorf("result provided without RequestID")
+		}
+
+		request, ok := cd.requests[result.RequestID]
+		if !ok {
+			return fmt.Errorf("result %d provided to not dispatched request", result.RequestID)
+		}
+
+		request <- result
+		close(request)
 	}
 
 	return nil
 }
 
-// Close makes connection by ipc to the mpv closed.
-func (cd commandDispatcher) Close() {
-	cd.conn.Close()
+func (cd *commandDispatcher) listenOnUnixSocket() error {
+	cd.setListeningOnSocket(true)
+	defer cd.setListeningOnSocket(false)
+
+	payloads := make(chan []byte)
+
+	// TODO: goroutine below can be replaced with synchronous code (and put inside 'for' below) however,
+	// it would be necessary to keep the state between calls to "readNewlineSeparatedJSONs",
+	// as the unfinished JSON chunk read in buffer should be used in the next read
+	// - probably could be solved by writing a struct holding the buffer between calls.
+	go func() {
+		err := readNewlineSeparatedJSONs(cd.conn, payloads)
+		if err == io.EOF {
+			cd.outLog.Println("connection closed")
+		} else {
+			cd.errLog.Println("could not read the payload from the connection")
+		}
+
+		close(payloads)
+	}()
+
+	for {
+		payload, more := <-payloads
+		if !more {
+			break
+		}
+
+		if len(payload) == 0 {
+			continue
+		}
+
+		err := cd.distributeResponse(payload)
+		if err != nil {
+			cd.errLog.Printf("could not distribute response: %s\n", err)
+		}
+	}
+
+	return nil
+}
+
+func (cd *commandDispatcher) observeProperties() {
+	cd.propertyObserversLock.RLock()
+	defer cd.propertyObserversLock.RUnlock()
+
+	for propertyName := range cd.propertyObservers {
+		err := cd.observeProperty(propertyName)
+		if err != nil {
+			cd.errLog.Printf("could not observe property '%s' due to error: %s", propertyName, err)
+		}
+	}
+}
+
+func (cd commandDispatcher) observeProperty(propertyName string) error {
+	requestID := cd.reserveRequestID()
+	cmd := command{
+		name:     observePropertyCommand,
+		elements: []interface{}{requestID, propertyName},
+	}
+	_, err := cd.Request(cmd)
+
+	return err
 }
 
 func (cd commandDispatcher) propertyObserver(propertyName string) (propertyObserver, bool) {
@@ -344,78 +423,6 @@ func (cd *commandDispatcher) reservePropertySubscriptionID() int {
 	cd.propertySubscriptionID++
 
 	return propertyObserverID
-}
-
-func (cd *commandDispatcher) listenOnUnixSocket() {
-	payloads := make(chan []byte)
-
-	go func() {
-		err := readNewlineSeparatedJSONs(cd.conn, payloads)
-		if err == io.EOF {
-			cd.errLog.Println("connection closed")
-		} else {
-			cd.errLog.Println("could not read the payload from the connection")
-		}
-
-		close(payloads)
-	}()
-
-	go func() {
-		for {
-			payload, more := <-payloads
-			if !more {
-				break
-			}
-
-			var result ResponsePayload
-			if len(payload) == 0 {
-				continue
-			}
-
-			err := json.Unmarshal(payload, &result)
-			if err != nil {
-				cd.errLog.Printf("could not parse the response: %s\npayload: %s\n", err, payload)
-				continue
-			}
-
-			formatNodeConverter, ok := FormatNodeConverters[result.Name]
-			if ok {
-				convertedData, err := formatNodeConverter(result.Data)
-				if err != nil {
-					cd.errLog.Printf("could not parse the format node data for the response: %s\npayload: %s\n", err, payload)
-					continue
-				}
-				result.Data = convertedData
-			}
-
-			if result.Event == propertyChangeEvent {
-				propertyObserver, ok := cd.propertyObserver(result.Name)
-				if !ok {
-					cd.errLog.Printf("observe property event provided to not observed property %s\n", result.Name)
-					continue
-				}
-
-				propertyObserver.responsePayloads <- result
-			} else {
-				if result.RequestID == 0 {
-					continue
-				}
-
-				request, ok := cd.requests[result.RequestID]
-				if !ok {
-					cd.errLog.Printf("result %d provided to not dispatched request\n", result.RequestID)
-					continue
-				}
-
-				request <- result
-				close(request)
-			}
-		}
-
-		cd.setListeningOnSocket(false)
-	}()
-
-	cd.setListeningOnSocket(true)
 }
 
 func (cd *commandDispatcher) setListeningOnSocket(listening bool) {
@@ -456,6 +463,27 @@ func dialSocket(socketType string, socketPath string, done chan<- net.Conn) {
 		// mpv takes a moment (up to a few seconds) to start listening on the socket, repeat until connection successful.
 		time.Sleep(1 * time.Second)
 	}
+}
+
+func getResponsePayload(payload []byte) (ResponsePayload, error) {
+	var result ResponsePayload
+	err := json.Unmarshal(payload, &result)
+	if err != nil {
+		return result, fmt.Errorf("could not parse the response JSON as ResponsePayload: %w", err)
+	}
+
+	formatNodeConverter, ok := FormatNodeConverters[result.Name]
+	if !ok {
+		return result, err
+	}
+
+	convertedData, err := formatNodeConverter(result.Data)
+	if err != nil {
+		return result, fmt.Errorf("could not parse the format node data for the response: %w", err)
+	}
+	result.Data = convertedData
+
+	return result, err
 }
 
 func prepareCommandPayload(cmd command, requestID int) ([]byte, error) {

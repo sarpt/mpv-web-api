@@ -69,7 +69,7 @@ func NewManager(cfg ManagerConfig) (*Manager, error) {
 		return m, nil
 	}
 
-	err := m.cd.Connect()
+	err := m.serveCommandDispatcher()
 	if err != nil {
 		return m, err // TODO: add some handling of errors on the manager instance
 	}
@@ -306,9 +306,28 @@ func (m *Manager) manageOwnMpvProcess() {
 		}
 		m.outLog.Println("mpv process started")
 
-		err = m.cd.Connect()
+		err := m.serveCommandDispatcher()
 		if err != nil {
 			return // TODO: add some handling of errors on the manager instance
 		}
 	}
+}
+
+func (m *Manager) serveCommandDispatcher() error {
+	err := m.cd.Connect()
+	if err != nil {
+		return err
+	}
+
+	// TODO: In the future commit, when NewManager function will be refactored, serve below
+	// and whole "serveCommandDispatcher" method should by synchronous and methods of Manager
+	// should dispatch them to go routines.
+	go func() {
+		err = m.cd.Serve()
+		if err != nil {
+			m.errLog.Printf("error while serving command dispatcher: %s\n", err)
+		}
+	}()
+
+	return nil
 }
