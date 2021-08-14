@@ -1,7 +1,6 @@
 package mpv
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -27,7 +26,7 @@ var (
 	ErrCommandFailedResponse = errors.New("mpv response does not include success state")
 
 	// ErrConnectionInProgress informs about failure of operation due to connection of command dispatcher being in progress.
-	ErrConnectionInProgress = errors.New("command dispatcher is connected to mpv socket")
+	ErrConnectionInProgress = errors.New("command dispatcher is already connected to mpv socket")
 
 	// ErrNoPropertyObserver informs about failure of finding observer for a specified property name (most likely property is not observed).
 	ErrNoPropertyObserver = errors.New("could not find observer for a provided property name")
@@ -67,7 +66,7 @@ type ResponsePayload struct {
 	Data      interface{} `json:"data"`
 }
 
-// commandDispatcher connects to the provided socket path and handles sending commands and handling results
+// commandDispatcher connects to the provided socket path and handles sending commands and handling results.
 type commandDispatcher struct {
 	conn                       net.Conn
 	connectionTimeout          time.Duration
@@ -82,6 +81,7 @@ type commandDispatcher struct {
 	requests                   map[int]chan ResponsePayload
 	requestID                  int
 	requestIDLock              *sync.Mutex
+	responses                  *responsesIterator
 	socketPath                 string
 }
 
@@ -141,6 +141,7 @@ func (cd *commandDispatcher) Connect() error {
 		return err
 	}
 	cd.outLog.Printf("connected to socket at '%s'\n", cd.socketPath)
+	cd.responses = NewResponsesIterator(cd.conn)
 
 	return nil
 }
@@ -304,12 +305,7 @@ func (cd *commandDispatcher) connectToMpvSocket() error {
 	return nil
 }
 
-func (cd *commandDispatcher) distributeResponse(payload []byte) error {
-	result, err := getResponsePayload(payload)
-	if err != nil {
-		return fmt.Errorf("could not parse payload '%s' as ResponsePayload: %w", payload, err)
-	}
-
+func (cd *commandDispatcher) distributeResponse(result ResponsePayload) error {
 	if result.Event == propertyChangeEvent {
 		propertyObserver, ok := cd.propertyObserver(result.Name)
 		if !ok {
@@ -338,34 +334,19 @@ func (cd *commandDispatcher) listenOnUnixSocket() error {
 	cd.setListeningOnSocket(true)
 	defer cd.setListeningOnSocket(false)
 
-	payloads := make(chan []byte)
-
-	// TODO: goroutine below can be replaced with synchronous code (and put inside 'for' below) however,
-	// it would be necessary to keep the state between calls to "readNewlineSeparatedJSONs",
-	// as the unfinished JSON chunk read in buffer should be used in the next read
-	// - probably could be solved by writing a struct holding the buffer between calls.
-	go func() {
-		err := readNewlineSeparatedJSONs(cd.conn, payloads)
-		if err == io.EOF {
-			cd.outLog.Println("connection closed")
-		} else {
-			cd.errLog.Println("could not read the payload from the connection")
-		}
-
-		close(payloads)
-	}()
-
 	for {
-		payload, more := <-payloads
-		if !more {
-			break
+		payload, err := cd.responses.Next()
+		if err != nil {
+			if err == io.EOF {
+				cd.outLog.Println("connection closed")
+				break
+			} else {
+				cd.errLog.Println("could not read the payload from the connection")
+				return err
+			}
 		}
 
-		if len(payload) == 0 {
-			continue
-		}
-
-		err := cd.distributeResponse(payload)
+		err = cd.distributeResponse(payload)
 		if err != nil {
 			cd.errLog.Printf("could not distribute response: %s\n", err)
 		}
@@ -501,34 +482,4 @@ func prepareCommandPayload(cmd command, requestID int) ([]byte, error) {
 	payload = append(payload, newline...)
 
 	return payload, nil
-}
-
-func readNewlineSeparatedJSONs(conn net.Conn, out chan<- []byte) error {
-	buf := make([]byte, bufSize)
-	var acc []byte
-
-	for {
-		nRead, err := conn.Read(buf)
-		if err != nil {
-			return err
-		}
-
-		acc = append(acc, buf[:nRead]...)
-
-		newlineIdx := bytes.Index(buf, newline)
-		if newlineIdx == -1 {
-			continue
-		}
-
-		chunks := bytes.Split(acc, newline)
-		acc = []byte{}
-		for _, chunk := range chunks {
-			chunkValid := json.Valid(chunk)
-			if chunkValid {
-				out <- chunk
-			} else {
-				acc = append(acc, chunk...)
-			}
-		}
-	}
 }
