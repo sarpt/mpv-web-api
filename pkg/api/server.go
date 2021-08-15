@@ -67,11 +67,7 @@ func NewServer(cfg Config) (*Server, error) {
 		SocketConnectionTimeout: cfg.SocketConnectionTimeout,
 		StartMpvInstance:        cfg.StartMpvInstance,
 	}
-	mpvManager, err := mpv.NewManager(managerCfg)
-	if err != nil {
-		return nil, err
-	}
-
+	mpvManager := mpv.NewManager(managerCfg)
 	movies := state.NewMovies()
 	playback := state.NewPlayback()
 	playlists := state.NewPlaylists()
@@ -122,8 +118,17 @@ func NewServer(cfg Config) (*Server, error) {
 	return server, nil
 }
 
-// Serve starts handling requests to the API endpoints. Blocks until closed.
+// Serve starts handling API endpoints - both REST and SSE.
+// It also starts mpv manager.
+// Blocks until closed.
 func (s *Server) Serve() error {
+	go func() {
+		err := s.mpvManager.Serve()
+		if err != nil {
+
+		}
+	}()
+
 	serv := http.Server{
 		Addr:    s.address,
 		Handler: s.mainHandler(),
