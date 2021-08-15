@@ -7,6 +7,10 @@ import (
 	"net"
 )
 
+const (
+	bufSize = 512
+)
+
 type responsesIterator struct {
 	conn        net.Conn
 	accumulator []byte

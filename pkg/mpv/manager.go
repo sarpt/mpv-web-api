@@ -1,6 +1,7 @@
 package mpv
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -35,7 +36,7 @@ type Manager struct {
 }
 
 // NewManager starts mpv process and instantiates new command dispatcher, preparing new Manager for use.
-func NewManager(cfg ManagerConfig) (*Manager, error) {
+func NewManager(cfg ManagerConfig) *Manager {
 	errLog := log.New(cfg.ErrWriter, managerLogPrefix, log.LstdFlags)
 	outLog := log.New(cfg.OutWriter, managerLogPrefix, log.LstdFlags)
 
@@ -45,36 +46,14 @@ func NewManager(cfg ManagerConfig) (*Manager, error) {
 		socketPath:        cfg.MpvSocketPath,
 		outWriter:         outLog.Writer(),
 	}
-	m := &Manager{
+
+	return &Manager{
 		cd:               newCommandDispatcher(cdCfg),
 		errLog:           errLog,
 		outLog:           outLog,
 		socketPath:       cfg.MpvSocketPath,
 		startMpvInstance: cfg.StartMpvInstance,
 	}
-
-	// TODO: all of the below should be handled be a separate method instead of doing it in NewManager.
-	// A proper error management from both mpv process management and command dispatcher
-	// command loop managmenet should be used to give client (API server in this case)
-	// a control over how Manager should behave in case of any errors.
-	// The issue - in case of own mpv process managment any issue related to crash/closure
-	// of mpv instance should be autonatic when possible - trying to restart the instance and reconnect.
-	// In case of connection to existing unmanaged instance restart is impossible, only reconnect.
-	// In case of unmanaged instance there is also an issue that command dispatch loop will crash instead
-	// of process management loop, which complicates a little the issue - there needs to be a single point of error handling
-	// and a method of a graceful shutdown instead of just loosing connection or endless restart cycle.
-	if m.startMpvInstance {
-		go m.manageOwnMpvProcess()
-
-		return m, nil
-	}
-
-	err := m.serveCommandDispatcher()
-	if err != nil {
-		return m, err // TODO: add some handling of errors on the manager instance
-	}
-
-	return m, nil
 }
 
 // ChangeFullscreen instructs mpv to change the fullscreen state.
@@ -243,6 +222,40 @@ func (m Manager) PlaylistMove(fromIdx uint, toIdx uint) error {
 	return err
 }
 
+// Serve starts handling requests to and responses from mpv.
+// If necessary, Serve also spawns and handles mpv process lifetime.
+func (m Manager) Serve() error {
+	mpvErrors := make(chan error)
+	cdErrors := make(chan error)
+
+	if m.startMpvInstance {
+		go func() {
+			err := m.manageOwnMpvProcess()
+			if err != nil {
+				mpvErrors <- err
+			}
+
+			close(mpvErrors)
+		}()
+	}
+
+	go func() {
+		err := m.serveCommandDispatcher()
+		if err != nil {
+			cdErrors <- err
+		}
+
+		close(cdErrors)
+	}()
+
+	select {
+	case err := <-mpvErrors:
+		return err
+	case err := <-cdErrors:
+		return err
+	}
+}
+
 // SetProperty sets the value of a property.
 // Value is of any type since various mpv commands expect different types of values.
 // TODO: rewrite to generics when those are out.
@@ -282,7 +295,7 @@ func (m *Manager) startMpv() error {
 	return nil
 }
 
-func (m *Manager) manageOwnMpvProcess() {
+func (m *Manager) manageOwnMpvProcess() error {
 	var err error
 	for {
 		if m.mpvCmd != nil {
@@ -290,44 +303,39 @@ func (m *Manager) manageOwnMpvProcess() {
 
 			err = m.mpvCmd.Wait()
 			if err != nil {
-				m.errLog.Printf("mpv process finished with error: %s\n", err)
+				return fmt.Errorf("mpv process finished with error: %w", err)
 			} else {
-				m.outLog.Println("mpv process finished successfully")
+				m.outLog.Println("mpv process finished successfully (closed by user)")
 			}
 
-			m.cd.Close()
-			m.outLog.Println("restarting mpv process and command dispatcher...")
+			m.outLog.Println("restarting mpv process...")
 		}
 
 		err = m.startMpv()
 		if err != nil {
-			m.errLog.Printf("could not start mpv process due to error: %s\n", err)
-			return // TODO: add some handling of errors on the manager instance
+			return fmt.Errorf("could not start mpv process due to error: %w", err)
 		}
 		m.outLog.Println("mpv process started")
-
-		err := m.serveCommandDispatcher()
-		if err != nil {
-			return // TODO: add some handling of errors on the manager instance
-		}
 	}
 }
 
 func (m *Manager) serveCommandDispatcher() error {
-	err := m.cd.Connect()
-	if err != nil {
-		return err
-	}
+	var err error
+	for {
+		m.outLog.Println("connecting command dispatcher...")
 
-	// TODO: In the future commit, when NewManager function will be refactored, serve below
-	// and whole "serveCommandDispatcher" method should by synchronous and methods of Manager
-	// should dispatch them to go routines.
-	go func() {
+		err = m.cd.Connect()
+		if errors.As(err, &ErrCheckConnectionFailure) {
+			continue
+		} else if err != nil {
+			return err
+		}
+
 		err = m.cd.Serve()
 		if err != nil {
-			m.errLog.Printf("error while serving command dispatcher: %s\n", err)
+			return err
 		}
-	}()
 
-	return nil
+		m.cd.Close()
+	}
 }

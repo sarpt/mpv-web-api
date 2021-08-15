@@ -14,7 +14,6 @@ import (
 
 const (
 	socketType = "unix"
-	bufSize    = 512
 
 	resultSuccess = "success"
 
@@ -22,6 +21,9 @@ const (
 )
 
 var (
+	// ErrCheckConnectionFailure informs about command dispatcher failure to send and receive test message after opening connection.
+	ErrCheckConnectionFailure = errors.New("socket connection check failed")
+
 	// ErrCommandFailedResponse informs about mpv returning something other than "success" in an error field of a response.
 	ErrCommandFailedResponse = errors.New("mpv response does not include success state")
 
@@ -135,13 +137,26 @@ func (cd *commandDispatcher) Connect() error {
 	}
 
 	cd.outLog.Printf("trying to connect to mpv socket at '%s' with timeout: %f seconds\n", cd.socketPath, cd.connectionTimeout.Seconds())
-	err := cd.connectToMpvSocket()
+	conn, err := waitForSocketConnection(cd.socketPath, cd.connectionTimeout)
 	if err != nil {
 		cd.errLog.Printf("could not connect to socket due to error: %s\n", err)
+
 		return err
 	}
-	cd.outLog.Printf("connected to socket at '%s'\n", cd.socketPath)
+
+	cd.conn = conn
 	cd.responses = NewResponsesIterator(cd.conn)
+
+	cd.outLog.Printf("checking connection...")
+	err = cd.checkConnection()
+	if err != nil {
+		cd.conn = nil
+		cd.responses = nil
+
+		return fmt.Errorf("connection check failed due to error: %w", err)
+	}
+
+	cd.outLog.Printf("connected to socket at '%s'\n", cd.socketPath)
 
 	return nil
 }
@@ -171,6 +186,7 @@ func (cd *commandDispatcher) Dispatch(cmd command, requestID int) error {
 }
 
 // Request is used to send simple Request->response command that is completed after the first response from mpv comes.
+// Request requires listening on a connection to succesfully get and return a response.
 func (cd *commandDispatcher) Request(cmd command) (Response, error) {
 	var resPayload ResponsePayload
 	var result Response
@@ -294,36 +310,46 @@ func (cd *commandDispatcher) addPropertyObserver(propertyName string) (propertyO
 	return newObserver, err
 }
 
-func (cd *commandDispatcher) connectToMpvSocket() error {
-	conn, err := waitForSocketConnection(cd.socketPath, cd.connectionTimeout)
-	if err != nil {
-		return err
+// checkConnection takes a connection and tries to send "get-version" mpv IPC command,
+// by sending and reading on a connection.
+func (cd *commandDispatcher) checkConnection() error {
+	cmd := command{
+		name:     getVersion,
+		elements: []interface{}{},
 	}
 
-	cd.conn = conn
+	err := cd.Dispatch(cmd, 1)
+	if err != nil {
+		return fmt.Errorf("%w: %s", ErrCheckConnectionFailure, err)
+	}
+
+	_, err = cd.responses.Next()
+	if err != nil {
+		return fmt.Errorf("%w: %s", ErrCheckConnectionFailure, err)
+	}
 
 	return nil
 }
 
-func (cd *commandDispatcher) distributeResponse(result ResponsePayload) error {
-	if result.Event == propertyChangeEvent {
-		propertyObserver, ok := cd.propertyObserver(result.Name)
+func (cd *commandDispatcher) distributeResponse(response ResponsePayload) error {
+	if response.Event == propertyChangeEvent {
+		propertyObserver, ok := cd.propertyObserver(response.Name)
 		if !ok {
-			return fmt.Errorf("observe property event provided to not observed property %s", result.Name)
+			return fmt.Errorf("observe property event provided to not observed property %s", response.Name)
 		}
 
-		propertyObserver.responsePayloads <- result
+		propertyObserver.responsePayloads <- response
 	} else {
-		if result.RequestID == 0 {
+		if response.RequestID == 0 {
 			return fmt.Errorf("result provided without RequestID")
 		}
 
-		request, ok := cd.requests[result.RequestID]
+		request, ok := cd.requests[response.RequestID]
 		if !ok {
-			return fmt.Errorf("result %d provided to not dispatched request", result.RequestID)
+			return fmt.Errorf("result %d provided to not dispatched request", response.RequestID)
 		}
 
-		request <- result
+		request <- response
 		close(request)
 	}
 
@@ -455,7 +481,7 @@ func getResponsePayload(payload []byte) (ResponsePayload, error) {
 
 	formatNodeConverter, ok := FormatNodeConverters[result.Name]
 	if !ok {
-		return result, err
+		return result, nil
 	}
 
 	convertedData, err := formatNodeConverter(result.Data)

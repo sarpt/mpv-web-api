@@ -1,10 +1,9 @@
 package mpv
 
 const (
+	getVersion             = "get_version"
 	loadfileCommand        = "loadfile"
-	setPropertyCommand     = "set_property"
 	observePropertyCommand = "observe_property_string"
-	stopCommand            = "stop"
 	playlistNextCommand    = "playlist-next"
 	playlistPrevCommand    = "playlist-prev"
 	playlistPlayIdxCommand = "playlist-play-index"
@@ -12,4 +11,6 @@ const (
 	playlistRemoveCommand  = "playlist-remove"
 	playlistMoveCommand    = "playlist-move"
 	playlistShuffleCommand = "playlist-shuffle"
+	setPropertyCommand     = "set_property"
+	stopCommand            = "stop"
 )
