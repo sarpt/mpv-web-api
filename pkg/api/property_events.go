@@ -152,6 +152,8 @@ func (s *Server) handlePlaybackTimeEvent(res mpv.ObservePropertyResponse) error 
 	}
 
 	if currentTime == "" {
+		s.playback.SetPlaybackTime(0)
+
 		return nil
 	}
 

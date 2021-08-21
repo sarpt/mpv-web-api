@@ -3,7 +3,6 @@ package mpv
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"net"
 )
 
@@ -26,24 +25,29 @@ func NewResponsesIterator(conn net.Conn) *responsesIterator {
 
 // Next returns ResponsePayload fetched from a mpv socket connection.
 // It blocks until a valid, newline-separated JSON is provided through the connection.
-// If the newline-separated data does not form a correct JSON responses, it returns an error.
+// If the newline-separated data does not form a correct JSON responses, it fetches newline separated
+// chunks of data and aggregates them until a correct JSON response is formed.
 // Not every call to Next results in reading from a socket - if previous call to Next
 // resulted in more than one newline-separated payloads being read, 'Next' will process
 // payload right after the one returned on previous call to 'Next' without reading new data from socket.
 func (ri *responsesIterator) Next() (ResponsePayload, error) {
 	var result ResponsePayload
+	var payload []byte
 
-	chunk, err := ri.getNonEmptyChunkFromAccumulator()
-	if err != nil {
-		return result, err
+	for {
+		chunk, err := ri.getNonEmptyChunkFromAccumulator()
+		if err != nil {
+			return result, err
+		}
+
+		payload = append(payload, chunk...)
+		payloadValid := json.Valid(payload)
+		if payloadValid {
+			break
+		}
 	}
 
-	chunkValid := json.Valid(chunk)
-	if !chunkValid {
-		return result, fmt.Errorf("received non-empty data from socket is not a correct json payload")
-	}
-
-	response, err := getResponsePayload(chunk)
+	response, err := getResponsePayload(payload)
 	return response, err
 }
 

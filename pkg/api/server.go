@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -120,14 +121,10 @@ func NewServer(cfg Config) (*Server, error) {
 
 // Serve starts handling API endpoints - both REST and SSE.
 // It also starts mpv manager.
-// Blocks until closed.
+// Blocks until either mpv manager or http server stops serving (with error or nil).
 func (s *Server) Serve() error {
-	go func() {
-		err := s.mpvManager.Serve()
-		if err != nil {
-
-		}
-	}()
+	mpvManagerErr := make(chan error)
+	httpServErr := make(chan error)
 
 	serv := http.Server{
 		Addr:    s.address,
@@ -139,14 +136,30 @@ func (s *Server) Serve() error {
 		return errors.New("could not start watching for properties")
 	}
 
-	s.outLog.Printf("running server at %s\n", s.address)
-	return serv.ListenAndServe()
-}
+	go func() {
+		mpvManagerErr <- s.mpvManager.Serve()
 
-// Close closes server, along with closing necessary helpers.
-// TODO: this can be done on defer inside Serve - does it make sense?
-func (s Server) Close() {
-	s.mpvManager.Close()
+		close(mpvManagerErr)
+	}()
+
+	go func() {
+		s.outLog.Printf("running server at %s\n", s.address)
+		err = serv.ListenAndServe()
+		if !errors.Is(err, http.ErrServerClosed) {
+			httpServErr <- err
+		}
+
+		close(httpServErr)
+	}()
+
+	select {
+	case err := <-mpvManagerErr:
+		serv.Shutdown(context.Background())
+		return err
+	case err := <-httpServErr:
+		s.mpvManager.Close()
+		return err
+	}
 }
 
 func (s *Server) initWatchers() error {
