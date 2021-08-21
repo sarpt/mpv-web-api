@@ -325,7 +325,7 @@ func (m *Manager) serveCommandDispatcher() error {
 		m.outLog.Println("connecting command dispatcher...")
 
 		err = m.cd.Connect()
-		if errors.As(err, &ErrCheckConnectionFailure) {
+		if errors.Is(err, ErrCheckConnectionFailure) {
 			continue
 		} else if err != nil {
 			return err

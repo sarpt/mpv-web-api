@@ -36,6 +36,10 @@ var (
 	// ErrNoPropertySubscription informs about failure of finding observer for a specified subscription id.
 	ErrNoPropertySubscription = errors.New("could not find subscription for a provided subscription id")
 
+	// ErrNotListeningOnSocket informs about dispatcher not being able to handle operation due to socket not being listened on.
+	// Methods reliant on responses through the socket may return this error.
+	ErrNotListeningOnSocket = errors.New("mpv socket is not beining listened on")
+
 	newline = []byte("\n")
 
 	commandDispatcherLogPrefix = "mpv.CommandDispatcher#"
@@ -188,9 +192,12 @@ func (cd *commandDispatcher) Dispatch(cmd command, requestID int) error {
 // Request is used to send simple Request->response command that is completed after the first response from mpv comes.
 // Request requires listening on a connection to succesfully get and return a response.
 func (cd *commandDispatcher) Request(cmd command) (Response, error) {
-	var resPayload ResponsePayload
 	var result Response
+	if !cd.Connected() {
+		return result, ErrNotListeningOnSocket
+	}
 
+	var resPayload ResponsePayload
 	requestResult := make(chan ResponsePayload)
 
 	requestID := cd.reserveRequestID()
@@ -341,12 +348,12 @@ func (cd *commandDispatcher) distributeResponse(response ResponsePayload) error 
 		propertyObserver.responsePayloads <- response
 	} else {
 		if response.RequestID == 0 {
-			return fmt.Errorf("result provided without RequestID")
+			return fmt.Errorf("response '%s' provided without RequestID", response.Event)
 		}
 
 		request, ok := cd.requests[response.RequestID]
 		if !ok {
-			return fmt.Errorf("result %d provided to not dispatched request", response.RequestID)
+			return fmt.Errorf("result '%d' provided to not dispatched request", response.RequestID)
 		}
 
 		request <- response
@@ -365,9 +372,9 @@ func (cd *commandDispatcher) listenOnUnixSocket() error {
 		if err != nil {
 			if err == io.EOF {
 				cd.outLog.Println("connection closed")
-				break
+				return nil
 			} else {
-				cd.errLog.Println("could not read the payload from the connection")
+				cd.errLog.Printf("could not read the payload from the connection: %s\n", err)
 				return err
 			}
 		}
@@ -377,8 +384,6 @@ func (cd *commandDispatcher) listenOnUnixSocket() error {
 			cd.errLog.Printf("could not distribute response: %s\n", err)
 		}
 	}
-
-	return nil
 }
 
 func (cd *commandDispatcher) observeProperties() {

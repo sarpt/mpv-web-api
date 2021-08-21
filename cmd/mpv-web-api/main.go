@@ -66,11 +66,10 @@ func main() {
 	}
 	server, err := api.NewServer(cfg)
 	if err != nil {
-		errLog.Printf("could not start API server due to error: %s\n", err)
+		errLog.Printf("could not start API server due to an error: %s\n", err)
 
 		return
 	}
-	defer server.Close()
 
 	var moviesDirectories []string
 	if len(dir.Values()) == 0 {
@@ -84,7 +83,7 @@ func main() {
 		}
 	}
 
-	outLog.Printf("directories being watched for movie files:\n%s\n", strings.Join(moviesDirectories, ", "))
+	outLog.Printf("directories being watched for movie files: %s\n", strings.Join(moviesDirectories, ", "))
 	server.AddDirectories(moviesDirectories)
 
 	err = server.Serve()
