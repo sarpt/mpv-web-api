@@ -69,7 +69,7 @@ func (ri *responsesIterator) getNonEmptyChunkFromAccumulator() ([]byte, error) {
 	var firstNewByteIdx int = 0
 
 	for {
-		newlineIdx := bytes.Index(ri.accumulator[firstNewByteIdx:], newline)
+		newlineIdx := bytes.Index(ri.accumulator[firstNewByteIdx:], newline) + firstNewByteIdx
 		if newlineIdx != -1 {
 			chunk := ri.takeFromAccumulator(newlineIdx)
 			if len(chunk) == 0 {
