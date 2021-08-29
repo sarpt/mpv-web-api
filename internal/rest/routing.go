@@ -7,7 +7,7 @@ import (
 )
 
 const (
-	moviesPath      = "/rest/movies"
+	mediaFilesPath  = "/rest/media-files"
 	directoriesPath = "/rest/directories"
 	playbackPath    = "/rest/playback"
 )
@@ -19,8 +19,8 @@ func (s *Server) Handler() http.Handler {
 		http.MethodGet:  s.getPlaybackHandler,
 	}
 
-	moviesHandlers := map[string]http.HandlerFunc{
-		http.MethodGet: s.getMoviesHandler,
+	mediaFilesHandlers := map[string]http.HandlerFunc{
+		http.MethodGet: s.getMediaFilesHandler,
 	}
 
 	directoriesHandlers := map[string]http.HandlerFunc{
@@ -31,7 +31,7 @@ func (s *Server) Handler() http.Handler {
 
 	allHandlers := map[string]common.MethodHandlers{
 		playbackPath:    playbackHandlers,
-		moviesPath:      moviesHandlers,
+		mediaFilesPath:  mediaFilesHandlers,
 		directoriesPath: directoriesHandlers,
 	}
 

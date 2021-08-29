@@ -14,14 +14,14 @@ const (
 
 // Config controls behaviour of the REST server.
 type Config struct {
-	AllowCORS bool
-	ErrWriter io.Writer
-	Movies    *state.Movies
-	MPVManger *mpv.Manager
-	Playback  *state.Playback
-	Playlist  *state.Playlist
-	OutWriter io.Writer
-	Status    *state.Status
+	AllowCORS  bool
+	ErrWriter  io.Writer
+	MediaFiles *state.MediaFiles
+	MPVManger  *mpv.Manager
+	Playback   *state.Playback
+	Playlist   *state.Playlist
+	OutWriter  io.Writer
+	Status     *state.Status
 }
 
 // Server is responsible for creating REST handlers, argument parsing and validation.
@@ -33,7 +33,7 @@ type Server struct {
 	addDirectoriesHandler func([]string) error
 	allowCORS             bool
 	errLog                *log.Logger
-	movies                *state.Movies
+	mediaFiles            *state.MediaFiles
 	mpvManager            *mpv.Manager
 	playback              *state.Playback
 	playlist              *state.Playlist
@@ -46,7 +46,7 @@ func NewServer(cfg Config) *Server {
 	return &Server{
 		allowCORS:  cfg.AllowCORS,
 		errLog:     log.New(cfg.ErrWriter, logPrefix, log.LstdFlags),
-		movies:     cfg.Movies,
+		mediaFiles: cfg.MediaFiles,
 		mpvManager: cfg.MPVManger,
 		playback:   cfg.Playback,
 		playlist:   cfg.Playlist,

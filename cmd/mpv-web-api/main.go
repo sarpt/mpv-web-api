@@ -42,7 +42,7 @@ var (
 func init() {
 	dir = listflag.NewStringList([]string{})
 
-	flag.Var(dir, dirFlag, "directory containing movies. when left empty, current working directory will be used")
+	flag.Var(dir, dirFlag, "directory containing media files. when left empty, current working directory will be used")
 	address = flag.String(addressFlag, defaultAddress, "address on which server should listen on")
 	allowCORS = flag.Bool(allowCorsFlag, false, "when not provided, Cross Origin Site Requests will be rejected")
 	mpvSocketPath = flag.String(mpvSocketPathFlag, defaultMpvSocketPath, "path to a socket file used by a MPV instance to listen for commands")
@@ -71,20 +71,20 @@ func main() {
 		return
 	}
 
-	var moviesDirectories []string
+	var mediaFilesDirectories []string
 	if len(dir.Values()) == 0 {
 		wd, err := os.Getwd()
 		if err == nil {
-			moviesDirectories = append(moviesDirectories, fmt.Sprintf("%s/", wd))
+			mediaFilesDirectories = append(mediaFilesDirectories, fmt.Sprintf("%s/", wd))
 		}
 	} else {
 		for _, dir := range dir.Values() {
-			moviesDirectories = append(moviesDirectories, fmt.Sprintf("%s/", dir))
+			mediaFilesDirectories = append(mediaFilesDirectories, fmt.Sprintf("%s/", dir))
 		}
 	}
 
-	outLog.Printf("directories being watched for movie files: %s\n", strings.Join(moviesDirectories, ", "))
-	server.AddDirectories(moviesDirectories)
+	outLog.Printf("directories being watched for media files: %s\n", strings.Join(mediaFilesDirectories, ", "))
+	server.AddDirectories(mediaFilesDirectories)
 
 	err = server.Serve()
 	if err != nil {

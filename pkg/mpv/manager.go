@@ -133,7 +133,7 @@ func (m Manager) LoopFile(looped bool) error {
 	return err
 }
 
-// PlaylistClear removies all entries from playlist.
+// PlaylistClear remediaFiles all entries from playlist.
 func (m Manager) PlaylistClear() error {
 	cmd := command{
 		name:     playlistClearCommand,
