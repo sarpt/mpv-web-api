@@ -8,7 +8,7 @@ import (
 // StatusChangeVariant specifies what type of change to server status occurs.
 type StatusChangeVariant string
 
-// SSEChannelVariant specifies type of observer (movies, playback, etc.)
+// SSEChannelVariant specifies type of observer (mediaFiles, playback, etc.)
 type SSEChannelVariant string
 
 const (

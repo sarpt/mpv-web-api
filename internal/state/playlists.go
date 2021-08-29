@@ -21,13 +21,13 @@ type PlaylistsChangeVariant string
 
 const (
 	// PlaylistsAdded notifies of a new playlist being served.
-	PlaylistsAdded PlaylistsChangeVariant = "playlistAdded" // TODO: playlist prefix redundant
+	PlaylistsAdded PlaylistsChangeVariant = "added"
 
 	// PlaylistsReplay notifies about replay of a whole playlist state.
 	PlaylistsReplay PlaylistsChangeVariant = "replay"
 
 	// PlaylistsItemsChange notifies about changes to the items/entries in a playlist.
-	PlaylistsItemsChange PlaylistsChangeVariant = "playlistItemsChange" // TODO: playlist prefix redundant
+	PlaylistsItemsChange PlaylistsChangeVariant = "itemsChange"
 )
 
 // PlaylistsChange is used to inform about changes to the Playback.

@@ -19,12 +19,12 @@ func (s *Server) probeDirectory(directory string) {
 
 	go probe.Directory(directory, results)
 	for probeResult := range results {
-		if !probeResult.IsMovieFile() {
+		if !probeResult.IsMediaFile() {
 			continue
 		}
 
-		movie := state.MapProbeResultToMovie(probeResult)
-		s.movies.Add(movie)
+		mediaFile := state.MapProbeResultToMediaFile(probeResult)
+		s.mediaFiles.Add(mediaFile)
 	}
 
 	s.outLog.Printf("finished probing directory %s\n", directory)

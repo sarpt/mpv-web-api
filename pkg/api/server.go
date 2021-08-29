@@ -29,7 +29,7 @@ type Server struct {
 	directories        []string
 	directoriesLock    *sync.RWMutex
 	errLog             *log.Logger
-	movies             *state.Movies
+	mediaFiles         *state.MediaFiles
 	mpvManager         *mpv.Manager
 	mpvSocketPath      string
 	outLog             *log.Logger
@@ -69,7 +69,7 @@ func NewServer(cfg Config) (*Server, error) {
 		StartMpvInstance:        cfg.StartMpvInstance,
 	}
 	mpvManager := mpv.NewManager(managerCfg)
-	movies := state.NewMovies()
+	mediaFiles := state.NewMediaFiles()
 	playback := state.NewPlayback()
 	playlists := state.NewPlaylists()
 	status := state.NewStatus()
@@ -77,7 +77,7 @@ func NewServer(cfg Config) (*Server, error) {
 	sseObserversChanges := make(chan sse.ObserversChange)
 	sseCfg := sse.Config{
 		ErrWriter:        cfg.ErrWriter,
-		Movies:           movies,
+		MediaFiles:       mediaFiles,
 		OutWriter:        cfg.OutWriter,
 		ObserversChanges: sseObserversChanges,
 		Playback:         playback,
@@ -87,13 +87,13 @@ func NewServer(cfg Config) (*Server, error) {
 	sseServer := sse.NewServer(sseCfg)
 
 	restCfg := rest.Config{
-		AllowCORS: cfg.AllowCORS,
-		ErrWriter: cfg.ErrWriter,
-		Movies:    movies,
-		MPVManger: mpvManager,
-		OutWriter: cfg.OutWriter,
-		Playback:  playback,
-		Status:    status,
+		AllowCORS:  cfg.AllowCORS,
+		ErrWriter:  cfg.ErrWriter,
+		MediaFiles: mediaFiles,
+		MPVManger:  mpvManager,
+		OutWriter:  cfg.OutWriter,
+		Playback:   playback,
+		Status:     status,
 	}
 	restServer := rest.NewServer(restCfg)
 
@@ -102,7 +102,7 @@ func NewServer(cfg Config) (*Server, error) {
 		[]string{},
 		&sync.RWMutex{},
 		log.New(cfg.ErrWriter, logPrefix, log.LstdFlags),
-		movies,
+		mediaFiles,
 		mpvManager,
 		cfg.MpvSocketPath,
 		log.New(cfg.OutWriter, logPrefix, log.LstdFlags),

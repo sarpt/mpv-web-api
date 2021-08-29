@@ -29,8 +29,8 @@ const (
 	// CurrentChapterIdxChange notifies about change of currently played chapter.
 	CurrentChapterIdxChange PlaybackChangeVariant = "currentChapterIndexChange"
 
-	// MovieChange notifies about change of currently played movie (TODO: change to "fileChange" in preparation for Music playback?).
-	MovieChange PlaybackChangeVariant = "movieChange"
+	// MediaFileChange notifies about change of currently played mediaFile.
+	MediaFileChange PlaybackChangeVariant = "mediaFileChange"
 
 	// PlaybackTimeChange notifies about current timestamp change.
 	PlaybackTimeChange PlaybackChangeVariant = "playbackTimeChange"
@@ -48,14 +48,14 @@ type PlaybackChange struct {
 	Variant PlaybackChangeVariant
 }
 
-// Playback contains information about currently played movie file.
+// Playback contains information about currently played media file.
 type Playback struct {
 	changes            chan interface{}
 	currentTime        float64
 	currentChapterIdx  int64
 	fullscreen         bool
 	loop               PlaybackLoop
-	moviePath          string
+	mediaFilePath      string
 	paused             bool
 	playlistCurrentIdx int
 	playlistUUID       string
@@ -69,7 +69,7 @@ type playbackJSON struct {
 	CurrentChapterIdx  int64        `json:"CurrentChapterIdx"`
 	Fullscreen         bool         `json:"Fullscreen"`
 	Loop               PlaybackLoop `json:"Loop"`
-	MoviePath          string       `json:"MoviePath"`
+	MediaFilePath      string       `json:"MediaFilePath"`
 	Paused             bool         `json:"Paused"`
 	PlaylistCurrentIdx int          `json:"PlaylistCurrentIdx"`
 	PlaylistUUID       string       `json:"PlaylistUUID"`
@@ -104,7 +104,7 @@ func (p *Playback) MarshalJSON() ([]byte, error) {
 		CurrentTime:        p.currentTime,
 		CurrentChapterIdx:  p.currentChapterIdx,
 		Fullscreen:         p.fullscreen,
-		MoviePath:          p.moviePath,
+		MediaFilePath:      p.mediaFilePath,
 		SelectedAudioID:    p.selectedAudioID,
 		SelectedSubtitleID: p.selectedSubtitleID,
 		PlaylistCurrentIdx: p.playlistCurrentIdx,
@@ -159,12 +159,12 @@ func (p *Playback) SetLoopFile(enabled bool) {
 	}
 }
 
-// SetMovie changes currently played movie, changing playback to not stopped.
-func (p *Playback) SetMovie(movie Movie) {
-	p.moviePath = movie.path
+// SetMediaFile changes currently played mediaFile, changing playback to not stopped.
+func (p *Playback) SetMediaFile(mediaFile MediaFile) {
+	p.mediaFilePath = mediaFile.path
 	p.Stopped = false
 	p.changes <- PlaybackChange{
-		Variant: MovieChange,
+		Variant: MediaFileChange,
 	}
 }
 
@@ -210,7 +210,7 @@ func (p *Playback) SetSubtitleID(sid string) {
 	}
 }
 
-// Stop clears outdated playback information related to played movie and sets playback to stopped.
+// Stop clears outdated playback information related to played mediaFile and sets playback to stopped.
 // The method preservers information about played playlist, since the playlist might not have been saved for a default (unnamed) playlist.
 // Change is being propagated before setting the state of Stopped, to inform observers about clear state of the playback,
 // and before suppressing further changes playback changes to stopped playback.

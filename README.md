@@ -40,7 +40,7 @@ Many REST endpoints are not implemented yet, since `mpv-web-front` mostly uses S
 
 - `PUT "/directories"` - add directory with media files for server to handle
   - `path` - string - path to a directory to be added (recursive) 
-- `GET "/movies"` - returns information about the movies: their paths and video, audio & subtitles streams. Media files without video stream will not be returned here (the endpoint will stay, however sooner or later server will differentiate between movie/music/media files)
+- `GET "/media-files"` - returns information about the media files: their paths and video, audio & subtitles streams
 - `POST "/playback"` - change current playback. Playback is a state which determines current file, playlist position, media timeline position, selection of subtitle and audio streams, etc.
   - `append` - bool (default: `false`) - when set to `true` with `path`, it append path as a next entry in currently played playlist (whether named/saved or not). When set to `false`, file under `path` will be played immediately, basically creating a new unnamed/empty playlist with only one item in it.
   - `audioID` - string - selects audio stream with the provided id. Although a string, mpv indexes its audio streams, so it will have numerical form.
@@ -54,29 +54,29 @@ Many REST endpoints are not implemented yet, since `mpv-web-front` mostly uses S
   - `stop` - bool (default: `false`) - stops mpv playback, clearing the playback state and instructing mpv instance to go into idle.
   - `subtitleID` - string - selects subtitle stream with the provided id. Although a string, mpv indexes its subtitle streams, so it will have numerical form.
 - `GET "/playback"` - returns the state of mpv current playback.
-- `GET "/sse/register"` - registers client to the SSE channels, estabilishing long running connection.
+- `GET "/sse/channels"` - registers client to the SSE channels, estabilishing long running connection.
   - `channel` - string[] - names of channels client wishes to be subscribed to. In URI it takes the form of `/sse/register?channel=name1&channel=name2&channel... etc`.
   - `replay` - bool (default: `false`) - when set to `true`, the first emitted event will be of `replay` type. More info on types of SSE events in a related section below.
 
 ### Server Sent Events
-SSE is used by server to notify reactively of changes to it's various states, eg. change of currently played media file in playback, new movies added, new directories added, changes to the current playlist etc. SSE communication is optional and the idea is to have all states queryable by REST API endpoints with `GET`, but since this is a constant WIP it may not always be the case - SSE takes priority in implementation since `mpv-web-front` uses it primarily to get updates without polling the server constantly.
+SSE is used by server to notify reactively of changes to it's various states, eg. change of currently played media file in playback, new media files added, new directories added, changes to the current playlist etc. SSE communication is optional and the idea is to have all states queryable by REST API endpoints with `GET`, but since this is a constant WIP it may not always be the case - SSE takes priority in implementation since `mpv-web-front` uses it primarily to get updates without polling the server constantly.
 
-Events are aggregated into channels, to which client subscribes. Due to limits of simultaneous connections count to a singular target, client should have only one open SSE connection that receives updates to all of the subscribed channels (that's how `mpv-web-front` does it). Since a standard Server Sent Event has "name" and "data" fields, the grouping has to be incorporated into one of them. For transparency of mechanism and ease of use, `mpv-web-api` uses name field with a `"."` separator to specify on which channel event was broadcasted, eg. `movies.added` is an `added` event on a `movies` channel etc.
+Events are aggregated into channels, to which client subscribes. Due to limits of simultaneous connections count to a singular target, client should have only one open SSE connection that receives updates to all of the subscribed channels (that's how `mpv-web-front` does it). Since a standard Server Sent Event has "name" and "data" fields, the grouping has to be incorporated into one of them. For transparency of mechanism and ease of use, `mpv-web-api` uses name field with a `"."` separator to specify on which channel event was broadcasted, eg. `mediaFiles.added` is an `added` event on a `mediaFiles` channel etc.
 
 In order to subsrcibe to channel(s), `/sse` REST endpoint should be used - how to use it is explained in the related REST endpoints section above.
 
 Some notes about weird/unexpected behavior that will at some point be changed/solved/cleared:
-- `replay` event is a special one, which is used to replay the whole state. It will be changed to `all` or something else - it's a legacy name that outlived it's temporary meaning and it's temporary solution implementation. It's used by `mpv-web-front` to "get a replay" of all data when connecting fresh or after a reconnect, instead of getting only chunks of data (get all movies to have possibility to handle added movies or updated movies additively). Since most of the events provide whole state anyway, it's usefullness and name are highly debatable. Although redundant, it's mentioned in all channels below (because why not).
+- `replay` event is a special one, which is used to replay the whole state. It will be changed to `all` or something else - it's a legacy name that outlived it's temporary meaning and it's temporary solution implementation. It's used by `mpv-web-front` to "get a replay" of all data when connecting fresh or after a reconnect, instead of getting only chunks of data (get all media files to have possibility to handle added media files or updated media files additively). Since most of the events provide whole state anyway, it's usefullness and name are highly debatable. Although redundant, it's mentioned in all channels below (because why not).
 - some events provide diferential state changes, while some always emit the whole state. Target behavior will be to have differential changes sent in all cases except for the currently ill-named `replay` events. That however will require a rewrite which I'm more willing to take when generics land in go (even if that means being dependent on the beta `go` release, like expected `go1.18 beta`). While generics clearly aren't "necessary" for rewrite, my intuition is telling me that resulting code will be easier on the eyes and soul rather than whatever form it will take without them (future will tell whether my intuition is right, exciting!).
-- events that have ~~strikethrough~~ are to be implmented "soon-ish" - as soon as I find ~~interest~~ ~~energy~~ ~~faith~~ use for them...
+- events that have ~~strikethrough~~ are to be implemented "soon-ish" - as soon as I find ~~interest~~ ~~energy~~ ~~faith~~ use for them...
 - overall, server's implementation of SSEs is a chaotic mess right now and there's no guarantee for their behavior and contents. This section will be updated (hopefully) as soon as they are more "stable" ~~(or I find another cool way of providing updates to clients - I'm looking at you GraphQL)~~
 
 Channels and their events:
-- `movies` - events fire in response to changes in watched movies
-  - `replay` - list of all movies 
-  - `added` - list of added movies
-  - ~~`updated` - list of added movies~~ 
-  - ~~`removed` - list of removed movies~~
+- `mediaFiles` - events fire in response to changes in watched media files
+  - `replay` - list of all media files 
+  - `added` - list of added media files
+  - ~~`updated` - list of added media files~~ 
+  - ~~`removed` - list of removed media files~~
 - `playback` (all events provide whole playback state) - events fire mostly in response to mpv changing it's playback-related properties
   - `replay` - whole playback state
   - `fullscreenChange` -  mpv changed it's `fullscreen` property
@@ -86,14 +86,14 @@ Channels and their events:
   - `playbackStoppedChange` - mpv changed it's `path` property but did not provide a new path (path is empty) 
   - `subtitleIdChange` - mpv changed it's `sid` property
   - ~~`currentChapterIndexChange` - mpv changed it's `chapter` property~~
-  - `movieChange` - mpv changed it's `path` property. Name of the event is ill-named, will be changed either to `pathChanged` or `fileChanged`
+  - `mediaFileChange` - mpv changed it's `path` property. Name of the event is ill-named, will be changed either to `pathChanged` or `fileChanged`
   - `playbackTimeChange` - mpv changed it's `playback-time` property
   - `playlistSelectionChange` - mpv changed it's `playlist` format node property - currently played playlist changed. This event is only partially mapped to mpv behavior, since playlists management is partially managed by the server.
   - `playlistCurrentIdxChange` - mpv changed it's `playlist-playing-pos` format node property - currently played entry in a playlist changed
 - `playlists` (all events privde whole playlist state) - events fire in response to external (and internal) requests to server related to playlists handling
   - `replay` - list of all playlists
-  - `playlistAdded` - a new playlist was added either by server itself (default/unnamed playlist) or an external client (`playlist` redundant in name, will be changed)
-  - `playlistItemsChange` - set of playlist entries/items changed (`playlist` redundant in name, will be changed)
+  - `added` - a new playlist was added either by server itself (default/unnamed playlist) or an external client
+  - `itemsChange` - set of playlist entries/items changed
 - `status` - (all events provide whole status state) -events fire in response to changes in server's runtime state
   - `replay` - whole status state
   - `client-observer-added` - a new SSE client observer was added

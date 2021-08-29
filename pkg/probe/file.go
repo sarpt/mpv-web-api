@@ -73,7 +73,7 @@ type Result struct {
 	err             probeError
 }
 
-// File checks information about the file format, it's streams and whether it can be used as a media (movie)
+// File checks information about the file format, it's streams and whether it can be used as a media file
 // As of now it usses "ffprobe" ran as a separate process to get this information. May be changed to use libav go wrappers in the future
 func File(filepath string) (Result, error) {
 	result := Result{
@@ -173,11 +173,11 @@ func probeWithFfprobe(filepath string) (ffprobeResult, error) {
 	return result, err
 }
 
-// IsMovieFile checks whether parsing of file was successful, and whether any video streams are present in the file (audio or subtitles optional)
-func (res Result) IsMovieFile() bool {
+// IsMediaFile checks whether parsing of file was successful, and whether any video streams are present in the file (audio or subtitles optional)
+func (res Result) IsMediaFile() bool {
 	if res.err.Code != 0 {
 		return false
 	}
 
-	return len(res.VideoStreams) != 0
+	return len(res.VideoStreams) != 0 || len(res.AudioStreams) != 0
 }
