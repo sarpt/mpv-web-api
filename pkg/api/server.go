@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
+	"github.com/sarpt/mpv-web-api/internal/common"
 	"github.com/sarpt/mpv-web-api/internal/rest"
 	"github.com/sarpt/mpv-web-api/internal/sse"
 	"github.com/sarpt/mpv-web-api/internal/state"
@@ -26,9 +28,10 @@ type observePropertyHandler = func(res mpv.ObservePropertyResponse) error
 // Server is used to serve API and hold state accessible to the API.
 type Server struct {
 	address            string
-	directories        []string
+	directories        []common.Directory
 	directoriesLock    *sync.RWMutex
 	errLog             *log.Logger
+	fsWatcher          *fsnotify.Watcher
 	mediaFiles         *state.MediaFiles
 	mpvManager         *mpv.Manager
 	mpvSocketPath      string
@@ -59,6 +62,11 @@ func NewServer(cfg Config) (*Server, error) {
 	}
 	if cfg.ErrWriter == nil {
 		cfg.ErrWriter = os.Stderr
+	}
+
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		return nil, fmt.Errorf("could not initialize filesystem watcher: %w", err)
 	}
 
 	managerCfg := mpv.ManagerConfig{
@@ -99,9 +107,10 @@ func NewServer(cfg Config) (*Server, error) {
 
 	server := &Server{
 		cfg.Address,
-		[]string{},
+		[]common.Directory{},
 		&sync.RWMutex{},
 		log.New(cfg.ErrWriter, logPrefix, log.LstdFlags),
+		watcher,
 		mediaFiles,
 		mpvManager,
 		cfg.MpvSocketPath,
@@ -123,6 +132,8 @@ func NewServer(cfg Config) (*Server, error) {
 // It also starts mpv manager.
 // Blocks until either mpv manager or http server stops serving (with error or nil).
 func (s *Server) Serve() error {
+	s.watchForFsChanges()
+
 	mpvManagerErr := make(chan error)
 	httpServErr := make(chan error)
 
