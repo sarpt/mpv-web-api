@@ -6,7 +6,9 @@ import (
 	"github.com/sarpt/mpv-web-api/internal/common"
 )
 
-func (s *Server) SetAddDirectoriesHandler(handler func([]string) error) {
+type AddDirectoriesHandler = func([]common.Directory) error
+
+func (s *Server) SetAddDirectoriesHandler(handler AddDirectoriesHandler) {
 	s.addDirectoriesHandler = handler
 }
 
@@ -22,7 +24,11 @@ func (s *Server) directoriesPathHandler(res http.ResponseWriter, req *http.Reque
 	dirPath := req.PostFormValue(pathArg)
 	s.outLog.Printf("adding directory %s due to request from %s\n", dirPath, req.RemoteAddr)
 
-	return s.addDirectoriesHandler([]string{dirPath})
+	return s.addDirectoriesHandler([]common.Directory{
+		{
+			Path: dirPath,
+		},
+	})
 }
 
 func (s *Server) putDirectoriesFormArgumentsHandlers() map[string]common.FormArgument {

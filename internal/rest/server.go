@@ -30,7 +30,7 @@ type Config struct {
 // TODO#2: As in SSE case, the pointers to the state should be replaced with a more separated approach
 // - rest package should not have unlimited access to the whole state.
 type Server struct {
-	addDirectoriesHandler func([]string) error
+	addDirectoriesHandler AddDirectoriesHandler
 	allowCORS             bool
 	errLog                *log.Logger
 	mediaFiles            *state.MediaFiles

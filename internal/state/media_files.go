@@ -101,6 +101,29 @@ func (m *MediaFiles) ByPath(path string) (MediaFile, error) {
 	return MediaFile{}, errNoMediaFileAvailable
 }
 
+// Pop removes MediaFile by a provided path from the state,
+// returning the object for use after removal.
+// When media file cannot be found, the error is being reported.
+func (m *MediaFiles) Pop(path string) (MediaFile, error) {
+	mediaFile, err := m.ByPath(path)
+	if err != nil {
+		return mediaFile, err
+	}
+
+	m.lock.Lock()
+	delete(m.items, path)
+	m.lock.Unlock()
+
+	m.changes <- MediaFilesChange{
+		variant: RemovedMediaFilesChange,
+		items: map[string]MediaFile{
+			mediaFile.path: mediaFile,
+		},
+	}
+
+	return MediaFile{}, nil
+}
+
 // Changes returns read-only channel notifying of mediaFiles changes.
 func (m *MediaFiles) Changes() <-chan interface{} {
 	return m.changes
