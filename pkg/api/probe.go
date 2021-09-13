@@ -25,6 +25,8 @@ func (s *Server) probeDirectory(directory string) {
 		}
 
 		mediaFile := state.MapProbeResultToMediaFile(probeResult)
+		// TODO: this add should not occur in case the directory was removed from the directories state
+		// before this probe could finish
 		s.mediaFiles.Add(mediaFile)
 	}
 

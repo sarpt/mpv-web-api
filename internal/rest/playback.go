@@ -15,7 +15,6 @@ const (
 	chapterArg    = "chapter"
 	fullscreenArg = "fullscreen"
 	loopFileArg   = "loopFile"
-	pathArg       = "path"
 	pauseArg      = "pause"
 	playlistIdx   = "playlistIdx"
 	playlistUUID  = "playlistUUID"

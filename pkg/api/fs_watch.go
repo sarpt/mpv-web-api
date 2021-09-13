@@ -5,7 +5,7 @@ import "github.com/fsnotify/fsnotify"
 func (s *Server) handleFsEvent(event fsnotify.Event) error {
 	if shouldRemoveMediaPath(event.Op) {
 		s.outLog.Printf("removing media file '%s'\n", event.Name)
-		_, err := s.mediaFiles.Pop(event.Name)
+		_, err := s.mediaFiles.Take(event.Name)
 
 		return err
 	}

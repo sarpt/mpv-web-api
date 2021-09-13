@@ -25,7 +25,7 @@ func (s *Server) Handler() http.Handler {
 
 	directoriesHandlers := map[string]http.HandlerFunc{
 		http.MethodGet:    s.getDirectoriesHandler,
-		http.MethodPut:    common.CreateFormHandler(s.putDirectoriesFormArgumentsHandlers()),
+		http.MethodPost:   common.CreateFormHandler(s.postDirectoriesFormArgumentsHandlers()),
 		http.MethodDelete: s.deleteDirectoriesHandler,
 	}
 

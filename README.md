@@ -19,10 +19,11 @@ It's main use is to be a backend for [mpv-web-front](https://github.com/sarpt/mp
 
 - `allow-cors` - bool - (default: false) whether Cross Origin Requests should be allowed
 - `addr` - string - (default: localhost:3001) address used to host the server
-- `dir` - []string - directories that should be scanned for media files. To specify more than one directory to be handled, multiple `--dir=<path>` arguments can be specified eg. `--dir=/path1 --dir=/path2`. The server will only handle paths provided by clients that start with one of the paths provided to `dir`.
+- `dir` - []string - directories that should be scanned for media files only once. To specify more than one directory to be handled, multiple `--dir=<path>` arguments can be specified eg. `--dir=/path1 --dir=/path2`. The server will only handle paths provided by clients that start with one of the paths provided to `dir`.
 - `mpv-socket-path` - string - (default: /tmp/mpvsocket) path to socket file used by MPV instance
 - `socket-timeout` - int - (defualt: 15) maximum allowed time in seconds for retrying connection to MPV socket
 - `start-mpv-instance` - bool - (default: true) when set to true, `mpv-web-api` will create it's own MPV process. When set to false, `mpv-web-api` will only try to connect to MPV using file at `mpv-socket-path`. Particularly useful when trying to run `mpv-web-api` in docker and connecting to local MPV instance
+- `watch-dir` - []string - directories that should be scanned for media files AND being watched for future changes to the underlying files. The argument works in the same way as a read-only variant `--dir`. If no paths are provided with neither `--dir` nor `--watch-dir`, a current working directory is watched by default.
 
 ### Building & Execution
 
@@ -38,8 +39,12 @@ In case the server is ran to serve as a backend to `mpv-web-front` on a local ma
 
 Many REST endpoints are not implemented yet, since `mpv-web-front` mostly uses SSEs to sync it's state (REST would require some kind of polling), while using REST mainly for sending instructions to server (and by extension, mpv). Target implementation however has whole REST/SSE parity planned when it comes to information fetching (`GET`s).
 
-- `PUT "/directories"` - add directory with media files for server to handle
+- `DELETE "/directories"` - deletes directories that match paths provided as a URL query `path` parameters
+  - `path` - string[] - paths to directories client wishes to be deleted. In URI it takes the form of `/rest/directories?path=%2Fpath%2Fto%2Fdir%2`. The path should be escaped, although unescaped *may* work. The ending separator is not necessary to be present. 
+- `GET "/directories"` - returns information about directories handled by the server instance: their paths and whether the directory is watched for changes
+- `POST "/directories"` - add directory with media files for server to handle
   - `path` - string - path to a directory to be added (recursive) 
+  - `watched` - bool (default: `false`) - whether directory should be watched for changes underneath (added/removed files), instead of being read once
 - `GET "/media-files"` - returns information about the media files: their paths and video, audio & subtitles streams
 - `POST "/playback"` - change current playback. Playback is a state which determines current file, playlist position, media timeline position, selection of subtitle and audio streams, etc.
   - `append` - bool (default: `false`) - when set to `true` with `path`, it append path as a next entry in currently played playlist (whether named/saved or not). When set to `false`, file under `path` will be played immediately, basically creating a new unnamed/empty playlist with only one item in it.
@@ -72,11 +77,15 @@ Some notes about weird/unexpected behavior that will at some point be changed/so
 - overall, server's implementation of SSEs is a chaotic mess right now and there's no guarantee for their behavior and contents. This section will be updated (hopefully) as soon as they are more "stable" ~~(or I find another cool way of providing updates to clients - I'm looking at you GraphQL)~~
 
 Channels and their events:
+- `directories` - events fire in response to changes in directories being handled by server's instance
+  - `replay` - list of all directories
+  - `added` - list of addded directories
+  - `removed` - list of removed directories
 - `mediaFiles` - events fire in response to changes in watched media files
   - `replay` - list of all media files 
   - `added` - list of added media files
   - ~~`updated` - list of added media files~~ 
-  - ~~`removed` - list of removed media files~~
+  - `removed` - list of removed media files
 - `playback` (all events provide whole playback state) - events fire mostly in response to mpv changing it's playback-related properties
   - `replay` - whole playback state
   - `fullscreenChange` -  mpv changed it's `fullscreen` property

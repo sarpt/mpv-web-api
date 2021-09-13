@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"log"
 	"os"
 	"time"
@@ -86,20 +85,20 @@ func main() {
 
 		outLog.Printf("No directories specified for server - watching working directory '%s'\n", wd)
 		mediaFilesDirectories = append(mediaFilesDirectories, common.Directory{
-			Path:    fmt.Sprintf("%s/", wd),
+			Path:    common.EnsureDirectoryPath(wd),
 			Watched: true,
 		})
 	} else {
 		for _, dir := range watchDir.Values() {
 			mediaFilesDirectories = append(mediaFilesDirectories, common.Directory{
-				Path:    fmt.Sprintf("%s/", dir),
+				Path:    common.EnsureDirectoryPath(dir),
 				Watched: true,
 			})
 		}
 
 		for _, dir := range dir.Values() {
 			mediaFilesDirectories = append(mediaFilesDirectories, common.Directory{
-				Path: fmt.Sprintf("%s/", dir),
+				Path: common.EnsureDirectoryPath(dir),
 			})
 		}
 	}
