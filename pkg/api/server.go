@@ -8,11 +8,9 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"sync"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-	"github.com/sarpt/mpv-web-api/internal/common"
 	"github.com/sarpt/mpv-web-api/internal/rest"
 	"github.com/sarpt/mpv-web-api/internal/sse"
 	"github.com/sarpt/mpv-web-api/internal/state"
@@ -28,8 +26,7 @@ type observePropertyHandler = func(res mpv.ObservePropertyResponse) error
 // Server is used to serve API and hold state accessible to the API.
 type Server struct {
 	address            string
-	directories        []common.Directory
-	directoriesLock    *sync.RWMutex
+	directories        *state.Directories
 	errLog             *log.Logger
 	fsWatcher          *fsnotify.Watcher
 	mediaFiles         *state.MediaFiles
@@ -77,6 +74,8 @@ func NewServer(cfg Config) (*Server, error) {
 		StartMpvInstance:        cfg.StartMpvInstance,
 	}
 	mpvManager := mpv.NewManager(managerCfg)
+
+	directories := state.NewDirectories()
 	mediaFiles := state.NewMediaFiles()
 	playback := state.NewPlayback()
 	playlists := state.NewPlaylists()
@@ -84,6 +83,7 @@ func NewServer(cfg Config) (*Server, error) {
 
 	sseObserversChanges := make(chan sse.ObserversChange)
 	sseCfg := sse.Config{
+		Directories:      directories,
 		ErrWriter:        cfg.ErrWriter,
 		MediaFiles:       mediaFiles,
 		OutWriter:        cfg.OutWriter,
@@ -95,20 +95,20 @@ func NewServer(cfg Config) (*Server, error) {
 	sseServer := sse.NewServer(sseCfg)
 
 	restCfg := rest.Config{
-		AllowCORS:  cfg.AllowCORS,
-		ErrWriter:  cfg.ErrWriter,
-		MediaFiles: mediaFiles,
-		MPVManger:  mpvManager,
-		OutWriter:  cfg.OutWriter,
-		Playback:   playback,
-		Status:     status,
+		AllowCORS:   cfg.AllowCORS,
+		Directories: directories,
+		ErrWriter:   cfg.ErrWriter,
+		MediaFiles:  mediaFiles,
+		MPVManger:   mpvManager,
+		OutWriter:   cfg.OutWriter,
+		Playback:    playback,
+		Status:      status,
 	}
 	restServer := rest.NewServer(restCfg)
 
 	server := &Server{
 		cfg.Address,
-		[]common.Directory{},
-		&sync.RWMutex{},
+		directories,
 		log.New(cfg.ErrWriter, logPrefix, log.LstdFlags),
 		watcher,
 		mediaFiles,
@@ -123,7 +123,12 @@ func NewServer(cfg Config) (*Server, error) {
 		status,
 	}
 
-	restServer.SetAddDirectoriesHandler(server.AddDirectories)
+	restServer.SetAddDirectoriesCallback(server.AddDirectories)
+	restServer.SetDeleteDirectoriesCallback(server.TakeDirectory)
+	err = server.initWatchers()
+	if err != nil {
+		return server, errors.New("could not start watching for properties")
+	}
 
 	return server, nil
 }
@@ -142,11 +147,6 @@ func (s *Server) Serve() error {
 		Handler: s.mainHandler(),
 	}
 
-	err := s.initWatchers()
-	if err != nil {
-		return errors.New("could not start watching for properties")
-	}
-
 	go func() {
 		mpvManagerErr <- s.mpvManager.Serve()
 
@@ -155,7 +155,7 @@ func (s *Server) Serve() error {
 
 	go func() {
 		s.outLog.Printf("running server at %s\n", s.address)
-		err = serv.ListenAndServe()
+		err := serv.ListenAndServe()
 		if !errors.Is(err, http.ErrServerClosed) {
 			httpServErr <- err
 		}

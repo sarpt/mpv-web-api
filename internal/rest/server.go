@@ -14,14 +14,15 @@ const (
 
 // Config controls behaviour of the REST server.
 type Config struct {
-	AllowCORS  bool
-	ErrWriter  io.Writer
-	MediaFiles *state.MediaFiles
-	MPVManger  *mpv.Manager
-	Playback   *state.Playback
-	Playlist   *state.Playlist
-	OutWriter  io.Writer
-	Status     *state.Status
+	AllowCORS   bool
+	Directories *state.Directories
+	ErrWriter   io.Writer
+	MediaFiles  *state.MediaFiles
+	MPVManger   *mpv.Manager
+	Playback    *state.Playback
+	Playlist    *state.Playlist
+	OutWriter   io.Writer
+	Status      *state.Status
 }
 
 // Server is responsible for creating REST handlers, argument parsing and validation.
@@ -30,27 +31,30 @@ type Config struct {
 // TODO#2: As in SSE case, the pointers to the state should be replaced with a more separated approach
 // - rest package should not have unlimited access to the whole state.
 type Server struct {
-	addDirectoriesHandler AddDirectoriesHandler
-	allowCORS             bool
-	errLog                *log.Logger
-	mediaFiles            *state.MediaFiles
-	mpvManager            *mpv.Manager
-	playback              *state.Playback
-	playlist              *state.Playlist
-	outLog                *log.Logger
-	status                *state.Status
+	addDirectoriesCallback    AddDirectoriesCallback
+	allowCORS                 bool
+	removeDirectoriesCallback RemoveDirectoriesCallback
+	directories               *state.Directories
+	errLog                    *log.Logger
+	mediaFiles                *state.MediaFiles
+	mpvManager                *mpv.Manager
+	playback                  *state.Playback
+	playlist                  *state.Playlist
+	outLog                    *log.Logger
+	status                    *state.Status
 }
 
 // NewServer returns rest.Server instance.
 func NewServer(cfg Config) *Server {
 	return &Server{
-		allowCORS:  cfg.AllowCORS,
-		errLog:     log.New(cfg.ErrWriter, logPrefix, log.LstdFlags),
-		mediaFiles: cfg.MediaFiles,
-		mpvManager: cfg.MPVManger,
-		playback:   cfg.Playback,
-		playlist:   cfg.Playlist,
-		outLog:     log.New(cfg.OutWriter, logPrefix, log.LstdFlags),
-		status:     cfg.Status,
+		allowCORS:   cfg.AllowCORS,
+		errLog:      log.New(cfg.ErrWriter, logPrefix, log.LstdFlags),
+		directories: cfg.Directories,
+		mediaFiles:  cfg.MediaFiles,
+		mpvManager:  cfg.MPVManger,
+		playback:    cfg.Playback,
+		playlist:    cfg.Playlist,
+		outLog:      log.New(cfg.OutWriter, logPrefix, log.LstdFlags),
+		status:      cfg.Status,
 	}
 }

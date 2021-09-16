@@ -17,21 +17,24 @@ const (
 
 // Server holds information about handled SSE connections and their observers.
 type Server struct {
-	errLog              *log.Logger
-	mediaFiles          *state.MediaFiles // TODO: this state passing from the user is very iffy - consider using either callbacks or builder pattern.
-	mediaFilesObservers observers
-	observersChange     chan<- ObserversChange
-	outLog              *log.Logger
-	playback            *state.Playback
-	playbackObservers   observers
-	playlists           *state.Playlists
-	playlistsObservers  observers
-	status              *state.Status
-	statusObservers     observers
+	directories          *state.Directories
+	directoriesObservers observers
+	errLog               *log.Logger
+	mediaFiles           *state.MediaFiles // TODO: this state passing from the user is very iffy - consider using either callbacks or builder pattern.
+	mediaFilesObservers  observers
+	observersChange      chan<- ObserversChange
+	outLog               *log.Logger
+	playback             *state.Playback
+	playbackObservers    observers
+	playlists            *state.Playlists
+	playlistsObservers   observers
+	status               *state.Status
+	statusObservers      observers
 }
 
 // Config controls behaviour of the SSE server.
 type Config struct {
+	Directories      *state.Directories
 	ErrWriter        io.Writer
 	MediaFiles       *state.MediaFiles
 	ObserversChanges chan<- ObserversChange
@@ -44,6 +47,11 @@ type Config struct {
 // NewServer prepares and returns SSE server to handle SSE connections and observers.
 func NewServer(cfg Config) *Server {
 	return &Server{
+		directories: cfg.Directories,
+		directoriesObservers: observers{
+			items: map[string]chan interface{}{},
+			lock:  &sync.RWMutex{},
+		},
 		errLog:     log.New(cfg.ErrWriter, logPrefix, log.LstdFlags),
 		mediaFiles: cfg.MediaFiles,
 		mediaFilesObservers: observers{
@@ -75,6 +83,7 @@ func NewServer(cfg Config) *Server {
 // and someone is listening to avoid unwanted (unsupported by channels) broadcast
 // (maybe channels are unsuitable in this situation at all - what else is there to consider?).
 func (s *Server) InitDispatchers() {
+	go distributeChangesToChannelObservers(s.directories.Changes(), s.directoriesObservers)
 	go distributeChangesToChannelObservers(s.playback.Changes(), s.playbackObservers)
 	go distributeChangesToChannelObservers(s.playlists.Changes(), s.playlistsObservers)
 	go distributeChangesToChannelObservers(s.mediaFiles.Changes(), s.mediaFilesObservers)
@@ -85,10 +94,11 @@ func (s *Server) InitDispatchers() {
 func (s *Server) Handler() http.Handler {
 	sseCfg := handlerConfig{
 		Channels: map[state.SSEChannelVariant]channel{
-			playbackSSEChannelVariant:   s.playbackSSEChannel(),
-			playlistsSSEChannelVariant:  s.playlistsSSEChannel(),
-			mediaFilesSSEChannelVariant: s.mediaFilesSSEChannel(),
-			statusSSEChannelVariant:     s.statusSSEChannel(),
+			directoriesSSEChannelVariant: s.directoriesSSEChannel(),
+			playbackSSEChannelVariant:    s.playbackSSEChannel(),
+			playlistsSSEChannelVariant:   s.playlistsSSEChannel(),
+			mediaFilesSSEChannelVariant:  s.mediaFilesSSEChannel(),
+			statusSSEChannelVariant:      s.statusSSEChannel(),
 		},
 	}
 

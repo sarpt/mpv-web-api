@@ -31,7 +31,7 @@ func (s *Server) createMediaFilesChangeHandler() sseChangeHandler {
 			return errIncorrectChangesType
 		}
 
-		return res.SendChange(mediaFilesChange, mediaFilesSSEChannelVariant, string(state.AddedMediaFilesChange))
+		return res.SendChange(mediaFilesChange, mediaFilesSSEChannelVariant, string(mediaFilesChange.Variant))
 	}
 }
 
