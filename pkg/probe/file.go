@@ -2,6 +2,7 @@ package probe
 
 import (
 	"encoding/json"
+	"fmt"
 	"os/exec"
 	"strconv"
 )
@@ -70,12 +71,12 @@ type Result struct {
 	VideoStreams    []VideoStream    `json:"VideoStreams"`
 	AudioStreams    []AudioStream    `json:"AudioStreams"`
 	SubtitleStreams []SubtitleStream `json:"SubtitleStreams"`
-	err             probeError
+	Err             error
 }
 
 // File checks information about the file format, it's streams and whether it can be used as a media file
 // As of now it usses "ffprobe" ran as a separate process to get this information. May be changed to use libav go wrappers in the future
-func File(filepath string) (Result, error) {
+func File(filepath string) Result {
 	result := Result{
 		Path:            filepath,
 		Format:          Format{},
@@ -87,12 +88,22 @@ func File(filepath string) (Result, error) {
 
 	ffprobeResult, err := probeWithFfprobe(filepath)
 	if err != nil {
-		return result, err
+		result.Err = fmt.Errorf("probing error: %w", err)
+
+		return result
+	}
+
+	if ffprobeResult.ProbeError.Code != 0 {
+		result.Err = fmt.Errorf("probing error from ffprobe: %d (%s)", ffprobeResult.ProbeError.Code, ffprobeResult.ProbeError.Message)
+
+		return result
 	}
 
 	parsedDuration, err := strconv.ParseFloat(ffprobeResult.Format.Duration, 64)
 	if err != nil {
-		return result, err
+		result.Err = fmt.Errorf("could not parse duration: %w", err)
+
+		return result
 	}
 
 	result.Format = Format{
@@ -105,12 +116,16 @@ func File(filepath string) (Result, error) {
 	for _, chapter := range ffprobeResult.Chapters {
 		startTime, err := strconv.ParseFloat(chapter.StartTime, 64)
 		if err != nil {
-			return result, err
+			result.Err = fmt.Errorf("could not parse start time: %w", err)
+
+			return result
 		}
 
 		endTime, err := strconv.ParseFloat(chapter.EndTime, 64)
 		if err != nil {
-			return result, err
+			result.Err = fmt.Errorf("could not parse end time: %w", err)
+
+			return result
 		}
 
 		result.Chapters = append(result.Chapters, Chapter{
@@ -146,7 +161,7 @@ func File(filepath string) (Result, error) {
 		}
 	}
 
-	return result, nil
+	return result
 }
 
 func probeWithFfprobe(filepath string) (ffprobeResult, error) {
@@ -175,7 +190,7 @@ func probeWithFfprobe(filepath string) (ffprobeResult, error) {
 
 // IsMediaFile checks whether parsing of file was successful, and whether any video streams are present in the file (audio or subtitles optional)
 func (res Result) IsMediaFile() bool {
-	if res.err.Code != 0 {
+	if res.Err != nil {
 		return false
 	}
 

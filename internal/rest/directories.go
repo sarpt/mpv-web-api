@@ -14,7 +14,7 @@ const (
 	watchedArg = "watched"
 )
 
-type AddDirectoriesCallback = func([]common.Directory) error
+type AddDirectoriesCallback = func([]common.Directory)
 type RemoveDirectoriesCallback = func(string) (common.Directory, error)
 
 type getDirectoriesRespone struct {
@@ -100,12 +100,14 @@ func (s *Server) directoriesPathHandler(res http.ResponseWriter, req *http.Reque
 		s.outLog.Printf("reading directory '%s' due to request from %s\n", dirPath, req.RemoteAddr)
 	}
 
-	return s.addDirectoriesCallback([]common.Directory{
+	s.addDirectoriesCallback([]common.Directory{
 		{
 			Path:    dirPath,
 			Watched: watchedDir,
 		},
 	})
+
+	return nil
 }
 
 func (s *Server) postDirectoriesFormArgumentsHandlers() map[string]common.FormArgument {
