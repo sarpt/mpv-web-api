@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/sarpt/mpv-web-api/internal/state"
 	"github.com/sarpt/mpv-web-api/pkg/probe"
@@ -12,42 +13,20 @@ var (
 	ErrPathNotDirectory = errors.New("path does not point to a directory")
 )
 
-func (s *Server) probeDirectory(directory string) {
-	s.outLog.Printf("probing directory %s\n", directory)
-
-	results := make(chan probe.Result)
-	// TODO: probe.Directory probably should be changed to probe.Directories(paths) or removed altogether,
-	// with probeDirectory from server taking walking the tree responsibilities
-	go probe.Directory(directory, results)
-	for probeResult := range results {
-		if !probeResult.IsMediaFile() {
-			continue
-		}
-
-		mediaFile := state.MapProbeResultToMediaFile(probeResult)
-		// TODO: this add should not occur in case the directory was removed from the directories state
-		// before this probe could finish
-		s.mediaFiles.Add(mediaFile)
-	}
-
-	s.outLog.Printf("finished probing directory %s\n", directory)
-}
-
-func (s *Server) probeFile(path string) {
+func (s *Server) probeFile(path string) (state.MediaFile, error) {
 	s.outLog.Printf("probing file %s\n", path)
 
-	probeResult, err := probe.File(path)
-	if err != nil {
-		s.errLog.Printf("error while probing '%s' file: %s", path, err)
-		return
+	probeResult := probe.File(path)
+	if probeResult.Err != nil {
+		return state.MediaFile{}, fmt.Errorf("error while probing '%s' file: %s", path, probeResult.Err)
 	}
 
 	if !probeResult.IsMediaFile() {
-		return
+		return state.MediaFile{}, fmt.Errorf("file '%s' is not a media file", path)
 	}
 
 	mediaFile := state.MapProbeResultToMediaFile(probeResult)
-	s.mediaFiles.Add(mediaFile)
-
 	s.outLog.Printf("finished probing file %s\n", path)
+
+	return mediaFile, nil
 }

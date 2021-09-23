@@ -103,7 +103,9 @@ func main() {
 		}
 	}
 
-	server.AddDirectories(mediaFilesDirectories)
+	go func() {
+		server.AddDirectories(mediaFilesDirectories)
+	}()
 
 	err = server.Serve()
 	if err != nil {

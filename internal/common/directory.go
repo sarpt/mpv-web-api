@@ -6,8 +6,9 @@ import (
 )
 
 type Directory struct {
-	Path    string
-	Watched bool
+	Path      string
+	Recursive bool
+	Watched   bool
 }
 
 // EnsureDirectoryPath

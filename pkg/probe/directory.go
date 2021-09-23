@@ -1,46 +1,32 @@
 package probe
 
 import (
-	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 )
 
-// SkippedFile holds information about the path of pile that is skipped from probing results and the reason for why it's skipped
-type SkippedFile struct {
-	Path string
-	Err  error
-}
+type ProbeResultHandler = func(Result)
 
-// Directory takes a single directory path that should be checked for media files.
-// TODO: Add error handling and some form of returning what files are skipped.
-func Directory(path string, results chan<- Result) {
-	defer close(results)
-	var skippedFiles []SkippedFile
+// Directory takes a directory path that should be checked for media files,
+// and a handler for each handler directory entry.
+// Returns error in case reading of the directory does not succeed.
+func Directory(path string, handler ProbeResultHandler) error {
+	pathFs := os.DirFS(path)
+	dirEntries, err := fs.ReadDir(pathFs, ".")
+	if err != nil {
+		return err
+	}
 
-	filepath.Walk(path, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			skippedFiles = append(skippedFiles, SkippedFile{
-				Path: path,
-				Err:  err,
-			})
-			return nil
+	for _, entry := range dirEntries {
+		if entry.IsDir() {
+			continue
 		}
 
-		if info.IsDir() {
-			return nil
-		}
+		entryPath := filepath.Join(path, entry.Name())
+		result := File(entryPath)
+		handler(result)
+	}
 
-		result, err := File(path)
-		if err != nil {
-			skippedFiles = append(skippedFiles, SkippedFile{
-				Path: path,
-				Err:  fmt.Errorf("file probing unsuccessful: %w", err),
-			})
-			return nil
-		}
-
-		results <- result
-		return nil
-	})
+	return err
 }

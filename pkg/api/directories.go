@@ -2,14 +2,19 @@ package api
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/sarpt/mpv-web-api/internal/common"
+	"github.com/sarpt/mpv-web-api/internal/state"
+	"github.com/sarpt/mpv-web-api/pkg/probe"
 )
 
-// ReadDirectory executes probing of directory concurrently.
-func (s *Server) ReadDirectory(path string) error {
+// readDirectory tries to read and probe directory,
+// adding found media files inside the directory.
+func (s *Server) readDirectory(path string) error {
 	info, err := os.Stat(path)
 	if err != nil {
 		return err
@@ -19,24 +24,56 @@ func (s *Server) ReadDirectory(path string) error {
 		return fmt.Errorf("%w: %s", ErrPathNotDirectory, path)
 	}
 
-	go s.probeDirectory(path)
+	s.outLog.Printf("probing directory %s\n", path)
+	err = probe.Directory(path, func(result probe.Result) {
+		if !result.IsMediaFile() {
+			return
+		}
 
-	return nil
+		mediaFile := state.MapProbeResultToMediaFile(result)
+		s.mediaFiles.Add(mediaFile)
+	})
+
+	return err
 }
 
 // AddDirectories adds root directories with media files to be handled by the server.
 // If the Directory entries are already present, they are overwritten along with their properties
 // (watched, recursive, etc.).
 // TODO: add posibility to disable recursivity
-func (s *Server) AddDirectories(directories []common.Directory) error {
-	for _, dir := range directories {
-		err := s.AddDirectory(dir)
-		if err != nil {
-			s.errLog.Printf("could not add directory '%s': %s\n", dir.Path, err)
+// TODO2: at the moment no error is being returned from the directories adding,
+// however some information about unsuccessful attempts should be returned
+// in addition to just printing it in server (for example for REST responses).
+func (s *Server) AddDirectories(rootDirectories []common.Directory) {
+	for _, rootDir := range rootDirectories {
+		walkErr := filepath.WalkDir(rootDir.Path, func(path string, dirEntry fs.DirEntry, err error) error {
+			if err != nil {
+				s.errLog.Printf("could not process entry '%s': %s\n", path, err)
+			}
+
+			if !dirEntry.IsDir() {
+				return nil
+			}
+
+			subDir := common.Directory{
+				Path:      path,
+				Recursive: rootDir.Recursive,
+				Watched:   rootDir.Watched,
+			}
+			addDirErr := s.AddDirectory(subDir)
+			if err != nil {
+				s.errLog.Printf("could not add directory '%s': %s\n", path, addDirErr)
+			} else {
+				s.outLog.Printf("directory added %s\n", path)
+			}
+
+			return nil
+		})
+
+		if walkErr != nil {
+			s.errLog.Printf("could not walk through the root directory '%s': %s\n", rootDir.Path, walkErr)
 		}
 	}
-
-	return nil
 }
 
 func (s *Server) AddDirectory(dir common.Directory) error {
@@ -55,7 +92,11 @@ func (s *Server) AddDirectory(dir common.Directory) error {
 		}
 	}
 
-	s.ReadDirectory(dir.Path)
+	err = s.readDirectory(dir.Path)
+	if err != nil {
+		return err
+	}
+
 	s.directories.Add(dir)
 
 	return nil

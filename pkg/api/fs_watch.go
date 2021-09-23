@@ -11,9 +11,12 @@ func (s *Server) handleFsEvent(event fsnotify.Event) error {
 	}
 
 	if shouldProbeMediaPath(event.Op) {
-		go s.probeFile(event.Name) // TODO: this does not necesarilly be run as a goroutine, change in the next commit with rest of probing refactor
+		mediaFile, err := s.probeFile(event.Name)
+		if err != nil {
+			return err
+		}
 
-		return nil
+		s.mediaFiles.Add(mediaFile)
 	}
 
 	return nil
