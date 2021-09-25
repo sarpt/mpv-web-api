@@ -94,13 +94,12 @@ func (m *MediaFiles) ByPath(path string) (MediaFile, error) {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 
-	for _, mediaFile := range m.items {
-		if mediaFile.path == path {
-			return mediaFile, nil
-		}
+	mediaFile, ok := m.items[path]
+	if !ok {
+		return MediaFile{}, errNoMediaFileAvailable
 	}
 
-	return MediaFile{}, errNoMediaFileAvailable
+	return mediaFile, nil
 }
 
 // ByParent returns media files with path under provided parent
@@ -122,6 +121,13 @@ func (m *MediaFiles) ByParent(parentPath string) []MediaFile {
 // Changes returns read-only channel notifying of mediaFiles changes.
 func (m *MediaFiles) Changes() <-chan interface{} {
 	return m.changes
+}
+
+// Exists checks whether media file with provided path exists.
+func (m *MediaFiles) Exists(path string) bool {
+	_, err := m.ByPath(path)
+
+	return err == nil
 }
 
 // PathsUnderParent returns paths of media files under provided parent
