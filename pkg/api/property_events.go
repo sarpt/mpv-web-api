@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/sarpt/mpv-web-api/internal/state"
 	"github.com/sarpt/mpv-web-api/pkg/mpv"
+	"github.com/sarpt/mpv-web-api/pkg/state"
 )
 
 var (

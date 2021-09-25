@@ -8,8 +8,8 @@ import (
 
 	"github.com/sarpt/goutils/pkg/listflag"
 
-	"github.com/sarpt/mpv-web-api/internal/common"
 	"github.com/sarpt/mpv-web-api/pkg/api"
+	"github.com/sarpt/mpv-web-api/pkg/state"
 )
 
 const (
@@ -74,7 +74,7 @@ func main() {
 		return
 	}
 
-	var mediaFilesDirectories []common.Directory
+	var mediaFilesDirectories []state.Directory
 	if len(dir.Values()) == 0 && len(watchDir.Values()) == 0 {
 		wd, err := os.Getwd()
 		if err != nil {
@@ -84,21 +84,21 @@ func main() {
 		}
 
 		outLog.Printf("No directories specified for server - watching working directory '%s'\n", wd)
-		mediaFilesDirectories = append(mediaFilesDirectories, common.Directory{
-			Path:    common.EnsureDirectoryPath(wd),
+		mediaFilesDirectories = append(mediaFilesDirectories, state.Directory{
+			Path:    state.EnsureDirectoryPath(wd),
 			Watched: true,
 		})
 	} else {
 		for _, dir := range watchDir.Values() {
-			mediaFilesDirectories = append(mediaFilesDirectories, common.Directory{
-				Path:    common.EnsureDirectoryPath(dir),
+			mediaFilesDirectories = append(mediaFilesDirectories, state.Directory{
+				Path:    state.EnsureDirectoryPath(dir),
 				Watched: true,
 			})
 		}
 
 		for _, dir := range dir.Values() {
-			mediaFilesDirectories = append(mediaFilesDirectories, common.Directory{
-				Path: common.EnsureDirectoryPath(dir),
+			mediaFilesDirectories = append(mediaFilesDirectories, state.Directory{
+				Path: state.EnsureDirectoryPath(dir),
 			})
 		}
 	}

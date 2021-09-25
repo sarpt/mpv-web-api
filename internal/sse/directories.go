@@ -3,8 +3,7 @@ package sse
 import (
 	"encoding/json"
 
-	"github.com/sarpt/mpv-web-api/internal/common"
-	"github.com/sarpt/mpv-web-api/internal/state"
+	"github.com/sarpt/mpv-web-api/pkg/state"
 )
 
 const (
@@ -12,7 +11,7 @@ const (
 )
 
 type directoriesMapChange struct {
-	Directories map[string]common.Directory
+	Directories map[string]state.Directory
 }
 
 func (dmc directoriesMapChange) MarshalJSON() ([]byte, error) {

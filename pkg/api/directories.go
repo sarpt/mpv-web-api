@@ -7,9 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/sarpt/mpv-web-api/internal/common"
-	"github.com/sarpt/mpv-web-api/internal/state"
 	"github.com/sarpt/mpv-web-api/pkg/probe"
+	"github.com/sarpt/mpv-web-api/pkg/state"
 )
 
 // readDirectory tries to read and probe directory,
@@ -44,7 +43,7 @@ func (s *Server) readDirectory(path string) error {
 // TODO2: at the moment no error is being returned from the directories adding,
 // however some information about unsuccessful attempts should be returned
 // in addition to just printing it in server (for example for REST responses).
-func (s *Server) AddDirectories(rootDirectories []common.Directory) {
+func (s *Server) AddDirectories(rootDirectories []state.Directory) {
 	for _, rootDir := range rootDirectories {
 		walkErr := filepath.WalkDir(rootDir.Path, func(path string, dirEntry fs.DirEntry, err error) error {
 			if err != nil {
@@ -55,7 +54,7 @@ func (s *Server) AddDirectories(rootDirectories []common.Directory) {
 				return nil
 			}
 
-			subDir := common.Directory{
+			subDir := state.Directory{
 				Path:      path,
 				Recursive: rootDir.Recursive,
 				Watched:   rootDir.Watched,
@@ -76,7 +75,7 @@ func (s *Server) AddDirectories(rootDirectories []common.Directory) {
 	}
 }
 
-func (s *Server) AddDirectory(dir common.Directory) error {
+func (s *Server) AddDirectory(dir state.Directory) error {
 	prevDir, err := s.directories.ByPath(dir.Path)
 	if err == nil && prevDir.Watched {
 		err := s.fsWatcher.Remove(prevDir.Path)
@@ -102,15 +101,15 @@ func (s *Server) AddDirectory(dir common.Directory) error {
 	return nil
 }
 
-func (s *Server) TakeDirectory(path string) (common.Directory, error) {
+func (s *Server) TakeDirectory(path string) (state.Directory, error) {
 	dir, err := s.directories.ByPath(path)
 	if err != nil {
-		return common.Directory{}, fmt.Errorf("could not remove directory '%s' - directory was not added", path)
+		return state.Directory{}, fmt.Errorf("could not remove directory '%s' - directory was not added", path)
 	}
 
 	if dir.Watched {
 		if err := s.fsWatcher.Remove(dir.Path); err != nil {
-			return common.Directory{}, fmt.Errorf("could not stop watching fs changes for a directory '%s': %s", path, err)
+			return state.Directory{}, fmt.Errorf("could not stop watching fs changes for a directory '%s': %s", path, err)
 		}
 	}
 
