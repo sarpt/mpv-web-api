@@ -58,7 +58,7 @@ func (s *Server) deleteDirectoriesHandler(res http.ResponseWriter, req *http.Req
 
 	var paths []string
 	for _, encodedPath := range encodedPaths {
-		unescapedPath, err := url.PathUnescape(encodedPath)
+		path, err := url.PathUnescape(encodedPath)
 		if err != nil {
 			res.WriteHeader(400)
 			res.Write([]byte(fmt.Sprintf("could not decode path '%s'", encodedPath)))
@@ -66,7 +66,6 @@ func (s *Server) deleteDirectoriesHandler(res http.ResponseWriter, req *http.Req
 			return
 		}
 
-		path := state.EnsureDirectoryPath(unescapedPath)
 		if !s.directories.Exists(path) {
 			res.WriteHeader(404)
 			res.Write([]byte(fmt.Sprintf("directory not found at path '%s'", encodedPath)))
@@ -93,17 +92,17 @@ func (s *Server) directoriesPathHandler(res http.ResponseWriter, req *http.Reque
 		return err
 	}
 
-	dirPath := state.EnsureDirectoryPath(req.PostFormValue(pathArg))
+	path := req.PostFormValue(pathArg)
 
 	if watchedDir {
-		s.outLog.Printf("watching directory '%s' due to request from %s\n", dirPath, req.RemoteAddr)
+		s.outLog.Printf("watching directory '%s' due to request from %s\n", path, req.RemoteAddr)
 	} else {
-		s.outLog.Printf("reading directory '%s' due to request from %s\n", dirPath, req.RemoteAddr)
+		s.outLog.Printf("reading directory '%s' due to request from %s\n", path, req.RemoteAddr)
 	}
 
 	s.addDirectoriesCallback([]state.Directory{
 		{
-			Path:    dirPath,
+			Path:    path,
 			Watched: watchedDir,
 		},
 	})

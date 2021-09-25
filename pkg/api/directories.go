@@ -39,19 +39,26 @@ func (s *Server) readDirectory(path string) error {
 // AddDirectories adds root directories with media files to be handled by the server.
 // If the Directory entries are already present, they are overwritten along with their properties
 // (watched, recursive, etc.).
-// TODO: add posibility to disable recursivity
 // TODO2: at the moment no error is being returned from the directories adding,
 // however some information about unsuccessful attempts should be returned
 // in addition to just printing it in server (for example for REST responses).
 func (s *Server) AddDirectories(rootDirectories []state.Directory) {
 	for _, rootDir := range rootDirectories {
-		walkErr := filepath.WalkDir(rootDir.Path, func(path string, dirEntry fs.DirEntry, err error) error {
+		rootPath := fmt.Sprintf("%s%c", rootDir.Path, filepath.Separator)
+
+		walkErr := filepath.WalkDir(rootPath, func(path string, dirEntry fs.DirEntry, err error) error {
 			if err != nil {
 				s.errLog.Printf("could not process entry '%s': %s\n", path, err)
+
+				return err
 			}
 
 			if !dirEntry.IsDir() {
 				return nil
+			}
+
+			if rootDir.Path != path && !rootDir.Recursive {
+				return fs.SkipDir
 			}
 
 			subDir := state.Directory{

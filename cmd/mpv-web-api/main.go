@@ -85,20 +85,21 @@ func main() {
 
 		outLog.Printf("No directories specified for server - watching working directory '%s'\n", wd)
 		mediaFilesDirectories = append(mediaFilesDirectories, state.Directory{
-			Path:    state.EnsureDirectoryPath(wd),
-			Watched: true,
+			Path:      wd,
+			Recursive: true,
+			Watched:   true,
 		})
 	} else {
 		for _, dir := range watchDir.Values() {
 			mediaFilesDirectories = append(mediaFilesDirectories, state.Directory{
-				Path:    state.EnsureDirectoryPath(dir),
+				Path:    dir,
 				Watched: true,
 			})
 		}
 
 		for _, dir := range dir.Values() {
 			mediaFilesDirectories = append(mediaFilesDirectories, state.Directory{
-				Path: state.EnsureDirectoryPath(dir),
+				Path: dir,
 			})
 		}
 	}

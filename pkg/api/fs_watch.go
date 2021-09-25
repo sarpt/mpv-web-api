@@ -1,22 +1,72 @@
 package api
 
-import "github.com/fsnotify/fsnotify"
+import (
+	"fmt"
+	"os"
 
-func (s *Server) handleFsEvent(event fsnotify.Event) error {
-	if shouldRemoveMediaPath(event.Op) {
-		s.outLog.Printf("removing media file '%s'\n", event.Name)
-		_, err := s.mediaFiles.Take(event.Name)
+	"github.com/fsnotify/fsnotify"
+	"github.com/sarpt/mpv-web-api/pkg/state"
+)
 
+func (s *Server) addFsEventTarget(path string) error {
+	fileInfo, err := os.Stat(path)
+	if err != nil {
 		return err
 	}
 
-	if shouldProbeMediaPath(event.Op) {
-		mediaFile, err := s.probeFile(event.Name)
+	if !fileInfo.IsDir() {
+		mediaFile, err := s.probeFile(path)
 		if err != nil {
 			return err
 		}
 
 		s.mediaFiles.Add(mediaFile)
+
+		return nil
+	}
+
+	parentDir, err := s.directories.ParentByPath(path)
+	if err != nil {
+		return fmt.Errorf("could not handle directory fs event for '%s' due to missing parent: %w", path, err)
+	}
+
+	if !parentDir.Recursive {
+		return nil
+	}
+
+	dir := state.Directory{
+		Path:      path,
+		Recursive: true,
+		Watched:   true,
+	}
+
+	return s.AddDirectory(dir)
+}
+
+func (s *Server) removeFsEventTarget(path string) error {
+	if s.mediaFiles.Exists(path) {
+		s.outLog.Printf("removing media file '%s'\n", path)
+		_, err := s.mediaFiles.Take(path)
+
+		return err
+	}
+
+	if s.directories.Exists(path) {
+		_, err := s.TakeDirectory(path)
+
+		return err
+	}
+
+	return nil
+}
+
+func (s *Server) handleFsEvent(event fsnotify.Event) error {
+	if shouldRemoveFsEventTarget(event.Op) {
+		return s.removeFsEventTarget(event.Name)
+	}
+
+	if shouldAddFsEventTarget(event.Op) {
+		return s.addFsEventTarget(event.Name)
 	}
 
 	return nil
@@ -48,10 +98,10 @@ func (s *Server) watchForFsChanges() {
 	}()
 }
 
-func shouldProbeMediaPath(op fsnotify.Op) bool {
+func shouldAddFsEventTarget(op fsnotify.Op) bool {
 	return op&fsnotify.Create == fsnotify.Create
 }
 
-func shouldRemoveMediaPath(op fsnotify.Op) bool {
+func shouldRemoveFsEventTarget(op fsnotify.Op) bool {
 	return op&(fsnotify.Rename|fsnotify.Remove) != 0
 }

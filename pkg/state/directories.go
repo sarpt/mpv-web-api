@@ -3,11 +3,13 @@ package state
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"path/filepath"
 	"sync"
 )
 
 var (
-	errNoDirectoryAvailable = errors.New("directory with specified path does not exist")
+	errNoDirectoryAvailable = errors.New("directory does not exist")
 )
 
 const (
@@ -52,7 +54,7 @@ func NewDirectories() *Directories {
 
 // Add appends a directory to the collection of directories handled by current server instance.
 func (d *Directories) Add(dir Directory) {
-	path := dir.Path
+	path := ensureDirectoryPath(dir.Path)
 
 	func() {
 		d.lock.Lock()
@@ -80,8 +82,8 @@ func (d *Directories) All() map[string]Directory {
 	d.lock.RLock()
 	defer d.lock.RUnlock()
 
-	for path, dir := range d.items {
-		allDirectories[path] = dir
+	for _, dir := range d.items {
+		allDirectories[dir.Path] = dir
 	}
 
 	return allDirectories
@@ -90,16 +92,17 @@ func (d *Directories) All() map[string]Directory {
 // ByPath returns a directory by a provided path.
 // When directory cannot be found, the error is being reported.
 func (d *Directories) ByPath(path string) (Directory, error) {
+	keyPath := ensureDirectoryPath(path)
+
 	d.lock.RLock()
 	defer d.lock.RUnlock()
 
-	for _, dir := range d.items {
-		if dir.Path == path {
-			return dir, nil
-		}
+	dir, ok := d.items[keyPath]
+	if !ok {
+		return Directory{}, errNoDirectoryAvailable
 	}
 
-	return Directory{}, errNoDirectoryAvailable
+	return dir, nil
 }
 
 // Exists checks wheter directory under path is handled.
@@ -109,23 +112,39 @@ func (d *Directories) Exists(path string) bool {
 	return err == nil
 }
 
+// ParentByPath returns direct parent of the path.
+// If not found, returns error errNoDirectoryAvailable.
+func (d *Directories) ParentByPath(path string) (Directory, error) {
+	d.lock.RLock()
+	defer d.lock.RUnlock()
+
+	dir, err := d.ByPath(filepath.Dir(path))
+	if err != nil {
+		return Directory{}, err
+	}
+
+	return dir, nil
+}
+
 // Take removes directory by a provided path from the state,
 // returning the object for use after removal.
 // When directory cannot be found, the error is being reported.
 func (d *Directories) Take(path string) (Directory, error) {
-	dir, err := d.ByPath(path)
+	keyPath := ensureDirectoryPath(path)
+
+	dir, err := d.ByPath(keyPath)
 	if err != nil {
 		return Directory{}, err
 	}
 
 	d.lock.Lock()
-	delete(d.items, path)
+	delete(d.items, keyPath)
 	d.lock.Unlock()
 
 	d.changes <- DirectoriesChange{
 		variant: RemovedDirectoriesChange,
 		items: map[string]Directory{
-			path: dir,
+			keyPath: dir,
 		},
 	}
 
@@ -135,4 +154,12 @@ func (d *Directories) Take(path string) (Directory, error) {
 // Changes returns read-only channel notifying of mediaFiles changes.
 func (d *Directories) Changes() <-chan interface{} {
 	return d.changes
+}
+
+func ensureDirectoryPath(path string) string {
+	if path[len(path)-1] == filepath.Separator {
+		return path
+	}
+
+	return fmt.Sprintf("%s%c", path, filepath.Separator)
 }
