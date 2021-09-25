@@ -8,17 +8,18 @@ import (
 	"strconv"
 
 	"github.com/sarpt/mpv-web-api/internal/common"
+	"github.com/sarpt/mpv-web-api/pkg/state"
 )
 
 const (
 	watchedArg = "watched"
 )
 
-type AddDirectoriesCallback = func([]common.Directory)
-type RemoveDirectoriesCallback = func(string) (common.Directory, error)
+type AddDirectoriesCallback = func([]state.Directory)
+type RemoveDirectoriesCallback = func(string) (state.Directory, error)
 
 type getDirectoriesRespone struct {
-	Directories map[string]common.Directory `json:"directories"`
+	Directories map[string]state.Directory `json:"directories"`
 }
 
 func (s *Server) SetAddDirectoriesCallback(callback AddDirectoriesCallback) {
@@ -65,7 +66,7 @@ func (s *Server) deleteDirectoriesHandler(res http.ResponseWriter, req *http.Req
 			return
 		}
 
-		path := common.EnsureDirectoryPath(unescapedPath)
+		path := state.EnsureDirectoryPath(unescapedPath)
 		if !s.directories.Exists(path) {
 			res.WriteHeader(404)
 			res.Write([]byte(fmt.Sprintf("directory not found at path '%s'", encodedPath)))
@@ -92,7 +93,7 @@ func (s *Server) directoriesPathHandler(res http.ResponseWriter, req *http.Reque
 		return err
 	}
 
-	dirPath := common.EnsureDirectoryPath(req.PostFormValue(pathArg))
+	dirPath := state.EnsureDirectoryPath(req.PostFormValue(pathArg))
 
 	if watchedDir {
 		s.outLog.Printf("watching directory '%s' due to request from %s\n", dirPath, req.RemoteAddr)
@@ -100,7 +101,7 @@ func (s *Server) directoriesPathHandler(res http.ResponseWriter, req *http.Reque
 		s.outLog.Printf("reading directory '%s' due to request from %s\n", dirPath, req.RemoteAddr)
 	}
 
-	s.addDirectoriesCallback([]common.Directory{
+	s.addDirectoriesCallback([]state.Directory{
 		{
 			Path:    dirPath,
 			Watched: watchedDir,

@@ -1,6 +1,6 @@
 package sse
 
-import "github.com/sarpt/mpv-web-api/internal/state"
+import "github.com/sarpt/mpv-web-api/pkg/state"
 
 const (
 	playlistsSSEChannelVariant state.SSEChannelVariant = "playlists"

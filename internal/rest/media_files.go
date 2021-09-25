@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/sarpt/mpv-web-api/internal/state"
+	"github.com/sarpt/mpv-web-api/pkg/state"
 )
 
 type getMediaFilesRespone struct {

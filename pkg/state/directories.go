@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"sync"
-
-	"github.com/sarpt/mpv-web-api/internal/common"
 )
 
 var (
@@ -26,7 +24,7 @@ const (
 // DirectoriesChange holds information about changes to the collection of directories being handled.
 type DirectoriesChange struct {
 	variant DirectoriesChangeVariant
-	items   map[string]common.Directory
+	items   map[string]Directory
 }
 
 // MarshalJSON returns change items in JSON format. Satisfies json.Marshaller.
@@ -39,7 +37,7 @@ type DirectoriesChangeVariant string
 
 type Directories struct {
 	changes chan interface{}
-	items   map[string]common.Directory
+	items   map[string]Directory
 	lock    *sync.RWMutex
 }
 
@@ -47,13 +45,13 @@ type Directories struct {
 func NewDirectories() *Directories {
 	return &Directories{
 		changes: make(chan interface{}),
-		items:   map[string]common.Directory{},
+		items:   map[string]Directory{},
 		lock:    &sync.RWMutex{},
 	}
 }
 
 // Add appends a directory to the collection of directories handled by current server instance.
-func (d *Directories) Add(dir common.Directory) {
+func (d *Directories) Add(dir Directory) {
 	path := dir.Path
 
 	func() {
@@ -69,15 +67,15 @@ func (d *Directories) Add(dir common.Directory) {
 
 	d.changes <- DirectoriesChange{
 		variant: AddedDirectoriesChange,
-		items: map[string]common.Directory{
+		items: map[string]Directory{
 			path: dir,
 		},
 	}
 }
 
 // All returns a copy of all Directories being handled by the instance of the server.
-func (d *Directories) All() map[string]common.Directory {
-	allDirectories := map[string]common.Directory{}
+func (d *Directories) All() map[string]Directory {
+	allDirectories := map[string]Directory{}
 
 	d.lock.RLock()
 	defer d.lock.RUnlock()
@@ -91,7 +89,7 @@ func (d *Directories) All() map[string]common.Directory {
 
 // ByPath returns a directory by a provided path.
 // When directory cannot be found, the error is being reported.
-func (d *Directories) ByPath(path string) (common.Directory, error) {
+func (d *Directories) ByPath(path string) (Directory, error) {
 	d.lock.RLock()
 	defer d.lock.RUnlock()
 
@@ -101,7 +99,7 @@ func (d *Directories) ByPath(path string) (common.Directory, error) {
 		}
 	}
 
-	return common.Directory{}, errNoDirectoryAvailable
+	return Directory{}, errNoDirectoryAvailable
 }
 
 // Exists checks wheter directory under path is handled.
@@ -114,10 +112,10 @@ func (d *Directories) Exists(path string) bool {
 // Take removes directory by a provided path from the state,
 // returning the object for use after removal.
 // When directory cannot be found, the error is being reported.
-func (d *Directories) Take(path string) (common.Directory, error) {
+func (d *Directories) Take(path string) (Directory, error) {
 	dir, err := d.ByPath(path)
 	if err != nil {
-		return common.Directory{}, err
+		return Directory{}, err
 	}
 
 	d.lock.Lock()
@@ -126,7 +124,7 @@ func (d *Directories) Take(path string) (common.Directory, error) {
 
 	d.changes <- DirectoriesChange{
 		variant: RemovedDirectoriesChange,
-		items: map[string]common.Directory{
+		items: map[string]Directory{
 			path: dir,
 		},
 	}
