@@ -57,13 +57,15 @@ func NewMediaFiles() *MediaFiles {
 func (m *MediaFiles) Add(mediaFile MediaFile) {
 	path := mediaFile.path
 
-	m.lock.Lock()
-	if _, ok := m.items[path]; ok {
-		return
-	}
+	go func() {
+		m.lock.Lock()
+		defer m.lock.Unlock()
+		if _, ok := m.items[path]; ok {
+			return
+		}
 
-	m.items[path] = mediaFile
-	m.lock.Unlock()
+		m.items[path] = mediaFile
+	}()
 
 	addedMediaFiles := map[string]MediaFile{
 		path: mediaFile,

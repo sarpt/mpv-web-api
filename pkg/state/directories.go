@@ -54,7 +54,7 @@ func NewDirectories() *Directories {
 
 // Add appends a directory to the collection of directories handled by current server instance.
 func (d *Directories) Add(dir Directory) {
-	path := ensureDirectoryPath(dir.Path)
+	path := EnsureDirectoryPath(dir.Path)
 
 	func() {
 		d.lock.Lock()
@@ -92,7 +92,7 @@ func (d *Directories) All() map[string]Directory {
 // ByPath returns a directory by a provided path.
 // When directory cannot be found, the error is being reported.
 func (d *Directories) ByPath(path string) (Directory, error) {
-	keyPath := ensureDirectoryPath(path)
+	keyPath := EnsureDirectoryPath(path)
 
 	d.lock.RLock()
 	defer d.lock.RUnlock()
@@ -115,9 +115,6 @@ func (d *Directories) Exists(path string) bool {
 // ParentByPath returns direct parent of the path.
 // If not found, returns error errNoDirectoryAvailable.
 func (d *Directories) ParentByPath(path string) (Directory, error) {
-	d.lock.RLock()
-	defer d.lock.RUnlock()
-
 	dir, err := d.ByPath(filepath.Dir(path))
 	if err != nil {
 		return Directory{}, err
@@ -130,7 +127,7 @@ func (d *Directories) ParentByPath(path string) (Directory, error) {
 // returning the object for use after removal.
 // When directory cannot be found, the error is being reported.
 func (d *Directories) Take(path string) (Directory, error) {
-	keyPath := ensureDirectoryPath(path)
+	keyPath := EnsureDirectoryPath(path)
 
 	dir, err := d.ByPath(keyPath)
 	if err != nil {
@@ -156,7 +153,7 @@ func (d *Directories) Changes() <-chan interface{} {
 	return d.changes
 }
 
-func ensureDirectoryPath(path string) string {
+func EnsureDirectoryPath(path string) string {
 	if path[len(path)-1] == filepath.Separator {
 		return path
 	}

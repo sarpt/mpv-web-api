@@ -174,6 +174,9 @@ func (s *Server) Serve() error {
 }
 
 func (s *Server) initWatchers() error {
+	go s.watchSSEObserversChanges()
+	s.sseServer.InitDispatchers()
+
 	observePropertyResponses := make(chan mpv.ObservePropertyResponse)
 	observePropertyHandlers := map[string]observePropertyHandler{
 		mpv.AudioIDProperty:            s.handleAudioIDChangeEvent,
@@ -187,9 +190,6 @@ func (s *Server) initWatchers() error {
 		mpv.PlaylistPlayingPosProperty: s.handlePlaylistPlayingPosEvent,
 		mpv.SubtitleIDProperty:         s.handleSubtitleIDChangeEvent,
 	}
-
-	go s.watchSSEObserversChanges()
-	s.sseServer.InitDispatchers()
 	go s.watchObservePropertyResponses(observePropertyHandlers, observePropertyResponses)
 
 	return s.observeProperties(observePropertyResponses)

@@ -44,7 +44,7 @@ func (s *Server) readDirectory(path string) error {
 // in addition to just printing it in server (for example for REST responses).
 func (s *Server) AddDirectories(rootDirectories []state.Directory) {
 	for _, rootDir := range rootDirectories {
-		rootPath := fmt.Sprintf("%s%c", rootDir.Path, filepath.Separator)
+		rootPath := state.EnsureDirectoryPath(rootDir.Path)
 
 		walkErr := filepath.WalkDir(rootPath, func(path string, dirEntry fs.DirEntry, err error) error {
 			if err != nil {
