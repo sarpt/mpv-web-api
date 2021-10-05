@@ -2,51 +2,51 @@ package state
 
 import (
 	"encoding/json"
+	"sync"
 
 	"github.com/google/uuid"
 )
 
-const (
-	defaultName string = "default"
-)
-
 // Playlist holds state about currently playing playlist.
 type Playlist struct {
-	items []string
-	name  string
-	uuid  string
+	description string
+	entries     []PlaylistEntry
+	name        string
+	lock        *sync.RWMutex
+	uuid        string
 }
 
 type playlistJSON struct {
-	Items []string `json:"Items"`
-	Name  string   `json:"Name"`
-	UUID  string   `json:"UUID"`
+	Description string          `json:"Description"`
+	Entries     []PlaylistEntry `json:"Entries"`
+	Name        string          `json:"Name"`
+	UUID        string          `json:"UUID"`
 }
 
 type PlaylistConfig struct {
-	Name string
+	Name        string
+	Description string
+	Entries     []PlaylistEntry
 }
 
 // NewPlaylist constructs Playlist state.
 func NewPlaylist(cfg PlaylistConfig) *Playlist {
-	var name string = defaultName
-	if cfg.Name != "" {
-		name = cfg.Name
-	}
-
 	return &Playlist{
-		items: []string{},
-		name:  name,
-		uuid:  uuid.NewString(),
+		description: cfg.Description,
+		entries:     []PlaylistEntry{},
+		name:        cfg.Name,
+		lock:        &sync.RWMutex{},
+		uuid:        uuid.NewString(),
 	}
 }
 
 // MarshalJSON satisifes json.Marshaller.
 func (p *Playlist) MarshalJSON() ([]byte, error) {
 	pJSON := playlistJSON{
-		Items: p.items,
-		Name:  p.name,
-		UUID:  p.uuid,
+		Description: p.description,
+		Entries:     p.entries,
+		Name:        p.name,
+		UUID:        p.uuid,
 	}
 	return json.Marshal(pJSON)
 }

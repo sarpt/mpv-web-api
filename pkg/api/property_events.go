@@ -75,18 +75,24 @@ func (s *Server) handlePlaylistProperty(res mpv.ObservePropertyResponse) error {
 	// TODO: below should be used something resembling a set - the playlist will fire at every possible change to the MPV map type,
 	// which due to having flag specifying which of the item is currently played will result in firing with the same items array,
 	// even though the list did not change.
-	items := []string{}
+	items := []state.PlaylistEntry{}
 	for _, playlistItem := range playlistItems {
-		items = append(items, playlistItem.Filename)
+		items = append(items, state.PlaylistEntry{
+			Path: playlistItem.Filename,
+		})
 	}
 
 	if !s.playback.PlaylistSelected() {
 		newPlaylist := state.NewPlaylist(state.PlaylistConfig{})
-		s.playlists.AddPlaylist(newPlaylist)
-		s.playback.SelectPlaylist(newPlaylist.UUID())
+		uuid, err := s.playlists.AddPlaylist(newPlaylist)
+		if err != nil {
+			return err
+		}
+
+		s.playback.SelectPlaylist(uuid)
 	}
 
-	return s.playlists.SetPlaylistItems(s.playback.PlaylistUUID(), items)
+	return s.playlists.SetPlaylistEntries(s.playback.PlaylistUUID(), items)
 }
 
 func (s *Server) handlePlaylistPlayingPosEvent(res mpv.ObservePropertyResponse) error {

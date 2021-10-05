@@ -14,35 +14,48 @@ import (
 // readDirectory tries to read and probe directory,
 // adding found media files inside the directory.
 func (s *Server) readDirectory(path string) error {
-	info, err := os.Stat(path)
+	pathFs := os.DirFS(path)
+	dirEntries, err := fs.ReadDir(pathFs, ".")
 	if err != nil {
 		return err
 	}
 
-	if !info.IsDir() {
-		return fmt.Errorf("%w: %s", ErrPathNotDirectory, path)
-	}
+	s.outLog.Printf("reading directory %s\n", path)
+	for _, entry := range dirEntries {
+		if entry.IsDir() {
+			continue
+		}
 
-	s.outLog.Printf("probing directory %s\n", path)
-	err = probe.Directory(path, func(result probe.Result) {
+		entryPath := filepath.Join(path, entry.Name())
+
+		if s.hasPlaylistFilePrefix(entryPath) {
+			err := s.handlePlaylistFile(entryPath)
+			if err == nil {
+				continue // successfuly handled playlist files don't need to be probed or handled in any other way
+			}
+
+			s.errLog.Printf("could not handle file with playlist prefix: %s", err)
+		}
+
+		result := probe.File(entryPath)
 		if !result.IsMediaFile() {
-			return
+			continue
 		}
 
 		mediaFile := state.MapProbeResultToMediaFile(result)
 		s.mediaFiles.Add(mediaFile)
-	})
+	}
 
 	return err
 }
 
-// AddDirectories adds root directories with media files to be handled by the server.
+// AddRootDirectories adds root directories with media files to be handled by the server.
 // If the Directory entries are already present, they are overwritten along with their properties
 // (watched, recursive, etc.).
 // TODO2: at the moment no error is being returned from the directories adding,
 // however some information about unsuccessful attempts should be returned
 // in addition to just printing it in server (for example for REST responses).
-func (s *Server) AddDirectories(rootDirectories []state.Directory) {
+func (s *Server) AddRootDirectories(rootDirectories []state.Directory) {
 	for _, rootDir := range rootDirectories {
 		rootPath := state.EnsureDirectoryPath(rootDir.Path)
 
