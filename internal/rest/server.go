@@ -20,7 +20,7 @@ type Config struct {
 	MediaFiles  *state.MediaFiles
 	MPVManger   *mpv.Manager
 	Playback    *state.Playback
-	Playlist    *state.Playlist
+	Playlists   *state.Playlists
 	OutWriter   io.Writer
 	Status      *state.Status
 }
@@ -39,7 +39,7 @@ type Server struct {
 	mediaFiles                *state.MediaFiles
 	mpvManager                *mpv.Manager
 	playback                  *state.Playback
-	playlist                  *state.Playlist
+	playlists                 *state.Playlists
 	outLog                    *log.Logger
 	status                    *state.Status
 }
@@ -53,7 +53,7 @@ func NewServer(cfg Config) *Server {
 		mediaFiles:  cfg.MediaFiles,
 		mpvManager:  cfg.MPVManger,
 		playback:    cfg.Playback,
-		playlist:    cfg.Playlist,
+		playlists:   cfg.Playlists,
 		outLog:      log.New(cfg.OutWriter, logPrefix, log.LstdFlags),
 		status:      cfg.Status,
 	}

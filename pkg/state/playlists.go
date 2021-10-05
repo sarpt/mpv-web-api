@@ -2,8 +2,11 @@ package state
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
+
+	"github.com/google/uuid"
 )
 
 type Playlists struct {
@@ -30,20 +33,20 @@ const (
 	PlaylistsItemsChange PlaylistsChangeVariant = "itemsChange"
 )
 
+var (
+	ErrPlaylistWithUUIDAlreadyExists = errors.New("playlist with UUID already exists")
+)
+
 // PlaylistsChange is used to inform about changes to the Playback.
 type PlaylistsChange struct {
 	Variant PlaylistsChangeVariant
 }
 
 func NewPlaylists() *Playlists {
-	defaultPlaylist := NewPlaylist(PlaylistConfig{})
-
 	return &Playlists{
 		changes: make(chan interface{}),
-		items: map[string]*Playlist{
-			defaultPlaylist.uuid: defaultPlaylist,
-		},
-		lock: &sync.RWMutex{},
+		items:   map[string]*Playlist{},
+		lock:    &sync.RWMutex{},
 	}
 }
 
@@ -76,8 +79,8 @@ func (p *Playlists) MarshalJSON() ([]byte, error) {
 	return json.Marshal(pJSON)
 }
 
-// SetPlaylistItems sets items of the playlist with uuid.
-func (p *Playlists) SetPlaylistItems(uuid string, items []string) error {
+// SetPlaylistEntries sets items of the playlist with uuid.
+func (p *Playlists) SetPlaylistEntries(uuid string, items []PlaylistEntry) error {
 	p.lock.RLock()
 	playlist, ok := p.items[uuid]
 	p.lock.RUnlock()
@@ -86,7 +89,7 @@ func (p *Playlists) SetPlaylistItems(uuid string, items []string) error {
 	}
 
 	p.lock.Lock()
-	playlist.items = items
+	playlist.entries = items
 	p.lock.Unlock()
 
 	p.changes <- PlaylistsChange{
@@ -95,14 +98,27 @@ func (p *Playlists) SetPlaylistItems(uuid string, items []string) error {
 	return nil
 }
 
-// SetPlaylistItems sets items of the playlist with uuid.
-func (p *Playlists) AddPlaylist(playlist *Playlist) error {
+// AddPlaylist sets items of the playlist with uuid.
+// Returns UUID of new playlist.
+// Note: AddPlaylist is responsible for creating an UUID since users of the
+// functions should not be trusted that playlist has a valid, if any, UUID.
+func (p *Playlists) AddPlaylist(playlist *Playlist) (string, error) {
+	if playlist.uuid == "" {
+		uuid := uuid.NewString()
+		playlist.uuid = uuid
+	}
+
+	if _, ok := p.items[playlist.uuid]; ok {
+		return playlist.uuid, fmt.Errorf("%w: %s", ErrPlaylistWithUUIDAlreadyExists, playlist.uuid)
+	}
+
 	p.lock.Lock()
-	p.items[playlist.UUID()] = playlist
+	p.items[playlist.uuid] = playlist
 	p.lock.Unlock()
 
 	p.changes <- PlaylistsChange{
 		Variant: PlaylistsAdded,
 	}
-	return nil
+
+	return playlist.uuid, nil
 }

@@ -10,6 +10,7 @@ const (
 	mediaFilesPath  = "/rest/media-files"
 	directoriesPath = "/rest/directories"
 	playbackPath    = "/rest/playback"
+	playlistsPath   = "/rest/playlists"
 )
 
 // Handler returns http.Handler responsible for REST handling subtree.
@@ -23,6 +24,10 @@ func (s *Server) Handler() http.Handler {
 		http.MethodGet: s.getMediaFilesHandler,
 	}
 
+	playlistsHandlers := map[string]http.HandlerFunc{
+		http.MethodGet: s.getPlaylistsHandler,
+	}
+
 	directoriesHandlers := map[string]http.HandlerFunc{
 		http.MethodGet:    s.getDirectoriesHandler,
 		http.MethodPost:   common.CreateFormHandler(s.postDirectoriesFormArgumentsHandlers()),
@@ -33,6 +38,7 @@ func (s *Server) Handler() http.Handler {
 		playbackPath:    playbackHandlers,
 		mediaFilesPath:  mediaFilesHandlers,
 		directoriesPath: directoriesHandlers,
+		playlistsPath:   playlistsHandlers,
 	}
 
 	mux := http.NewServeMux()

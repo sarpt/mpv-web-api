@@ -25,20 +25,21 @@ type observePropertyHandler = func(res mpv.ObservePropertyResponse) error
 
 // Server is used to serve API and hold state accessible to the API.
 type Server struct {
-	address            string
-	directories        *state.Directories
-	errLog             *log.Logger
-	fsWatcher          *fsnotify.Watcher
-	mediaFiles         *state.MediaFiles
-	mpvManager         *mpv.Manager
-	mpvSocketPath      string
-	outLog             *log.Logger
-	playback           *state.Playback
-	playlists          *state.Playlists
-	restServer         *rest.Server
-	sseObserverChanges chan sse.ObserversChange
-	sseServer          *sse.Server
-	status             *state.Status
+	address               string
+	directories           *state.Directories
+	errLog                *log.Logger
+	fsWatcher             *fsnotify.Watcher
+	mediaFiles            *state.MediaFiles
+	mpvManager            *mpv.Manager
+	mpvSocketPath         string
+	outLog                *log.Logger
+	playback              *state.Playback
+	playlists             *state.Playlists
+	playlistFilesPrefixes []string
+	restServer            *rest.Server
+	sseObserverChanges    chan sse.ObserversChange
+	sseServer             *sse.Server
+	status                *state.Status
 }
 
 // Config controls behaviour of the api server.
@@ -47,6 +48,7 @@ type Config struct {
 	AllowCORS               bool
 	ErrWriter               io.Writer
 	MpvSocketPath           string
+	PlaylistFilesPrefixes   []string
 	OutWriter               io.Writer
 	SocketConnectionTimeout time.Duration
 	StartMpvInstance        bool
@@ -102,6 +104,7 @@ func NewServer(cfg Config) (*Server, error) {
 		MPVManger:   mpvManager,
 		OutWriter:   cfg.OutWriter,
 		Playback:    playback,
+		Playlists:   playlists,
 		Status:      status,
 	}
 	restServer := rest.NewServer(restCfg)
@@ -117,18 +120,25 @@ func NewServer(cfg Config) (*Server, error) {
 		log.New(cfg.OutWriter, logPrefix, log.LstdFlags),
 		playback,
 		playlists,
+		cfg.PlaylistFilesPrefixes,
 		restServer,
 		sseObserversChanges,
 		sseServer,
 		status,
 	}
 
-	restServer.SetAddDirectoriesCallback(server.AddDirectories)
+	restServer.SetAddDirectoriesCallback(server.AddRootDirectories)
 	restServer.SetDeleteDirectoriesCallback(server.TakeDirectory)
 	err = server.initWatchers()
 	if err != nil {
 		return server, errors.New("could not start watching for properties")
 	}
+
+	defaultPlaylistUUID, err := server.createDefaultPlaylist()
+	if err != nil {
+		return server, err
+	}
+	server.playback.SelectPlaylist(defaultPlaylistUUID)
 
 	return server, nil
 }
