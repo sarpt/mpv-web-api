@@ -21,6 +21,8 @@ func (s *Server) readDirectory(path string) error {
 	}
 
 	s.outLog.Printf("reading directory %s\n", path)
+	var playlistUUIDs []string
+	var playlistEntries []state.PlaylistEntry
 	for _, entry := range dirEntries {
 		if entry.IsDir() {
 			continue
@@ -29,8 +31,10 @@ func (s *Server) readDirectory(path string) error {
 		entryPath := filepath.Join(path, entry.Name())
 
 		if s.hasPlaylistFilePrefix(entryPath) {
-			err := s.handlePlaylistFile(entryPath)
+			uuid, err := s.handlePlaylistFile(entryPath)
 			if err == nil {
+				playlistUUIDs = append(playlistUUIDs, uuid)
+
 				continue // successfuly handled playlist files don't need to be probed or handled in any other way
 			}
 
@@ -44,6 +48,26 @@ func (s *Server) readDirectory(path string) error {
 
 		mediaFile := state.MapProbeResultToMediaFile(result)
 		s.mediaFiles.Add(mediaFile)
+
+		entry := state.PlaylistEntry{
+			Path: mediaFile.Path(),
+		}
+		playlistEntries = append(playlistEntries, entry)
+	}
+
+	for _, uuid := range playlistUUIDs {
+		playlist, err := s.playlists.ByUUID(uuid)
+		if err != nil {
+			s.errLog.Printf("could not find playlists with provided uuid '%s': %s", uuid, err)
+
+			continue
+		}
+
+		if !playlist.DirectoryContentsAsEntries() {
+			continue
+		}
+
+		s.playlists.SetPlaylistEntries(uuid, playlistEntries)
 	}
 
 	return err
