@@ -35,6 +35,7 @@ const (
 
 var (
 	ErrPlaylistWithUUIDAlreadyExists = errors.New("playlist with UUID already exists")
+	ErrPlaylistWithUUIDDoesNotExist  = errors.New("playlist with provided uuid does not exist")
 )
 
 // PlaylistsChange is used to inform about changes to the Playback.
@@ -62,6 +63,18 @@ func (p *Playlists) All() map[string]*Playlist {
 	}
 
 	return allPlaylists
+}
+
+func (p *Playlists) ByUUID(uuid string) (*Playlist, error) {
+	p.lock.RLock()
+	defer p.lock.RUnlock()
+
+	playlist, ok := p.items[uuid]
+	if !ok {
+		return &Playlist{}, ErrPlaylistWithUUIDDoesNotExist
+	}
+
+	return playlist, nil
 }
 
 func (p *Playlists) Changes() <-chan interface{} {

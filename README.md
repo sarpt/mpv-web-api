@@ -13,16 +13,17 @@ It's main use is to be a backend for [mpv-web-front](https://github.com/sarpt/mp
 
 ### Dependencies for builidng
 
-- `go` (tested on 1.14, might build on earlier versions, recommended 1.16.5 and up because of the bomb-ass improvements to the arguments help display)
+- `go` (tested on `1.14`, might build on earlier versions, recommended `1.16.5` and up because of the bomb-ass improvements to the arguments help display)
 
 ### Arguments
 
-- `allow-cors` - bool - (default: false) whether Cross Origin Requests should be allowed
-- `addr` - string - (default: localhost:3001) address used to host the server
+- `allow-cors` - bool - (default: `false`) whether Cross Origin Requests should be allowed
+- `addr` - string - (default: `localhost:3001`) address used to host the server
 - `dir` - []string - directories that should be scanned for media files only once. To specify more than one directory to be handled, multiple `--dir=<path>` arguments can be specified eg. `--dir=/path1 --dir=/path2`. The server will only handle paths provided by clients that start with one of the paths provided to `dir`.
-- `mpv-socket-path` - string - (default: /tmp/mpvsocket) path to socket file used by MPV instance
-- `socket-timeout` - int - (defualt: 15) maximum allowed time in seconds for retrying connection to MPV socket
-- `start-mpv-instance` - bool - (default: true) when set to true, `mpv-web-api` will create it's own MPV process. When set to false, `mpv-web-api` will only try to connect to MPV using file at `mpv-socket-path`. Particularly useful when trying to run `mpv-web-api` in docker and connecting to local MPV instance
+- `mpv-socket-path` - string - (default: `/tmp/mpvsocket`) path to socket file used by MPV instance
+- `playlist-prefix` - []string - list of prefixes for playlist JSON files located in directories being handled by the server instance. For more informations on playlists please check related section.
+- `socket-timeout` - int - (defualt: `15`) maximum allowed time in seconds for retrying connection to MPV socket
+- `start-mpv-instance` - bool - (default: `true`) when set to true, `mpv-web-api` will create it's own MPV process. When set to false, `mpv-web-api` will only try to connect to MPV using file at `mpv-socket-path`. Particularly useful when trying to run `mpv-web-api` in docker and connecting to local MPV instance
 - `watch-dir` - []string - directories that should be scanned for media files AND being watched for future changes to the underlying files. The argument works in the same way as a read-only variant `--dir`. If no paths are provided with neither `--dir` nor `--watch-dir`, a current working directory is watched by default.
 
 ### Building & Execution
@@ -39,7 +40,7 @@ In case the server is ran to serve as a backend to `mpv-web-front` on a local ma
 
 Many REST endpoints are not implemented yet, since `mpv-web-front` mostly uses SSEs to sync it's state (REST would require some kind of polling), while using REST mainly for sending instructions to server (and by extension, mpv). Target implementation however has whole REST/SSE parity planned when it comes to information fetching (`GET`s).
 
-- `DELETE "/directories"` - deletes directories that match paths provided as a URL query `path` parameters
+- `DELETE "/directories"` - deletes directories that match paths provided as a URL query `path` parameters. Deleting a directory stops watch of new files and removes it's content from being played.
   - `path` - string[] - paths to directories client wishes to be deleted. In URI it takes the form of `/rest/directories?path=%2Fpath%2Fto%2Fdir%2`. The path should be escaped, although unescaped *may* work. The ending separator is not necessary to be present. 
 - `GET "/directories"` - returns information about directories handled by the server instance: their paths and whether the directory is watched for changes
 - `POST "/directories"` - add directory with media files for server to handle
@@ -66,7 +67,7 @@ Many REST endpoints are not implemented yet, since `mpv-web-front` mostly uses S
 ### Server Sent Events
 SSE is used by server to notify reactively of changes to it's various states, eg. change of currently played media file in playback, new media files added, new directories added, changes to the current playlist etc. SSE communication is optional and the idea is to have all states queryable by REST API endpoints with `GET`, but since this is a constant WIP it may not always be the case - SSE takes priority in implementation since `mpv-web-front` uses it primarily to get updates without polling the server constantly.
 
-Events are aggregated into channels, to which client subscribes. Due to limits of simultaneous connections count to a singular target, client should have only one open SSE connection that receives updates to all of the subscribed channels (that's how `mpv-web-front` does it). Since a standard Server Sent Event has "name" and "data" fields, the grouping has to be incorporated into one of them. For transparency of mechanism and ease of use, `mpv-web-api` uses name field with a `"."` separator to specify on which channel event was broadcasted, eg. `mediaFiles.added` is an `added` event on a `mediaFiles` channel etc.
+Events are aggregated into channels, to which client subscribes. Due to limits of simultaneous connections count to a singular target, client should have only one open SSE connection that receives updates to all of the subscribed channels (that's how `mpv-web-front` does it). Since a standard Server Sent Event has `name` and `data` fields, the grouping has to be incorporated into one of them. For transparency of mechanism and ease of use, `mpv-web-api` uses name field with a `.` separator to specify on which channel event was broadcasted, eg. `mediaFiles.added` is an `added` event on a `mediaFiles` channel etc.
 
 In order to subsrcibe to channel(s), `/sse` REST endpoint should be used - how to use it is explained in the related REST endpoints section above.
 
@@ -99,7 +100,7 @@ Channels and their events:
   - `playbackTimeChange` - mpv changed it's `playback-time` property
   - `playlistSelectionChange` - mpv changed it's `playlist` format node property - currently played playlist changed. This event is only partially mapped to mpv behavior, since playlists management is partially managed by the server.
   - `playlistCurrentIdxChange` - mpv changed it's `playlist-playing-pos` format node property - currently played entry in a playlist changed
-- `playlists` (all events privde whole playlist state) - events fire in response to external (and internal) requests to server related to playlists handling
+- `playlists` (all events provide whole playlist state) - events fire in response to external (and internal) requests to server related to playlists handling
   - `replay` - list of all playlists
   - `added` - a new playlist was added either by server itself (default/unnamed playlist) or an external client
   - `itemsChange` - set of playlist entries/items changed
@@ -108,3 +109,33 @@ Channels and their events:
   - `client-observer-added` - a new SSE client observer was added
   - `client-observer-removed` - SSE client observer was removed (most probably disconnected on it's own, but not guarenteed)
   - ~~`mpv-process-changed` - when server manages it's own mpv process, this event fires when server creates mpv process (changed not necesarilly means that a process existed beforehand)~~
+
+### Playlists
+
+For a file to be considered a playlist it has to:
+- be a valid JSON file
+- have a name which matches any of the passed prefixes with `--playlist-prefix`
+- have property `MpvWebApiPlaylist` set to `true`
+
+A playlist file is a file that contains a valid JSON object. The properties at the top level of the object:
+- `MpvWebApiPlaylist` - bool - a flag that specifies whether `mpv-web-api` should treat this file as a playlist. The property is used as a failsafe in case other valid JSON files are present in the directory and match specified playlist prefix
+- `Entries` - []PlaylistEntry - a list of objects specifying entries to be treated to be played by a playlist.
+- `Name` - string - a name of the playlist (usage up to the client)
+- `Description` - string - a description of the playlist (usage up to the client)
+- `DirectoryContentsAsEntries` - bool - when set to true, `Entries` field is ignored and replaced with media files found in the directory the playlist file is in.
+
+Example:
+```
+{
+	"MpvWebApiPlaylist": true,
+	"Entries": [],
+	"Name": "Example playlist",
+	"Description": "Som description"
+}
+```
+
+Entries are instances of an object with the following fields:
+- `Path` - absolute path to the playlist entry
+- `PlaybackTimestamp` - timestamp from which the entry should start playing
+- `AudioID` - audio id for playlist entry
+- `SubtitleID` - subtitle id for playlist entry

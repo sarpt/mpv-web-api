@@ -19,11 +19,12 @@ const (
 )
 
 type PlaylistFile struct {
-	CurrentEntryIdx   int                   `json:"CurrentEntryIdx"`
-	Entries           []state.PlaylistEntry `json:"Entries"`
-	MpvWebApiPlaylist bool                  `json:"MpvWebApiPlaylist"`
-	Name              string                `json:"Name"`
-	Description       string                `json:"Description"`
+	CurrentEntryIdx            int                   `json:"CurrentEntryIdx"`
+	DirectoryContentsAsEntries bool                  `json:"DirectoryContentsAsEntries"`
+	Entries                    []state.PlaylistEntry `json:"Entries"`
+	MpvWebApiPlaylist          bool                  `json:"MpvWebApiPlaylist"`
+	Name                       string                `json:"Name"`
+	Description                string                `json:"Description"`
 }
 
 func (s *Server) createDefaultPlaylist() (string, error) {
@@ -46,22 +47,25 @@ func (s *Server) hasPlaylistFilePrefix(path string) bool {
 	return false
 }
 
-func (s *Server) handlePlaylistFile(path string) error {
+func (s *Server) handlePlaylistFile(path string) (string, error) {
 	playlistFile, err := s.readPlaylistFile(path)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	playlistCfg := state.PlaylistConfig{
-		Description: playlistFile.Description,
-		Entries:     playlistFile.Entries,
-		Name:        playlistFile.Name,
+		Description:                playlistFile.Description,
+		DirectoryContentsAsEntries: playlistFile.DirectoryContentsAsEntries,
+		Entries:                    playlistFile.Entries,
+		Name:                       playlistFile.Name,
 	}
 
-	s.playlists.AddPlaylist(state.NewPlaylist(playlistCfg))
-	s.outLog.Printf("added playlist '%s' at path '%s'", playlistFile.Name, path)
+	uuid, err := s.playlists.AddPlaylist(state.NewPlaylist(playlistCfg))
+	if err == nil {
+		s.outLog.Printf("added playlist '%s' at path '%s'", playlistFile.Name, path)
+	}
 
-	return nil
+	return uuid, err
 }
 
 func (s *Server) readPlaylistFile(path string) (PlaylistFile, error) {
