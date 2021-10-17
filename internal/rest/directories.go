@@ -16,6 +16,7 @@ const (
 )
 
 type AddDirectoriesCallback = func([]state.Directory)
+type LoadPlaylistCallback = func(string, bool) error
 type RemoveDirectoriesCallback = func(string) (state.Directory, error)
 
 type getDirectoriesRespone struct {

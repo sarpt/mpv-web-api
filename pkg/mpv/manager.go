@@ -121,6 +121,25 @@ func (m Manager) LoadFile(filePath string, append bool) error {
 	return err
 }
 
+// LoadList instructs mpv to start playing the playliust from provided file.
+// Second argument (append) controls whether playlist should be appended to the current playlist (instead of playlist replacement).
+func (m Manager) LoadList(filePath string, append bool) error {
+	var loadlistArg string
+	if append {
+		loadlistArg = AppendValue
+	} else {
+		loadlistArg = ReplaceValue
+	}
+
+	cmd := command{
+		name:     loadlistCommand,
+		elements: []interface{}{filePath, loadlistArg},
+	}
+	_, err := m.cd.Request(cmd)
+
+	return err
+}
+
 // LoopFile instructs mpv to change the loop state.
 func (m Manager) LoopFile(looped bool) error {
 	var loopedVal string = NoValue

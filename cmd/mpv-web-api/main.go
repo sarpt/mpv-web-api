@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"time"
@@ -17,37 +18,44 @@ const (
 )
 
 const (
-	defaultAddress          = "localhost:3001"
-	defaultMpvSocketPath    = "/tmp/mpvsocket"
-	defaultSocketTimeoutSec = 15
-
-	addressFlag          = "addr"
-	allowCorsFlag        = "allow-cors"
-	dirFlag              = "dir"
-	mpvSocketPathFlag    = "mpv-socket-path"
-	playlistPrefixFlag   = "playlist-prefix"
-	socketTimeoutSecFlag = "socket-timeout"
-	startMpvInstanceFlag = "start-mpv-instance"
-	watchDirFlag         = "watch-dir"
+	defaultAddress           = "localhost:3001"
+	defaultSocketTimeoutSec  = 15
+	defaultMpvSocketFilename = "mpvsocket"
+	addressFlag              = "addr"
+	allowCorsFlag            = "allow-cors"
+	dirFlag                  = "dir"
+	dirRecursiveFlag         = "dir-recursive"
+	mpvSocketPathFlag        = "mpv-socket-path"
+	playlistPrefixFlag       = "playlist-prefix"
+	socketTimeoutSecFlag     = "socket-timeout"
+	startMpvInstanceFlag     = "start-mpv-instance"
+	watchDirFlag             = "watch-dir"
+	watchDirRecursiveFlag    = "watch-dir-recursive"
 )
 
 var (
-	address          *string
-	allowCORS        *bool
-	dir              *listflag.StringList
-	watchDir         *listflag.StringList
-	mpvSocketPath    *string
-	playlistPrefix   *listflag.StringList
-	socketTimeoutSec *int64
-	startMpvInstance *bool
+	address              *string
+	allowCORS            *bool
+	defaultMpvSocketPath = fmt.Sprintf("%s%c%s", os.TempDir(), os.PathSeparator, defaultMpvSocketFilename)
+	dir                  *listflag.StringList
+	dirRecursive         *listflag.StringList
+	mpvSocketPath        *string
+	playlistPrefix       *listflag.StringList
+	socketTimeoutSec     *int64
+	startMpvInstance     *bool
+	watchDir             *listflag.StringList
+	watchDirRecursive    *listflag.StringList
 )
 
 func init() {
 	dir = listflag.NewStringList([]string{})
+	dirRecursive = listflag.NewStringList([]string{})
 	watchDir = listflag.NewStringList([]string{})
+	watchDirRecursive = listflag.NewStringList([]string{})
 	playlistPrefix = listflag.NewStringList([]string{})
 
 	flag.Var(dir, dirFlag, "directory containing media files - the directory is not watched for changes")
+	flag.Var(dirRecursive, dirRecursiveFlag, "recursive variant of --dir flag: handles all directories in the tree from the path downards")
 	address = flag.String(addressFlag, defaultAddress, "address on which server should listen on")
 	allowCORS = flag.Bool(allowCorsFlag, false, "when not provided, Cross Origin Site Requests will be rejected")
 	mpvSocketPath = flag.String(mpvSocketPathFlag, defaultMpvSocketPath, "path to a socket file used by a MPV instance to listen for commands")
@@ -55,6 +63,7 @@ func init() {
 	socketTimeoutSec = flag.Int64(socketTimeoutSecFlag, defaultSocketTimeoutSec, "maximum allowed time in seconds for retrying connection to MPV instance")
 	startMpvInstance = flag.Bool(startMpvInstanceFlag, true, "controls whether the application should create and manage its own MPV instance")
 	flag.Var(watchDir, watchDirFlag, "directory containing media files - the directory will be watched for changes. When left empty and no --dir arguments are specified, current working directory will be used")
+	flag.Var(watchDirRecursive, watchDirRecursiveFlag, "recursive variant of --watch-dir flag: handles all directories in the tree from the path downards")
 
 	flag.Parse()
 }
@@ -103,9 +112,24 @@ func main() {
 			})
 		}
 
+		for _, dir := range watchDirRecursive.Values() {
+			mediaFilesDirectories = append(mediaFilesDirectories, state.Directory{
+				Path:      dir,
+				Recursive: true,
+				Watched:   true,
+			})
+		}
+
 		for _, dir := range dir.Values() {
 			mediaFilesDirectories = append(mediaFilesDirectories, state.Directory{
 				Path: dir,
+			})
+		}
+
+		for _, dir := range dirRecursive.Values() {
+			mediaFilesDirectories = append(mediaFilesDirectories, state.Directory{
+				Path:      dir,
+				Recursive: true,
 			})
 		}
 	}

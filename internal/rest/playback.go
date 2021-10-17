@@ -10,17 +10,21 @@ import (
 )
 
 const (
-	appendArg     = "append"
-	audioIDArg    = "audioID"
-	chapterArg    = "chapter"
-	fullscreenArg = "fullscreen"
-	loopFileArg   = "loopFile"
-	pauseArg      = "pause"
-	playlistIdx   = "playlistIdx"
-	playlistUUID  = "playlistUUID"
-	stopArg       = "stop"
-	subtitleIDArg = "subtitleID"
+	appendArg       = "append"
+	audioIDArg      = "audioID"
+	chapterArg      = "chapter"
+	fullscreenArg   = "fullscreen"
+	loopFileArg     = "loopFile"
+	pauseArg        = "pause"
+	playlistIdxArg  = "playlistIdx"
+	playlistUUIDArg = "playlistUUID"
+	stopArg         = "stop"
+	subtitleIDArg   = "subtitleID"
 )
+
+func (s *Server) SetLoadPlaylistCallback(cb LoadPlaylistCallback) {
+	s.loadPlaylistCallback = cb
+}
 
 func (s *Server) getPlaybackHandler(res http.ResponseWriter, req *http.Request) {
 	json, err := json.Marshal(s.playback)
@@ -36,17 +40,11 @@ func (s *Server) getPlaybackHandler(res http.ResponseWriter, req *http.Request) 
 }
 
 func (s *Server) pathHandler(res http.ResponseWriter, req *http.Request) error {
-	var append bool = false
-	var err error
-
 	filePath := req.PostFormValue(pathArg)
 
-	appendArgInForm := req.PostFormValue(appendArg)
-	if appendArgInForm != "" {
-		append, err = strconv.ParseBool(appendArgInForm)
-		if err != nil {
-			return err
-		}
+	append, err := getAppendArgument(req)
+	if err != nil {
+		return err
 	}
 
 	s.outLog.Printf("loading file '%s' with '%t' argument due to request from %s\n", filePath, append, req.RemoteAddr)
@@ -109,13 +107,25 @@ func (s *Server) pauseHandler(res http.ResponseWriter, req *http.Request) error 
 }
 
 func (s *Server) playlistIdxHandler(res http.ResponseWriter, req *http.Request) error {
-	idx, err := strconv.Atoi(req.PostFormValue(playlistIdx))
+	idx, err := strconv.Atoi(req.PostFormValue(playlistIdxArg))
 	if err != nil {
 		return err
 	}
 
 	s.outLog.Printf("changing playlist idx to %d due to request from %s\n", idx, req.RemoteAddr)
 	return s.mpvManager.PlaylistPlayIndex(idx)
+}
+
+func (s *Server) playlistUUIDHandler(res http.ResponseWriter, req *http.Request) error {
+	uuid := req.PostFormValue(playlistUUIDArg)
+
+	append, err := getAppendArgument(req)
+	if err != nil {
+		return err
+	}
+
+	s.outLog.Printf("loading playlist with uuid '%s' and append '%t' due to request from %s\n", uuid, append, req.RemoteAddr)
+	return s.loadPlaylistCallback(uuid, append)
 }
 
 func (s *Server) stopHandler(res http.ResponseWriter, req *http.Request) error {
@@ -130,6 +140,16 @@ func (s *Server) stopHandler(res http.ResponseWriter, req *http.Request) error {
 
 	s.outLog.Printf("stopping playback due to request from %s\n", req.RemoteAddr)
 	return s.mpvManager.Stop()
+}
+
+func getAppendArgument(req *http.Request) (bool, error) {
+	appendArgInForm := req.PostFormValue(appendArg)
+	if appendArgInForm == "" {
+		return false, nil
+	}
+
+	append, err := strconv.ParseBool(appendArgInForm)
+	return append, err
 }
 
 func (s *Server) postPlaybackFormArgumentsHandlers() map[string]common.FormArgument {
@@ -171,20 +191,17 @@ func (s *Server) postPlaybackFormArgumentsHandlers() map[string]common.FormArgum
 				return err
 			},
 		},
-		playlistIdx: {
+		playlistIdxArg: {
 			Handle: s.playlistIdxHandler,
 			Validate: func(req *http.Request) error {
-				_, err := strconv.Atoi(req.PostFormValue(playlistIdx))
+				_, err := strconv.Atoi(req.PostFormValue(playlistIdxArg))
 				return err
 			},
 		},
-		// TODO: to be implemented. Prereqs: api server should handle reading/storing user-defined playlists.
-		// The handler should also take into account possibility that with the same POST both playlistIdx and playlistUUID will be passed -
-		// in such case, playlistIdx handler should not be called/handled on it's own, but by this playlistUUID handler. This requires
-		// implementation of some form of a "ShouldHandle" callback (in the vein of "Validate") which will check whether specific handler should be called.
-		// playlistUUID: {
-		// 	Handle: s.playlistUUIDHandler,
-		// },
+		playlistUUIDArg: {
+			Handle:   s.playlistUUIDHandler,
+			Priority: 1,
+		},
 		subtitleIDArg: {
 			Handle: s.subtitleIDHandler,
 		},

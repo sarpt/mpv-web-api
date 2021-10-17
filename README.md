@@ -20,11 +20,13 @@ It's main use is to be a backend for [mpv-web-front](https://github.com/sarpt/mp
 - `allow-cors` - bool - (default: `false`) whether Cross Origin Requests should be allowed
 - `addr` - string - (default: `localhost:3001`) address used to host the server
 - `dir` - []string - directories that should be scanned for media files only once. To specify more than one directory to be handled, multiple `--dir=<path>` arguments can be specified eg. `--dir=/path1 --dir=/path2`. The server will only handle paths provided by clients that start with one of the paths provided to `dir`.
+- `dir-recursive` - []string - recurisve variant of `dir` argument - all directories from the provider path downards are handled
 - `mpv-socket-path` - string - (default: `/tmp/mpvsocket`) path to socket file used by MPV instance
 - `playlist-prefix` - []string - list of prefixes for playlist JSON files located in directories being handled by the server instance. For more informations on playlists please check related section.
 - `socket-timeout` - int - (defualt: `15`) maximum allowed time in seconds for retrying connection to MPV socket
 - `start-mpv-instance` - bool - (default: `true`) when set to true, `mpv-web-api` will create it's own MPV process. When set to false, `mpv-web-api` will only try to connect to MPV using file at `mpv-socket-path`. Particularly useful when trying to run `mpv-web-api` in docker and connecting to local MPV instance
 - `watch-dir` - []string - directories that should be scanned for media files AND being watched for future changes to the underlying files. The argument works in the same way as a read-only variant `--dir`. If no paths are provided with neither `--dir` nor `--watch-dir`, a current working directory is watched by default.
+- `wathc-dir-recursive` - []string - recurisve variant of `watch-dir` argument - all directories from the provider path downards are handled
 
 ### Building & Execution
 
@@ -60,6 +62,7 @@ Many REST endpoints are not implemented yet, since `mpv-web-front` mostly uses S
   - `stop` - bool (default: `false`) - stops mpv playback, clearing the playback state and instructing mpv instance to go into idle.
   - `subtitleID` - string - selects subtitle stream with the provided id. Although a string, mpv indexes its subtitle streams, so it will have numerical form.
 - `GET "/playback"` - returns the state of mpv current playback.
+- `GET "/playlists"` - returns playlists handled by the api server.
 - `GET "/sse/channels"` - registers client to the SSE channels, estabilishing long running connection.
   - `channel` - string[] - names of channels client wishes to be subscribed to. In URI it takes the form of `/sse/register?channel=name1&channel=name2&channel... etc`.
   - `replay` - bool (default: `false`) - when set to `true`, the first emitted event will be of `replay` type. More info on types of SSE events in a related section below.

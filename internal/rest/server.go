@@ -36,6 +36,7 @@ type Server struct {
 	removeDirectoriesCallback RemoveDirectoriesCallback
 	directories               *state.Directories
 	errLog                    *log.Logger
+	loadPlaylistCallback      LoadPlaylistCallback
 	mediaFiles                *state.MediaFiles
 	mpvManager                *mpv.Manager
 	playback                  *state.Playback
