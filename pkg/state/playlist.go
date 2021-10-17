@@ -44,6 +44,16 @@ func NewPlaylist(cfg PlaylistConfig) *Playlist {
 	}
 }
 
+// All returns a copy of all PlaylistEntries being served by the instance of the server.
+func (p *Playlist) All() []PlaylistEntry {
+	entries := []PlaylistEntry{}
+
+	p.lock.RLock()
+	defer p.lock.RUnlock()
+
+	return append(entries, p.entries...)
+}
+
 func (p *Playlist) DirectoryContentsAsEntries() bool {
 	return p.directoryContentsAsEntries
 }

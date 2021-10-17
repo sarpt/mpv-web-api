@@ -94,7 +94,7 @@ func (s *Server) AddRootDirectories(rootDirectories []state.Directory) {
 				return nil
 			}
 
-			if rootDir.Path != path && !rootDir.Recursive {
+			if rootPath != path && !rootDir.Recursive {
 				return fs.SkipDir
 			}
 

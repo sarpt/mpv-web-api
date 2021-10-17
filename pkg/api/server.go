@@ -129,6 +129,7 @@ func NewServer(cfg Config) (*Server, error) {
 
 	restServer.SetAddDirectoriesCallback(server.AddRootDirectories)
 	restServer.SetDeleteDirectoriesCallback(server.TakeDirectory)
+	restServer.SetLoadPlaylistCallback(server.LoadPlaylist)
 	err = server.initWatchers()
 	if err != nil {
 		return server, errors.New("could not start watching for properties")

@@ -3,6 +3,7 @@ package mpv
 const (
 	getVersion             = "get_version"
 	loadfileCommand        = "loadfile"
+	loadlistCommand        = "loadlist"
 	observePropertyCommand = "observe_property_string"
 	playlistNextCommand    = "playlist-next"
 	playlistPrevCommand    = "playlist-prev"

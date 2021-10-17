@@ -3,6 +3,8 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,6 +27,37 @@ type PlaylistFile struct {
 	MpvWebApiPlaylist          bool                  `json:"MpvWebApiPlaylist"`
 	Name                       string                `json:"Name"`
 	Description                string                `json:"Description"`
+}
+
+func (s *Server) LoadPlaylist(uuid string, append bool) error {
+	playlist, err := s.playlists.ByUUID(uuid)
+	if err != nil {
+		return err
+	}
+
+	filename := fmt.Sprintf("%s%cmwa_playlist_%s", os.TempDir(), os.PathSeparator, uuid)
+	err = s.createTempPlaylistFile(filename, playlist.All())
+	if err != nil {
+		return err
+	}
+
+	err = s.mpvManager.LoadList(filename, append)
+	if err != nil {
+		return err
+	}
+
+	s.playback.SelectPlaylist(uuid)
+
+	return nil
+}
+
+func (s *Server) createTempPlaylistFile(filename string, entries []state.PlaylistEntry) error {
+	fileData := []byte{}
+	for _, entry := range entries {
+		fileData = append(fileData, []byte(fmt.Sprintln(entry.Path))...)
+	}
+
+	return ioutil.WriteFile(filename, fileData, os.ModePerm)
 }
 
 func (s *Server) createDefaultPlaylist() (string, error) {
