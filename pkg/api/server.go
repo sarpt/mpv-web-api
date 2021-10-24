@@ -26,6 +26,7 @@ type observePropertyHandler = func(res mpv.ObservePropertyResponse) error
 // Server is used to serve API and hold state accessible to the API.
 type Server struct {
 	address               string
+	defaultPlaylistUUID   string
 	directories           *state.Directories
 	errLog                *log.Logger
 	fsWatcher             *fsnotify.Watcher
@@ -111,6 +112,7 @@ func NewServer(cfg Config) (*Server, error) {
 
 	server := &Server{
 		cfg.Address,
+		"",
 		directories,
 		log.New(cfg.ErrWriter, logPrefix, log.LstdFlags),
 		watcher,
@@ -139,6 +141,8 @@ func NewServer(cfg Config) (*Server, error) {
 	if err != nil {
 		return server, err
 	}
+
+	server.defaultPlaylistUUID = defaultPlaylistUUID
 	server.playback.SelectPlaylist(defaultPlaylistUUID)
 
 	return server, nil
@@ -220,7 +224,7 @@ func (s Server) watchObservePropertyResponses(handlers map[string]observePropert
 
 		err := observeHandler(observePropertyResponse)
 		if err != nil {
-			s.errLog.Printf("could not handle property '%s' observer handling: %s\n", observePropertyResponse.Property, err)
+			s.errLog.Printf("error during '%s' property observer handling: %s\n", observePropertyResponse.Property, err)
 		}
 	}
 }
