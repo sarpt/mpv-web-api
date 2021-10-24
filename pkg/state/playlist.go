@@ -9,6 +9,7 @@ import (
 
 // Playlist holds state about currently playing playlist.
 type Playlist struct {
+	currentEntryIdx            int
 	description                string
 	directoryContentsAsEntries bool
 	entries                    []PlaylistEntry
@@ -18,6 +19,7 @@ type Playlist struct {
 }
 
 type playlistJSON struct {
+	CurrentEntryIdx            int             `json:"CurrentEntryIdx"`
 	Description                string          `json:"Description"`
 	DirectoryContentsAsEntries bool            `json:"DirectoryContentsAsEntries"`
 	Entries                    []PlaylistEntry `json:"Entries"`
@@ -26,6 +28,7 @@ type playlistJSON struct {
 }
 
 type PlaylistConfig struct {
+	CurrentEntryIdx            int
 	Description                string
 	DirectoryContentsAsEntries bool
 	Entries                    []PlaylistEntry
@@ -35,9 +38,10 @@ type PlaylistConfig struct {
 // NewPlaylist constructs Playlist state.
 func NewPlaylist(cfg PlaylistConfig) *Playlist {
 	return &Playlist{
+		currentEntryIdx:            cfg.CurrentEntryIdx,
 		description:                cfg.Description,
 		directoryContentsAsEntries: cfg.DirectoryContentsAsEntries,
-		entries:                    []PlaylistEntry{},
+		entries:                    cfg.Entries,
 		name:                       cfg.Name,
 		lock:                       &sync.RWMutex{},
 		uuid:                       uuid.NewString(),
@@ -58,6 +62,34 @@ func (p *Playlist) DirectoryContentsAsEntries() bool {
 	return p.directoryContentsAsEntries
 }
 
+func (p *Playlist) CurrentEntryIdx() int {
+	p.lock.RLock()
+	defer p.lock.RUnlock()
+
+	return p.currentEntryIdx
+}
+
+// EntriesDiffer checks whether provided entries match entries stored in playlist.
+// Currently only paths are taken into account.
+func (p *Playlist) EntriesDiffer(entries []PlaylistEntry) bool {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
+	if len(p.entries) != len(entries) {
+		return true
+	}
+
+	for idx, entry := range p.entries {
+		externalEntry := entries[idx]
+
+		if entry.Path != externalEntry.Path {
+			return true
+		}
+	}
+
+	return false
+}
+
 // MarshalJSON satisifes json.Marshaller.
 func (p *Playlist) MarshalJSON() ([]byte, error) {
 	pJSON := playlistJSON{
@@ -68,6 +100,20 @@ func (p *Playlist) MarshalJSON() ([]byte, error) {
 		UUID:                       p.uuid,
 	}
 	return json.Marshal(pJSON)
+}
+
+func (p *Playlist) setCurrentEntryIdx(idx int) {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
+	p.currentEntryIdx = idx
+}
+
+func (p *Playlist) setEntries(entries []PlaylistEntry) {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
+	p.entries = entries
 }
 
 func (p *Playlist) UUID() string {

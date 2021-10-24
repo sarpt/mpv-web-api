@@ -92,18 +92,29 @@ func (p *Playlists) MarshalJSON() ([]byte, error) {
 	return json.Marshal(pJSON)
 }
 
-// SetPlaylistEntries sets items of the playlist with uuid.
-func (p *Playlists) SetPlaylistEntries(uuid string, items []PlaylistEntry) error {
-	p.lock.RLock()
-	playlist, ok := p.items[uuid]
-	p.lock.RUnlock()
-	if !ok {
-		return fmt.Errorf("could not set items for a playlist with uuid '%s': no such uuid exist", uuid)
+// SetPlaylistCurrentEntryIdx sets currently played entry Idx for a playlist with provided UUID.
+func (p *Playlists) SetPlaylistCurrentEntryIdx(uuid string, idx int) error {
+	playlist, err := p.ByUUID(uuid)
+	if err != nil {
+		return err
 	}
 
-	p.lock.Lock()
-	playlist.entries = items
-	p.lock.Unlock()
+	playlist.setCurrentEntryIdx(idx)
+
+	p.changes <- PlaylistsChange{
+		Variant: PlaylistsItemsChange,
+	}
+	return nil
+}
+
+// SetPlaylistEntries sets items of the playlist with uuid.
+func (p *Playlists) SetPlaylistEntries(uuid string, entries []PlaylistEntry) error {
+	playlist, err := p.ByUUID(uuid)
+	if err != nil {
+		return err
+	}
+
+	playlist.setEntries(entries)
 
 	p.changes <- PlaylistsChange{
 		Variant: PlaylistsItemsChange,

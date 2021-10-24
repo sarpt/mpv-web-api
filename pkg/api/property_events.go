@@ -67,32 +67,36 @@ func (s *Server) handleAudioIDChangeEvent(res mpv.ObservePropertyResponse) error
 }
 
 func (s *Server) handlePlaylistProperty(res mpv.ObservePropertyResponse) error {
+	currentPlaylist, err := s.playlists.ByUUID(s.playback.PlaylistUUID())
+	if err != nil {
+		return fmt.Errorf("selected playlist UUID does not point to an existing playlist: %s", err)
+	}
+
 	playlistItems, ok := res.Data.(mpv.PlaylistFormatNodeArray)
 	if !ok {
 		return ErrResponseDataNotExpectedFormatNode
 	}
 
-	// TODO: below should be used something resembling a set - the playlist will fire at every possible change to the MPV map type,
-	// which due to having flag specifying which of the item is currently played will result in firing with the same items array,
-	// even though the list did not change.
-	items := []state.PlaylistEntry{}
+	entries := []state.PlaylistEntry{}
 	for _, playlistItem := range playlistItems {
-		items = append(items, state.PlaylistEntry{
+		entries = append(entries, state.PlaylistEntry{
 			Path: playlistItem.Filename,
 		})
 	}
 
-	if !s.playback.PlaylistSelected() {
-		newPlaylist := state.NewPlaylist(state.PlaylistConfig{})
-		uuid, err := s.playlists.AddPlaylist(newPlaylist)
-		if err != nil {
-			return err
-		}
-
-		s.playback.SelectPlaylist(uuid)
+	if !currentPlaylist.EntriesDiffer(entries) {
+		return nil
 	}
 
-	return s.playlists.SetPlaylistEntries(s.playback.PlaylistUUID(), items)
+	if !s.DefaultPlaylistSelected() {
+		// To prevent unwanted changes to a named playlist when entries don't match, a default playlist
+		// should be selected and modified. Mismatched entries for a named playlist suggest
+		// changes introduced from outside the server.
+		s.outLog.Printf("entries do not match for a named, not-default playlist (uuid: %s) - switching to a default playlist", s.playback.PlaylistUUID())
+		s.playback.SelectPlaylist(s.defaultPlaylistUUID)
+	}
+
+	return s.playlists.SetPlaylistEntries(s.playback.PlaylistUUID(), entries)
 }
 
 func (s *Server) handlePlaylistPlayingPosEvent(res mpv.ObservePropertyResponse) error {
