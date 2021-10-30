@@ -79,15 +79,12 @@ func NewServer(cfg Config) *Server {
 }
 
 // InitDispatchers starts listening on state changes channels for further distribution to its observers.
-// TODO: Changes of specific methods should be aware that they've been already called
-// and someone is listening to avoid unwanted (unsupported by channels) broadcast
-// (maybe channels are unsuitable in this situation at all - what else is there to consider?).
 func (s *Server) InitDispatchers() {
-	go distributeChangesToChannelObservers(s.directories.Changes(), s.directoriesObservers)
-	go distributeChangesToChannelObservers(s.playback.Changes(), s.playbackObservers)
-	go distributeChangesToChannelObservers(s.playlists.Changes(), s.playlistsObservers)
-	go distributeChangesToChannelObservers(s.mediaFiles.Changes(), s.mediaFilesObservers)
-	go distributeChangesToChannelObservers(s.status.Changes(), s.statusObservers)
+	s.directories.Subscribe(directoriesChangesToChannelObserversDistributor(s.directoriesObservers), func(err error) {})
+	s.playback.Subscribe(playbackChangesToChannelObserversDistributor(s.playbackObservers), func(err error) {})
+	s.playlists.Subscribe(playlistsChangesToChannelObserversDistributor(s.playbackObservers), func(err error) {})
+	s.mediaFiles.Subscribe(mediaFilesChangesToChannelObserversDistributor(s.playlistsObservers), func(err error) {})
+	s.status.Subscribe(statusChangesToChannelObserversDistributor(s.statusObservers), func(err error) {})
 }
 
 // Handler returns map of HTTPs methods and their handlers.

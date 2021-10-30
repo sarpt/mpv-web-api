@@ -5,6 +5,8 @@ import (
 	"sync"
 )
 
+type StatusSubscriber = func(change StatusChange)
+
 // StatusChangeVariant specifies what type of change to server status occurs.
 type StatusChangeVariant string
 
@@ -37,23 +39,21 @@ type StatusChange struct {
 
 // Status holds information about server misc status.
 type Status struct {
+	broadcaster        *ChangesBroadcaster
 	observingAddresses map[string][]SSEChannelVariant
 	lock               *sync.RWMutex
-	changes            chan interface{}
 }
 
 // NewStatus constructs Status state.
 func NewStatus() *Status {
+	broadcaster := NewChangesBroadcaster()
+	broadcaster.Broadcast()
+
 	return &Status{
+		broadcaster:        broadcaster,
 		observingAddresses: map[string][]SSEChannelVariant{},
 		lock:               &sync.RWMutex{},
-		changes:            make(chan interface{}),
 	}
-}
-
-// Changes returns read-only channel notifying of status changes
-func (s *Status) Changes() <-chan interface{} {
-	return s.changes
 }
 
 // ObservingAddresses returns a mapping of a remote address to the channel variants.
@@ -78,9 +78,20 @@ func (s *Status) AddObservingAddress(remoteAddr string, observerVariant SSEChann
 	s.observingAddresses[remoteAddr] = append(observers, observerVariant)
 	s.lock.Unlock()
 
-	s.changes <- StatusChange{
+	s.broadcaster.changes <- StatusChange{
 		Variant: ClientObserverAdded,
 	}
+}
+
+// MarshalJSON satisfies json.Marshaller.
+func (s *Status) MarshalJSON() ([]byte, error) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	sJSON := statusJSON{
+		ObservingAddresses: s.observingAddresses,
+	}
+	return json.Marshal(&sJSON)
 }
 
 // RemoveObservingAddress removes remote address listening on specific channel variant from the state.
@@ -110,18 +121,20 @@ func (s *Status) RemoveObservingAddress(remoteAddr string, observerVariant SSECh
 
 	s.lock.Unlock()
 
-	s.changes <- StatusChange{
+	s.broadcaster.changes <- StatusChange{
 		Variant: ClientObserverRemoved,
 	}
 }
 
-// MarshalJSON satisfies json.Marshaller.
-func (s *Status) MarshalJSON() ([]byte, error) {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
+func (p *Status) Subscribe(sub StatusSubscriber, onError func(err error)) {
+	p.broadcaster.Subscribe(func(change interface{}) {
+		statusChange, ok := change.(StatusChange)
+		if !ok {
+			onError(errIncorrectChangesType)
 
-	sJSON := statusJSON{
-		ObservingAddresses: s.observingAddresses,
-	}
-	return json.Marshal(&sJSON)
+			return
+		}
+
+		sub(statusChange)
+	})
 }

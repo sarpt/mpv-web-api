@@ -40,3 +40,14 @@ func (s *Server) playbackSSEChannel() channel {
 		replayHandler: s.createPlaybackReplayHandler(),
 	}
 }
+
+// playbackChangesToChannelObserversDistributor is a fan-out dispatcher, which notifies all playback observers (subscribers from SSE etc.) when a playbackChange occurs.
+func playbackChangesToChannelObserversDistributor(channelObservers observers) func(change state.PlaybackChange) {
+	return func(change state.PlaybackChange) {
+		channelObservers.lock.RLock()
+		for _, observer := range channelObservers.items {
+			observer <- change
+		}
+		channelObservers.lock.RUnlock()
+	}
+}

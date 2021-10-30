@@ -205,19 +205,3 @@ func formatSseEvent(channel state.SSEChannelVariant, eventName string, data []by
 	out = append(out, sseEventEnd...)
 	return out
 }
-
-// distributeChangesToChannelObservers is a fan-out dispatcher, which notifies all playback observers (subscribers from SSE etc.) when a playbackChange occurs.
-func distributeChangesToChannelObservers(channelChanges <-chan interface{}, channelObservers observers) {
-	for {
-		change, ok := <-channelChanges
-		if !ok {
-			return
-		}
-
-		channelObservers.lock.RLock()
-		for _, observer := range channelObservers.items {
-			observer <- change
-		}
-		channelObservers.lock.RUnlock()
-	}
-}

@@ -23,6 +23,8 @@ const (
 	RemovedDirectoriesChange DirectoriesChangeVariant = "removed"
 )
 
+type DirectoriesSubscriber = func(change DirectoriesChange)
+
 // DirectoriesChange holds information about changes to the collection of directories being handled.
 type DirectoriesChange struct {
 	variant DirectoriesChangeVariant
@@ -38,17 +40,20 @@ func (d DirectoriesChange) MarshalJSON() ([]byte, error) {
 type DirectoriesChangeVariant string
 
 type Directories struct {
-	changes chan interface{}
-	items   map[string]Directory
-	lock    *sync.RWMutex
+	broadcaster *ChangesBroadcaster
+	items       map[string]Directory
+	lock        *sync.RWMutex
 }
 
 // NewDirectories counstructs Directories state.
 func NewDirectories() *Directories {
+	broadcaster := NewChangesBroadcaster()
+	broadcaster.Broadcast()
+
 	return &Directories{
-		changes: make(chan interface{}),
-		items:   map[string]Directory{},
-		lock:    &sync.RWMutex{},
+		broadcaster: broadcaster,
+		items:       map[string]Directory{},
+		lock:        &sync.RWMutex{},
 	}
 }
 
@@ -67,7 +72,7 @@ func (d *Directories) Add(dir Directory) {
 		d.items[path] = dir
 	}()
 
-	d.changes <- DirectoriesChange{
+	d.broadcaster.changes <- DirectoriesChange{
 		variant: AddedDirectoriesChange,
 		items: map[string]Directory{
 			path: dir,
@@ -123,6 +128,19 @@ func (d *Directories) ParentByPath(path string) (Directory, error) {
 	return dir, nil
 }
 
+func (p *Directories) Subscribe(sub DirectoriesSubscriber, onError func(err error)) {
+	p.broadcaster.Subscribe(func(change interface{}) {
+		directoriesChange, ok := change.(DirectoriesChange)
+		if !ok {
+			onError(errIncorrectChangesType)
+
+			return
+		}
+
+		sub(directoriesChange)
+	})
+}
+
 // Take removes directory by a provided path from the state,
 // returning the object for use after removal.
 // When directory cannot be found, the error is being reported.
@@ -138,7 +156,7 @@ func (d *Directories) Take(path string) (Directory, error) {
 	delete(d.items, keyPath)
 	d.lock.Unlock()
 
-	d.changes <- DirectoriesChange{
+	d.broadcaster.changes <- DirectoriesChange{
 		variant: RemovedDirectoriesChange,
 		items: map[string]Directory{
 			keyPath: dir,
@@ -146,11 +164,6 @@ func (d *Directories) Take(path string) (Directory, error) {
 	}
 
 	return dir, nil
-}
-
-// Changes returns read-only channel notifying of mediaFiles changes.
-func (d *Directories) Changes() <-chan interface{} {
-	return d.changes
 }
 
 func EnsureDirectoryPath(path string) string {

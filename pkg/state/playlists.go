@@ -9,10 +9,15 @@ import (
 	"github.com/google/uuid"
 )
 
+var (
+	errIncorrectChangesType = errors.New("changes of incorrect type provided to the change handler")
+)
+
+type PlaylistSubscriber = func(playlist PlaylistsChange)
 type Playlists struct {
-	changes chan interface{}
-	items   map[string]*Playlist
-	lock    *sync.RWMutex
+	broadcaster *ChangesBroadcaster
+	items       map[string]*Playlist
+	lock        *sync.RWMutex
 }
 
 type playlistsJSON struct {
@@ -44,10 +49,13 @@ type PlaylistsChange struct {
 }
 
 func NewPlaylists() *Playlists {
+	broadcaster := NewChangesBroadcaster()
+	broadcaster.Broadcast()
+
 	return &Playlists{
-		changes: make(chan interface{}),
-		items:   map[string]*Playlist{},
-		lock:    &sync.RWMutex{},
+		broadcaster: broadcaster,
+		items:       map[string]*Playlist{},
+		lock:        &sync.RWMutex{},
 	}
 }
 
@@ -77,10 +85,6 @@ func (p *Playlists) ByUUID(uuid string) (*Playlist, error) {
 	return playlist, nil
 }
 
-func (p *Playlists) Changes() <-chan interface{} {
-	return p.changes
-}
-
 // MarshalJSON satisifes json.Marshaller.
 func (p *Playlists) MarshalJSON() ([]byte, error) {
 	p.lock.RLock()
@@ -101,7 +105,7 @@ func (p *Playlists) SetPlaylistCurrentEntryIdx(uuid string, idx int) error {
 
 	playlist.setCurrentEntryIdx(idx)
 
-	p.changes <- PlaylistsChange{
+	p.broadcaster.changes <- PlaylistsChange{
 		Variant: PlaylistsItemsChange,
 	}
 	return nil
@@ -116,10 +120,23 @@ func (p *Playlists) SetPlaylistEntries(uuid string, entries []PlaylistEntry) err
 
 	playlist.setEntries(entries)
 
-	p.changes <- PlaylistsChange{
+	p.broadcaster.changes <- PlaylistsChange{
 		Variant: PlaylistsItemsChange,
 	}
 	return nil
+}
+
+func (p *Playlists) Subscribe(sub PlaylistSubscriber, onError func(err error)) {
+	p.broadcaster.Subscribe(func(change interface{}) {
+		playlistChange, ok := change.(PlaylistsChange)
+		if !ok {
+			onError(errIncorrectChangesType)
+
+			return
+		}
+
+		sub(playlistChange)
+	})
 }
 
 // AddPlaylist sets items of the playlist with uuid.
@@ -140,7 +157,7 @@ func (p *Playlists) AddPlaylist(playlist *Playlist) (string, error) {
 	p.items[playlist.uuid] = playlist
 	p.lock.Unlock()
 
-	p.changes <- PlaylistsChange{
+	p.broadcaster.changes <- PlaylistsChange{
 		Variant: PlaylistsAdded,
 	}
 
