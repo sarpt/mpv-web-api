@@ -33,14 +33,3 @@ func (s *Server) statusSSEChannel() channel {
 		replayHandler: s.createStatusReplayHandler(),
 	}
 }
-
-// statusChangesToChannelObserversDistributor is a fan-out dispatcher, which notifies all playback observers (subscribers from SSE etc.) when a playbackChange occurs.
-func statusChangesToChannelObserversDistributor(channelObservers observers) func(change state.StatusChange) {
-	return func(change state.StatusChange) {
-		channelObservers.lock.RLock()
-		for _, observer := range channelObservers.items {
-			observer <- change
-		}
-		channelObservers.lock.RUnlock()
-	}
-}

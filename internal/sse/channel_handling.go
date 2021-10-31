@@ -30,12 +30,6 @@ const (
 	ObserverRemoved ObserverChangeVariant = "observer-removed"
 )
 
-// observers represents client observers that are currently connected to this instance of api server
-type observers struct {
-	items map[string]chan interface{}
-	lock  *sync.RWMutex
-}
-
 // ObserverChangeVariant specifies what change to the state the specified observers change specifies (addition, removal, etc.).
 type ObserverChangeVariant string
 
@@ -100,10 +94,7 @@ func (s *Server) observeChannelVariant(res ResponseWriter, req *http.Request, ss
 	defer wg.Done()
 
 	remoteAddr := req.RemoteAddr
-	changes := make(chan interface{})
-	sseChannel.observers.lock.Lock()
-	sseChannel.observers.items[remoteAddr] = changes
-	sseChannel.observers.lock.Unlock()
+	changes := sseChannel.observers.Add(remoteAddr)
 
 	if s.observersChange != nil {
 		s.observersChange <- ObserversChange{
@@ -150,9 +141,7 @@ func (s *Server) observeChannelVariant(res ResponseWriter, req *http.Request, ss
 // the loop of channel observers and unlock the mutex.
 func (s *Server) waitForConnectionClosure(req *http.Request, done chan<- bool, sseChannel channel) {
 	<-req.Context().Done()
-	sseChannel.observers.lock.Lock()
-	delete(sseChannel.observers.items, req.RemoteAddr)
-	sseChannel.observers.lock.Unlock()
+	sseChannel.observers.Remove(req.RemoteAddr)
 
 	if s.observersChange != nil {
 		s.observersChange <- ObserversChange{

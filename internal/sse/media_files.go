@@ -43,14 +43,3 @@ func (s *Server) mediaFilesSSEChannel() channel {
 		replayHandler: s.createMediaFilesReplayHandler(),
 	}
 }
-
-// mediaFilesChangesToChannelObserversDistributor is a fan-out dispatcher, which notifies all playback observers (subscribers from SSE etc.) when a playbackChange occurs.
-func mediaFilesChangesToChannelObserversDistributor(channelObservers observers) func(change state.MediaFilesChange) {
-	return func(change state.MediaFilesChange) {
-		channelObservers.lock.RLock()
-		for _, observer := range channelObservers.items {
-			observer <- change
-		}
-		channelObservers.lock.RUnlock()
-	}
-}

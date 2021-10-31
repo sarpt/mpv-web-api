@@ -4,7 +4,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"sync"
 
 	"github.com/sarpt/mpv-web-api/pkg/state"
 )
@@ -47,44 +46,38 @@ type Config struct {
 // NewServer prepares and returns SSE server to handle SSE connections and observers.
 func NewServer(cfg Config) *Server {
 	return &Server{
-		directories: cfg.Directories,
-		directoriesObservers: observers{
-			items: map[string]chan interface{}{},
-			lock:  &sync.RWMutex{},
-		},
-		errLog:     log.New(cfg.ErrWriter, logPrefix, log.LstdFlags),
-		mediaFiles: cfg.MediaFiles,
-		mediaFilesObservers: observers{
-			items: map[string]chan interface{}{},
-			lock:  &sync.RWMutex{},
-		},
-		observersChange: cfg.ObserversChanges,
-		outLog:          log.New(cfg.OutWriter, logPrefix, log.LstdFlags),
-		playback:        cfg.Playback,
-		playbackObservers: observers{
-			items: map[string]chan interface{}{},
-			lock:  &sync.RWMutex{},
-		},
-		playlists: cfg.Playlists,
-		playlistsObservers: observers{
-			items: map[string]chan interface{}{},
-			lock:  &sync.RWMutex{},
-		},
-		status: cfg.Status,
-		statusObservers: observers{
-			items: map[string]chan interface{}{},
-			lock:  &sync.RWMutex{},
-		},
+		directories:          cfg.Directories,
+		directoriesObservers: newDirectoryObserver(),
+		errLog:               log.New(cfg.ErrWriter, logPrefix, log.LstdFlags),
+		mediaFiles:           cfg.MediaFiles,
+		mediaFilesObservers:  newMediaFilesObservers(),
+		observersChange:      cfg.ObserversChanges,
+		outLog:               log.New(cfg.OutWriter, logPrefix, log.LstdFlags),
+		playback:             cfg.Playback,
+		playbackObservers:    newPlaybackObservers(),
+		playlists:            cfg.Playlists,
+		playlistsObservers:   newPlaylistsObservers(),
+		status:               cfg.Status,
+		statusObservers:      newStatusObservers(),
 	}
 }
 
 // InitDispatchers starts listening on state changes channels for further distribution to its observers.
 func (s *Server) InitDispatchers() {
-	s.directories.Subscribe(directoriesChangesToChannelObserversDistributor(s.directoriesObservers), func(err error) {})
-	s.playback.Subscribe(playbackChangesToChannelObserversDistributor(s.playbackObservers), func(err error) {})
-	s.playlists.Subscribe(playlistsChangesToChannelObserversDistributor(s.playbackObservers), func(err error) {})
-	s.mediaFiles.Subscribe(mediaFilesChangesToChannelObserversDistributor(s.playlistsObservers), func(err error) {})
-	s.status.Subscribe(statusChangesToChannelObserversDistributor(s.statusObservers), func(err error) {})
+	directoriesObservers := s.directoriesObservers.(*directoriesObserver) // TODO: Ooof... Eww... Remove when rewriting with generics
+	s.directories.Subscribe(directoriesObservers.BroadcastToChannelObservers, func(err error) {})
+
+	playbackObservers := s.playbackObservers.(*playbackObservers)
+	s.playback.Subscribe(playbackObservers.BroadcastToChannelObservers, func(err error) {})
+
+	playlistsObservers := s.playlistsObservers.(*playlistsObservers)
+	s.playlists.Subscribe(playlistsObservers.BroadcastToChannelObservers, func(err error) {})
+
+	mediaFilesObservers := s.mediaFilesObservers.(*mediaFilesObservers)
+	s.mediaFiles.Subscribe(mediaFilesObservers.BroadcastToChannelObservers, func(err error) {})
+
+	statusObservers := s.statusObservers.(*statusObservers)
+	s.status.Subscribe(statusObservers.BroadcastToChannelObservers, func(err error) {})
 }
 
 // Handler returns map of HTTPs methods and their handlers.

@@ -28,8 +28,8 @@ func (cb *ChangesBroadcaster) Subscribe(sub ChangesSubscriber) {
 func (cb *ChangesBroadcaster) Broadcast() {
 	go func() {
 		for {
-			change, done := <-cb.changes
-			if done {
+			change, more := <-cb.changes
+			if !more {
 				return
 			}
 

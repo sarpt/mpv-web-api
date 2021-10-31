@@ -43,14 +43,3 @@ func (s *Server) directoriesSSEChannel() channel {
 		replayHandler: s.createDirectoriesReplayHandler(),
 	}
 }
-
-// directoriesChangesToChannelObserversDistributor is a fan-out dispatcher, which notifies all playback observers (subscribers from SSE etc.) when a playbackChange occurs.
-func directoriesChangesToChannelObserversDistributor(channelObservers observers) func(change state.DirectoriesChange) {
-	return func(change state.DirectoriesChange) {
-		channelObservers.lock.RLock()
-		for _, observer := range channelObservers.items {
-			observer <- change
-		}
-		channelObservers.lock.RUnlock()
-	}
-}
