@@ -16,19 +16,15 @@ const (
 
 // Server holds information about handled SSE connections and their observers.
 type Server struct {
-	directories          *state.Directories
-	directoriesObservers observers
-	errLog               *log.Logger
-	mediaFiles           *state.MediaFiles // TODO: this state passing from the user is very iffy - consider using either callbacks or builder pattern.
-	mediaFilesObservers  observers
-	observersChange      chan<- ObserversChange
-	outLog               *log.Logger
-	playback             *state.Playback
-	playbackObservers    observers
-	playlists            *state.Playlists
-	playlistsObservers   observers
-	status               *state.Status
-	statusObservers      observers
+	channels        map[state.SSEChannelVariant]channel
+	directories     *state.Directories
+	errLog          *log.Logger
+	mediaFiles      *state.MediaFiles // TODO: this state passing from the user is very iffy - consider using either callbacks or builder pattern.
+	observersChange chan<- ObserversChange
+	outLog          *log.Logger
+	playback        *state.Playback
+	playlists       *state.Playlists
+	status          *state.Status
 }
 
 // Config controls behaviour of the SSE server.
@@ -46,50 +42,46 @@ type Config struct {
 // NewServer prepares and returns SSE server to handle SSE connections and observers.
 func NewServer(cfg Config) *Server {
 	return &Server{
-		directories:          cfg.Directories,
-		directoriesObservers: newDirectoryObserver(),
-		errLog:               log.New(cfg.ErrWriter, logPrefix, log.LstdFlags),
-		mediaFiles:           cfg.MediaFiles,
-		mediaFilesObservers:  newMediaFilesObservers(),
-		observersChange:      cfg.ObserversChanges,
-		outLog:               log.New(cfg.OutWriter, logPrefix, log.LstdFlags),
-		playback:             cfg.Playback,
-		playbackObservers:    newPlaybackObservers(),
-		playlists:            cfg.Playlists,
-		playlistsObservers:   newPlaylistsObservers(),
-		status:               cfg.Status,
-		statusObservers:      newStatusObservers(),
+		channels: map[state.SSEChannelVariant]channel{
+			directoriesSSEChannelVariant: newDirectoriesChannel(cfg.Directories),
+			mediaFilesSSEChannelVariant:  newMediaFilesChannel(cfg.MediaFiles),
+			playbackSSEChannelVariant:    newPlaybackChannel(cfg.Playback),
+			playlistsSSEChannelVariant:   newPlaylistsChannel(cfg.Playback, cfg.Playlists),
+			statusSSEChannelVariant:      newStatusChannel(cfg.Status),
+		},
+		directories:     cfg.Directories,
+		errLog:          log.New(cfg.ErrWriter, logPrefix, log.LstdFlags),
+		mediaFiles:      cfg.MediaFiles,
+		observersChange: cfg.ObserversChanges,
+		outLog:          log.New(cfg.OutWriter, logPrefix, log.LstdFlags),
+		playback:        cfg.Playback,
+		playlists:       cfg.Playlists,
+		status:          cfg.Status,
 	}
 }
 
 // InitDispatchers starts listening on state changes channels for further distribution to its observers.
 func (s *Server) InitDispatchers() {
-	directoriesObservers := s.directoriesObservers.(*directoriesObserver) // TODO: Ooof... Eww... Remove when rewriting with generics
-	s.directories.Subscribe(directoriesObservers.BroadcastToChannelObservers, func(err error) {})
+	directoriesChannel := s.channels[directoriesSSEChannelVariant].(*directoriesChannel) // TODO: Ooof... Eww... Remove when rewriting with generics
+	s.directories.Subscribe(directoriesChannel.BroadcastToChannelObservers, func(err error) {})
 
-	playbackObservers := s.playbackObservers.(*playbackObservers)
-	s.playback.Subscribe(playbackObservers.BroadcastToChannelObservers, func(err error) {})
+	playbackChannel := s.channels[playbackSSEChannelVariant].(*playbackChannel)
+	s.playback.Subscribe(playbackChannel.BroadcastToChannelObservers, func(err error) {})
 
-	playlistsObservers := s.playlistsObservers.(*playlistsObservers)
-	s.playlists.Subscribe(playlistsObservers.BroadcastToChannelObservers, func(err error) {})
+	playlistsChannel := s.channels[playlistsSSEChannelVariant].(*playlistsChannel)
+	s.playlists.Subscribe(playlistsChannel.BroadcastToChannelObservers, func(err error) {})
 
-	mediaFilesObservers := s.mediaFilesObservers.(*mediaFilesObservers)
-	s.mediaFiles.Subscribe(mediaFilesObservers.BroadcastToChannelObservers, func(err error) {})
+	mediaFilesChannel := s.channels[mediaFilesSSEChannelVariant].(*mediaFilesChannel)
+	s.mediaFiles.Subscribe(mediaFilesChannel.BroadcastToChannelObservers, func(err error) {})
 
-	statusObservers := s.statusObservers.(*statusObservers)
-	s.status.Subscribe(statusObservers.BroadcastToChannelObservers, func(err error) {})
+	statusChannel := s.channels[statusSSEChannelVariant].(*statusChannel)
+	s.status.Subscribe(statusChannel.BroadcastToChannelObservers, func(err error) {})
 }
 
 // Handler returns map of HTTPs methods and their handlers.
 func (s *Server) Handler() http.Handler {
 	sseCfg := handlerConfig{
-		Channels: map[state.SSEChannelVariant]channel{
-			directoriesSSEChannelVariant: s.directoriesSSEChannel(),
-			playbackSSEChannelVariant:    s.playbackSSEChannel(),
-			playlistsSSEChannelVariant:   s.playlistsSSEChannel(),
-			mediaFilesSSEChannelVariant:  s.mediaFilesSSEChannel(),
-			statusSSEChannelVariant:      s.statusSSEChannel(),
-		},
+		Channels: s.channels,
 	}
 
 	mux := http.NewServeMux()

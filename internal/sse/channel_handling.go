@@ -16,7 +16,6 @@ var (
 	errResponseJSONCreationFailed = errors.New("could not create JSON for response")
 	errClientWritingFailed        = errors.New("could not write to the client")
 	errConvertToFlusherFailed     = errors.New("could not instantiate http sse flusher")
-	errIncorrectChangesType       = errors.New("changes of incorrect type provided to the change handler")
 )
 
 const (
@@ -41,16 +40,14 @@ type ObserversChange struct {
 }
 
 type getSseHandler = func(res http.ResponseWriter, req *http.Request)
-type sseReplayHandler = func(res ResponseWriter) error
-type sseChangeHandler = func(res ResponseWriter, change interface{}) error
 
 // channel is used to construct channel on which subscribers can listen to on a mutexed on a single SSE keep-alive connection
-type channel struct {
-	observers     observers
-	variant       state.SSEChannelVariant
-	changeHandler sseChangeHandler
-	replayHandler sseReplayHandler
-}
+// type channel struct {
+// 	observers     observers
+// 	variant       state.SSEChannelVariant
+// 	changeHandler sseChangeHandler
+// 	replayHandler sseReplayHandler
+// }
 
 // handlerConfig is used to control creation of SSE handler for Server
 type handlerConfig struct {
@@ -94,40 +91,38 @@ func (s *Server) observeChannelVariant(res ResponseWriter, req *http.Request, ss
 	defer wg.Done()
 
 	remoteAddr := req.RemoteAddr
-	changes := sseChannel.observers.Add(remoteAddr)
+	sseChannel.AddObserver(remoteAddr)
 
 	if s.observersChange != nil {
 		s.observersChange <- ObserversChange{
 			ChangeVariant:  ObserverAdded,
 			RemoteAddr:     remoteAddr,
-			ChannelVariant: sseChannel.variant,
+			ChannelVariant: sseChannel.Variant(),
 		}
 	}
-	s.outLog.Printf("added %s observer with addr %s\n", sseChannel.variant, remoteAddr)
+	s.outLog.Printf("added %s observer with addr %s\n", sseChannel.Variant(), remoteAddr)
 
 	if replaySseState(req) {
-		err := sseChannel.replayHandler(res)
+		err := sseChannel.Replay(res)
 		if err != nil {
 			s.errLog.Println(fmt.Sprintf("could not replay data on sse: %s", err.Error()))
 		}
 	}
 
 	connectionDone := make(chan bool)
+	channelDone := make(chan bool)
+	channelErrors := make(chan error)
 	go s.waitForConnectionClosure(req, connectionDone, sseChannel)
+	go sseChannel.ServeObserver(remoteAddr, res, channelDone, channelErrors)
 
 	for {
 		select {
-		case change, closed := <-changes:
-			if !closed {
-				s.outLog.Printf("sse observation on channel %s done for %s due to changes channel being closed\n", sseChannel.variant, remoteAddr)
+		case err := <-channelErrors:
+			s.errLog.Printf("error occured on channel %s for remote address %s: %s", sseChannel.Variant(), remoteAddr, err)
+		case <-channelDone:
+			s.outLog.Printf("sse observation on channel %s done for %s due to changes channel being closed\n", sseChannel.Variant(), remoteAddr)
 
-				return
-			}
-
-			err := sseChannel.changeHandler(res, change)
-			if err != nil {
-				s.errLog.Println(err.Error())
-			}
+			return
 		case <-connectionDone:
 			return
 		}
@@ -141,16 +136,16 @@ func (s *Server) observeChannelVariant(res ResponseWriter, req *http.Request, ss
 // the loop of channel observers and unlock the mutex.
 func (s *Server) waitForConnectionClosure(req *http.Request, done chan<- bool, sseChannel channel) {
 	<-req.Context().Done()
-	sseChannel.observers.Remove(req.RemoteAddr)
+	sseChannel.RemoveObserver(req.RemoteAddr)
 
 	if s.observersChange != nil {
 		s.observersChange <- ObserversChange{
 			ChangeVariant:  ObserverRemoved,
 			RemoteAddr:     req.RemoteAddr,
-			ChannelVariant: sseChannel.variant,
+			ChannelVariant: sseChannel.Variant(),
 		}
 	}
-	s.outLog.Printf("removing %s observer with addr %s\n", sseChannel.variant, req.RemoteAddr)
+	s.outLog.Printf("removing %s observer with addr %s\n", sseChannel.Variant(), req.RemoteAddr)
 
 	done <- true
 	close(done)

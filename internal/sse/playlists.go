@@ -1,35 +1,102 @@
 package sse
 
-import "github.com/sarpt/mpv-web-api/pkg/state"
+import (
+	"errors"
+	"sync"
+
+	"github.com/sarpt/mpv-web-api/pkg/state"
+)
 
 const (
 	playlistsSSEChannelVariant state.SSEChannelVariant = "playlists"
 )
 
-func (s *Server) createPlaylistsReplayHandler() sseReplayHandler {
-	return func(res ResponseWriter) error {
-		return res.SendChange(s.playlists, playlistsSSEChannelVariant, string(state.PlaylistsReplay))
+type playlistsChannel struct {
+	playback  *state.Playback
+	playlists *state.Playlists
+	lock      *sync.RWMutex
+	observers map[string]chan state.PlaylistsChange
+}
+
+func newPlaylistsChannel(playback *state.Playback, playlists *state.Playlists) *playlistsChannel {
+	return &playlistsChannel{
+		playback:  playback,
+		playlists: playlists,
+		observers: map[string]chan state.PlaylistsChange{},
+		lock:      &sync.RWMutex{},
 	}
 }
 
-func (s *Server) createPlaylistsChangesHandler() sseChangeHandler {
-	return func(res ResponseWriter, changes interface{}) error {
-		change, ok := changes.(state.PlaylistsChange)
-		if !ok {
-			return errIncorrectChangesType
+func (pc *playlistsChannel) AddObserver(address string) {
+	changes := make(chan state.PlaylistsChange)
+
+	pc.lock.Lock()
+	defer pc.lock.Unlock()
+
+	pc.observers[address] = changes
+}
+
+func (pc *playlistsChannel) RemoveObserver(address string) {
+	pc.lock.Lock()
+	defer pc.lock.Unlock()
+
+	changes, ok := pc.observers[address]
+	if !ok {
+		return
+	}
+
+	close(changes)
+	delete(pc.observers, address)
+}
+
+func (pc *playlistsChannel) Replay(res ResponseWriter) error {
+	return res.SendChange(pc.playlists, pc.Variant(), playbackReplaySseEvent)
+}
+
+func (pc *playlistsChannel) ServeObserver(address string, res ResponseWriter, done chan<- bool, errs chan<- error) {
+	defer close(done)
+	defer close(errs)
+
+	changes, ok := pc.observers[address]
+	if !ok {
+		errs <- errors.New("no observer found for provided address")
+		done <- true
+
+		return
+	}
+
+	for {
+		change, more := <-changes
+		if !more {
+			done <- true
+
+			return
 		}
 
-		// TODO: playlists changes always send the whole state of the playlists state - hardly ideal.
-		// To consider: most of the time changes would revolve around a single playlist - probably sending only playlist in question would be enough.
-		return res.SendChange(s.playlists, playlistsSSEChannelVariant, string(change.Variant))
+		err := pc.changeHandler(res, change)
+		if err != nil {
+			errs <- err
+		}
 	}
 }
 
-func (s *Server) playlistsSSEChannel() channel {
-	return channel{
-		variant:       playlistsSSEChannelVariant,
-		observers:     s.playlistsObservers,
-		changeHandler: s.createPlaylistsChangesHandler(),
-		replayHandler: s.createPlaylistsReplayHandler(),
+func (pc *playlistsChannel) changeHandler(res ResponseWriter, change state.PlaylistsChange) error {
+	if pc.playback.Stopped { // TODO: the changes are shot by state.Playback even after the mediaFilePath is cleared, as such it may be wasteful to push further changes through SSE. to think of a way to reduce number of those blank data calls after closing stopping playback
+		return res.SendEmptyChange(pc.Variant(), string(change.Variant))
 	}
+
+	return res.SendChange(pc.playlists, pc.Variant(), string(change.Variant))
+}
+
+func (pc *playlistsChannel) BroadcastToChannelObservers(change state.PlaylistsChange) {
+	pc.lock.RLock()
+	defer pc.lock.RUnlock()
+
+	for _, observer := range pc.observers {
+		observer <- change
+	}
+}
+
+func (pc playlistsChannel) Variant() state.SSEChannelVariant {
+	return playlistsSSEChannelVariant
 }
