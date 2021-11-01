@@ -1,6 +1,9 @@
 package sse
 
 import (
+	"errors"
+	"sync"
+
 	"github.com/sarpt/mpv-web-api/pkg/state"
 )
 
@@ -8,28 +11,86 @@ const (
 	statusSSEChannelVariant state.SSEChannelVariant = "status"
 )
 
-func (s *Server) createStatusReplayHandler() sseReplayHandler {
-	return func(res ResponseWriter) error {
-		return res.SendChange(s.status, statusSSEChannelVariant, string(state.StatusReplay))
+type statusChannel struct {
+	status    *state.Status
+	lock      *sync.RWMutex
+	observers map[string]chan state.StatusChange
+}
+
+func newStatusChannel(status *state.Status) *statusChannel {
+	return &statusChannel{
+		status:    status,
+		observers: map[string]chan state.StatusChange{},
+		lock:      &sync.RWMutex{},
 	}
 }
 
-func (s *Server) createStatusChangeHandler() sseChangeHandler {
-	return func(res ResponseWriter, changes interface{}) error {
-		statusChange, ok := changes.(state.StatusChange)
-		if !ok {
-			return errIncorrectChangesType
+func (sc *statusChannel) AddObserver(address string) {
+	changes := make(chan state.StatusChange)
+
+	sc.lock.Lock()
+	defer sc.lock.Unlock()
+
+	sc.observers[address] = changes
+}
+
+func (sc *statusChannel) RemoveObserver(address string) {
+	sc.lock.Lock()
+	defer sc.lock.Unlock()
+
+	changes, ok := sc.observers[address]
+	if !ok {
+		return
+	}
+
+	close(changes)
+	delete(sc.observers, address)
+}
+
+func (sc *statusChannel) Replay(res ResponseWriter) error {
+	return res.SendChange(sc.status, sc.Variant(), string(state.StatusReplay))
+}
+
+func (sc *statusChannel) ServeObserver(address string, res ResponseWriter, done chan<- bool, errs chan<- error) {
+	defer close(done)
+	defer close(errs)
+
+	changes, ok := sc.observers[address]
+	if !ok {
+		errs <- errors.New("no observer found for provided address")
+		done <- true
+
+		return
+	}
+
+	for {
+		change, more := <-changes
+		if !more {
+			done <- true
+
+			return
 		}
 
-		return res.SendChange(s.status, statusSSEChannelVariant, string(statusChange.Variant))
+		err := sc.changeHandler(res, change)
+		if err != nil {
+			errs <- err
+		}
 	}
 }
 
-func (s *Server) statusSSEChannel() channel {
-	return channel{
-		variant:       statusSSEChannelVariant,
-		observers:     s.statusObservers,
-		changeHandler: s.createStatusChangeHandler(),
-		replayHandler: s.createStatusReplayHandler(),
+func (sc *statusChannel) changeHandler(res ResponseWriter, change state.StatusChange) error {
+	return res.SendChange(sc.status, sc.Variant(), string(change.Variant))
+}
+
+func (sc *statusChannel) BroadcastToChannelObservers(change state.StatusChange) {
+	sc.lock.RLock()
+	defer sc.lock.RUnlock()
+
+	for _, observer := range sc.observers {
+		observer <- change
 	}
+}
+
+func (sc statusChannel) Variant() state.SSEChannelVariant {
+	return statusSSEChannelVariant
 }

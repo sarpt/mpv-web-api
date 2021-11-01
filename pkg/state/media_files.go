@@ -22,6 +22,8 @@ const (
 	RemovedMediaFilesChange MediaFilesChangeVariant = "removed"
 )
 
+type MediaFilesSubscriber = func(change MediaFilesChange)
+
 // MediaFilesChange holds information about changes to the list of mediaFiles being served.
 type MediaFilesChange struct {
 	Variant MediaFilesChangeVariant
@@ -39,17 +41,20 @@ type MediaFilesChangeVariant string
 // MediaFiles is an aggregate state of the media files being served by the server instance.
 // Any modification done on the state should be done by exposed methods which should guarantee goroutine access safety.
 type MediaFiles struct {
-	items   map[string]MediaFile
-	changes chan interface{}
-	lock    *sync.RWMutex
+	broadcaster *ChangesBroadcaster
+	items       map[string]MediaFile
+	lock        *sync.RWMutex
 }
 
 // NewMediaFiles counstructs MediaFiles state.
 func NewMediaFiles() *MediaFiles {
+	broadcaster := NewChangesBroadcaster()
+	broadcaster.Broadcast()
+
 	return &MediaFiles{
-		items:   map[string]MediaFile{},
-		changes: make(chan interface{}),
-		lock:    &sync.RWMutex{},
+		broadcaster: broadcaster,
+		items:       map[string]MediaFile{},
+		lock:        &sync.RWMutex{},
 	}
 }
 
@@ -70,7 +75,7 @@ func (m *MediaFiles) Add(mediaFile MediaFile) {
 	addedMediaFiles := map[string]MediaFile{
 		path: mediaFile,
 	}
-	m.changes <- MediaFilesChange{
+	m.broadcaster.changes <- MediaFilesChange{
 		Variant: AddedMediaFilesChange,
 		Items:   addedMediaFiles,
 	}
@@ -120,11 +125,6 @@ func (m *MediaFiles) ByParent(parentPath string) []MediaFile {
 	return mediaFiles
 }
 
-// Changes returns read-only channel notifying of mediaFiles changes.
-func (m *MediaFiles) Changes() <-chan interface{} {
-	return m.changes
-}
-
 // Exists checks whether media file with provided path exists.
 func (m *MediaFiles) Exists(path string) bool {
 	_, err := m.ByPath(path)
@@ -148,6 +148,19 @@ func (m *MediaFiles) PathsUnderParent(parentPath string) []string {
 	return paths
 }
 
+func (p *MediaFiles) Subscribe(sub MediaFilesSubscriber, onError func(err error)) {
+	p.broadcaster.Subscribe(func(change interface{}) {
+		mediaFilesChange, ok := change.(MediaFilesChange)
+		if !ok {
+			onError(errIncorrectChangesType)
+
+			return
+		}
+
+		sub(mediaFilesChange)
+	})
+}
+
 // Take removes MediaFile by a provided path from the state,
 // returning the object for use after removal.
 // When media file cannot be found, the error is being reported.
@@ -161,7 +174,7 @@ func (m *MediaFiles) Take(path string) (MediaFile, error) {
 	delete(m.items, path)
 	m.lock.Unlock()
 
-	m.changes <- MediaFilesChange{
+	m.broadcaster.changes <- MediaFilesChange{
 		Variant: RemovedMediaFilesChange,
 		Items: map[string]MediaFile{
 			mediaFile.path: mediaFile,
@@ -197,7 +210,7 @@ func (m *MediaFiles) TakeMultiple(paths []string) ([]MediaFile, []string) {
 		change.Items[mediaFile.path] = mediaFile
 	}
 
-	m.changes <- change
+	m.broadcaster.changes <- change
 
 	return taken, skipped
 }
