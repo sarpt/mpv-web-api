@@ -60,8 +60,8 @@ func NewServer(cfg Config) *Server {
 	}
 }
 
-// InitDispatchers starts listening on state changes channels for further distribution to its observers.
-func (s *Server) InitDispatchers() {
+// SubscribeToStateChanges starts listening on state changes channels for further distribution to its observers.
+func (s *Server) SubscribeToStateChanges() {
 	directoriesChannel := s.channels[directoriesSSEChannelVariant].(*directoriesChannel) // TODO: Ooof... Eww... Remove when rewriting with generics
 	s.directories.Subscribe(directoriesChannel.BroadcastToChannelObservers, func(err error) {})
 

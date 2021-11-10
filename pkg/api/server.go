@@ -190,7 +190,8 @@ func (s *Server) Serve() error {
 
 func (s *Server) initWatchers() error {
 	go s.watchSSEObserversChanges()
-	s.sseServer.InitDispatchers()
+	s.sseServer.SubscribeToStateChanges()
+	s.playback.Subscribe(s.handlePlaylistRelatedPlaybackChanges, func(err error) {})
 
 	observePropertyResponses := make(chan mpv.ObservePropertyResponse)
 	observePropertyHandlers := map[string]observePropertyHandler{
@@ -207,7 +208,7 @@ func (s *Server) initWatchers() error {
 	}
 	go s.watchObservePropertyResponses(observePropertyHandlers, observePropertyResponses)
 
-	return s.observeProperties(observePropertyResponses)
+	return s.subscribeToMpvProperties(observePropertyResponses)
 }
 
 func (s Server) watchObservePropertyResponses(handlers map[string]observePropertyHandler, responses chan mpv.ObservePropertyResponse) {
@@ -245,7 +246,7 @@ func (s Server) watchSSEObserversChanges() {
 	}
 }
 
-func (s Server) observeProperties(observeResponses chan mpv.ObservePropertyResponse) error {
+func (s Server) subscribeToMpvProperties(observeResponses chan mpv.ObservePropertyResponse) error {
 	for _, propertyName := range mpv.ObservableProperties {
 		_, err := s.mpvManager.SubscribeToProperty(propertyName, observeResponses)
 		if err != nil {

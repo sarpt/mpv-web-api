@@ -41,14 +41,6 @@ type ObserversChange struct {
 
 type getSseHandler = func(res http.ResponseWriter, req *http.Request)
 
-// channel is used to construct channel on which subscribers can listen to on a mutexed on a single SSE keep-alive connection
-// type channel struct {
-// 	observers     observers
-// 	variant       state.SSEChannelVariant
-// 	changeHandler sseChangeHandler
-// 	replayHandler sseReplayHandler
-// }
-
 // handlerConfig is used to control creation of SSE handler for Server
 type handlerConfig struct {
 	Channels map[state.SSEChannelVariant]channel

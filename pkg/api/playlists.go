@@ -111,6 +111,7 @@ func (s *Server) handlePlaylistFile(path string) (string, error) {
 		DirectoryContentsAsEntries: playlistFile.DirectoryContentsAsEntries,
 		Entries:                    playlistFile.Entries,
 		Name:                       playlistFile.Name,
+		Path:                       path,
 	}
 
 	uuid, err := s.playlists.AddPlaylist(state.NewPlaylist(playlistCfg))
@@ -139,4 +140,55 @@ func (s *Server) readPlaylistFile(path string) (PlaylistFile, error) {
 	}
 
 	return Playlist, nil
+}
+
+func (s *Server) handlePlaylistRelatedPlaybackChanges(change state.PlaybackChange) {
+	if change.Variant != state.PlaylistUnloadChange && change.Variant != state.PlaylistCurrentIdxChange {
+		return
+	}
+
+	if change.Variant == state.PlaylistCurrentIdxChange {
+		uuid := s.playback.PlaylistUUID()
+		if uuid == s.defaultPlaylistUUID {
+			return
+		}
+
+		err := s.playlists.SetPlaylistCurrentEntryIdx(uuid, s.playback.PlaylistCurrentIdx())
+		if err != nil {
+			s.errLog.Println(err)
+		}
+	} else if change.Variant == state.PlaylistUnloadChange {
+		uuid, ok := change.Value.(string)
+		if !ok || uuid == s.defaultPlaylistUUID {
+			return
+		}
+
+		err := s.savePlaylist(uuid)
+		if err != nil {
+			s.errLog.Println(err)
+		}
+	}
+}
+
+func (s *Server) savePlaylist(uuid string) error {
+	playlist, err := s.playlists.ByUUID(uuid)
+	if err != nil {
+		return err
+	}
+
+	playlistFile := &PlaylistFile{
+		CurrentEntryIdx:            s.playback.PlaylistCurrentIdx(),
+		DirectoryContentsAsEntries: playlist.DirectoryContentsAsEntries(),
+		Entries:                    playlist.All(),
+		MpvWebApiPlaylist:          true,
+		Name:                       playlist.Name(),
+		Description:                playlist.Description(),
+	}
+
+	filePayload, err := json.Marshal(playlistFile)
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(playlist.Path(), filePayload, 0)
 }

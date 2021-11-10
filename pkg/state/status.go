@@ -14,9 +14,6 @@ type StatusChangeVariant string
 type SSEChannelVariant string
 
 const (
-	// StatusReplay notifies about replay of status state.
-	StatusReplay StatusChangeVariant = "replay"
-
 	// ClientObserverAdded notifies about addition of new client observer.
 	ClientObserverAdded StatusChangeVariant = "client-observer-added"
 
