@@ -40,6 +40,9 @@ const (
 	// PlaylistSelectionChange notifies about change of currently played playlist.
 	PlaylistSelectionChange PlaybackChangeVariant = "playlistSelectionChange"
 
+	// PlaylistUnloadChange notifies about unload of playlist.
+	PlaylistUnloadChange PlaybackChangeVariant = "playlistUnloadChange"
+
 	// PlaylistCurrentIdxChange notifies about change of currently played entry in a selected playlist.
 	PlaylistCurrentIdxChange PlaybackChangeVariant = "playlistCurrentIdxChange"
 )
@@ -48,6 +51,7 @@ const (
 // TODO: implement playback change to carry information on the change (using either interfaces or generics in go2).
 type PlaybackChange struct {
 	Variant PlaybackChangeVariant
+	Value   interface{}
 }
 
 // Playback contains information about currently played media file.
@@ -115,6 +119,10 @@ func (p *Playback) MarshalJSON() ([]byte, error) {
 	return json.Marshal(pJSON)
 }
 
+func (p *Playback) PlaylistCurrentIdx() int {
+	return p.playlistCurrentIdx
+}
+
 func (p *Playback) PlaylistUUID() string {
 	return p.playlistUUID
 }
@@ -178,6 +186,11 @@ func (p *Playback) SetPause(paused bool) {
 
 // SelectPlaylist sets currently played uuid of a playlist.
 func (p *Playback) SelectPlaylist(uuid string) {
+	p.broadcaster.changes <- PlaybackChange{
+		Variant: PlaylistUnloadChange,
+		Value:   p.playlistUUID,
+	}
+
 	p.playlistUUID = uuid
 
 	p.broadcaster.changes <- PlaybackChange{

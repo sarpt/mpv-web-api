@@ -15,6 +15,7 @@ type Playlist struct {
 	entries                    []PlaylistEntry
 	name                       string
 	lock                       *sync.RWMutex
+	path                       string
 	uuid                       string
 }
 
@@ -24,6 +25,7 @@ type playlistJSON struct {
 	DirectoryContentsAsEntries bool            `json:"DirectoryContentsAsEntries"`
 	Entries                    []PlaylistEntry `json:"Entries"`
 	Name                       string          `json:"Name"`
+	Path                       string          `json:"Path"`
 	UUID                       string          `json:"UUID"`
 }
 
@@ -33,6 +35,7 @@ type PlaylistConfig struct {
 	DirectoryContentsAsEntries bool
 	Entries                    []PlaylistEntry
 	Name                       string
+	Path                       string
 }
 
 // NewPlaylist constructs Playlist state.
@@ -44,6 +47,7 @@ func NewPlaylist(cfg PlaylistConfig) *Playlist {
 		entries:                    cfg.Entries,
 		name:                       cfg.Name,
 		lock:                       &sync.RWMutex{},
+		path:                       cfg.Path,
 		uuid:                       uuid.NewString(),
 	}
 }
@@ -92,6 +96,7 @@ func (p *Playlist) EntriesDiffer(entries []PlaylistEntry) bool {
 
 // MarshalJSON satisifes json.Marshaller.
 func (p *Playlist) MarshalJSON() ([]byte, error) {
+	p.lock.Lock()
 	pJSON := playlistJSON{
 		DirectoryContentsAsEntries: p.directoryContentsAsEntries,
 		Description:                p.description,
@@ -99,7 +104,27 @@ func (p *Playlist) MarshalJSON() ([]byte, error) {
 		Name:                       p.name,
 		UUID:                       p.uuid,
 	}
+	p.lock.Unlock()
+
 	return json.Marshal(pJSON)
+}
+
+func (p *Playlist) Description() string {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
+	return p.description
+}
+
+func (p *Playlist) Name() string {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
+	return p.name
+}
+
+func (p *Playlist) Path() string {
+	return p.path
 }
 
 func (p *Playlist) setCurrentEntryIdx(idx int) {

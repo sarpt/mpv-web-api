@@ -90,7 +90,8 @@ func main() {
 	}
 
 	var mediaFilesDirectories []state.Directory
-	if len(dir.Values()) == 0 && len(watchDir.Values()) == 0 {
+	watchWorkingDir := len(dir.Values()) == 0 && len(watchDir.Values()) == 0 && len(dirRecursive.Values()) == 0 && len(watchDirRecursive.Values()) == 0
+	if watchWorkingDir {
 		wd, err := os.Getwd()
 		if err != nil {
 			errLog.Printf("could not start API server due to error while getting working directory: %s\n", err)

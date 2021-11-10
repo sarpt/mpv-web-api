@@ -9,6 +9,9 @@ import (
 
 const (
 	statusSSEChannelVariant state.SSEChannelVariant = "status"
+
+	// statusReplay notifies about replay of status state.
+	statusReplay state.StatusChangeVariant = "replay"
 )
 
 type statusChannel struct {
@@ -48,7 +51,7 @@ func (sc *statusChannel) RemoveObserver(address string) {
 }
 
 func (sc *statusChannel) Replay(res ResponseWriter) error {
-	return res.SendChange(sc.status, sc.Variant(), string(state.StatusReplay))
+	return res.SendChange(sc.status, sc.Variant(), string(statusReplay))
 }
 
 func (sc *statusChannel) ServeObserver(address string, res ResponseWriter, done chan<- bool, errs chan<- error) {

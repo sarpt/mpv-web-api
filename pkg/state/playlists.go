@@ -31,11 +31,12 @@ const (
 	// PlaylistsAdded notifies of a new playlist being served.
 	PlaylistsAdded PlaylistsChangeVariant = "added"
 
-	// PlaylistsReplay notifies about replay of a whole playlist state.
-	PlaylistsReplay PlaylistsChangeVariant = "replay"
+	// PlaylistsCurrentEntryIdxChange notifies about change to the most current idx
+	// (not neccessarily currently played by the mpv, but most recent idx in the scope of this playlist).
+	PlaylistsCurrentEntryIdxChange PlaylistsChangeVariant = "currentEntryIdxChange"
 
-	// PlaylistsItemsChange notifies about changes to the items/entries in a playlist.
-	PlaylistsItemsChange PlaylistsChangeVariant = "itemsChange"
+	// PlaylistsEntriesChange notifies about changes to the entries in a playlist.
+	PlaylistsEntriesChange PlaylistsChangeVariant = "entriesChange"
 )
 
 var (
@@ -45,7 +46,8 @@ var (
 
 // PlaylistsChange is used to inform about changes to the Playback.
 type PlaylistsChange struct {
-	Variant PlaylistsChangeVariant
+	Variant  PlaylistsChangeVariant
+	Playlist *Playlist
 }
 
 func NewPlaylists() *Playlists {
@@ -106,7 +108,8 @@ func (p *Playlists) SetPlaylistCurrentEntryIdx(uuid string, idx int) error {
 	playlist.setCurrentEntryIdx(idx)
 
 	p.broadcaster.changes <- PlaylistsChange{
-		Variant: PlaylistsItemsChange,
+		Variant:  PlaylistsCurrentEntryIdxChange,
+		Playlist: playlist,
 	}
 	return nil
 }
@@ -121,7 +124,8 @@ func (p *Playlists) SetPlaylistEntries(uuid string, entries []PlaylistEntry) err
 	playlist.setEntries(entries)
 
 	p.broadcaster.changes <- PlaylistsChange{
-		Variant: PlaylistsItemsChange,
+		Variant:  PlaylistsEntriesChange,
+		Playlist: playlist,
 	}
 	return nil
 }
@@ -144,10 +148,7 @@ func (p *Playlists) Subscribe(sub PlaylistSubscriber, onError func(err error)) {
 // Note: AddPlaylist is responsible for creating an UUID since users of the
 // functions should not be trusted that playlist has a valid, if any, UUID.
 func (p *Playlists) AddPlaylist(playlist *Playlist) (string, error) {
-	if playlist.uuid == "" {
-		uuid := uuid.NewString()
-		playlist.uuid = uuid
-	}
+	playlist.uuid = uuid.NewString()
 
 	if _, ok := p.items[playlist.uuid]; ok {
 		return playlist.uuid, fmt.Errorf("%w: %s", ErrPlaylistWithUUIDAlreadyExists, playlist.uuid)
@@ -158,7 +159,8 @@ func (p *Playlists) AddPlaylist(playlist *Playlist) (string, error) {
 	p.lock.Unlock()
 
 	p.broadcaster.changes <- PlaylistsChange{
-		Variant: PlaylistsAdded,
+		Variant:  PlaylistsAdded,
+		Playlist: playlist,
 	}
 
 	return playlist.uuid, nil

@@ -9,6 +9,8 @@ import (
 
 const (
 	playlistsSSEChannelVariant state.SSEChannelVariant = "playlists"
+
+	playlistsReplay state.PlaylistsChangeVariant = "replay"
 )
 
 type playlistsChannel struct {
@@ -50,7 +52,7 @@ func (pc *playlistsChannel) RemoveObserver(address string) {
 }
 
 func (pc *playlistsChannel) Replay(res ResponseWriter) error {
-	return res.SendChange(pc.playlists, pc.Variant(), playbackReplaySseEvent)
+	return res.SendChange(pc.playlists, pc.Variant(), string(playlistsReplay))
 }
 
 func (pc *playlistsChannel) ServeObserver(address string, res ResponseWriter, done chan<- bool, errs chan<- error) {
@@ -85,7 +87,7 @@ func (pc *playlistsChannel) changeHandler(res ResponseWriter, change state.Playl
 		return res.SendEmptyChange(pc.Variant(), string(change.Variant))
 	}
 
-	return res.SendChange(pc.playlists, pc.Variant(), string(change.Variant))
+	return res.SendChange(change.Playlist, pc.Variant(), string(change.Variant))
 }
 
 func (pc *playlistsChannel) BroadcastToChannelObservers(change state.PlaylistsChange) {
