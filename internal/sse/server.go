@@ -16,27 +16,26 @@ const (
 
 // Server holds information about handled SSE connections and their observers.
 type Server struct {
-	channels        map[state.SSEChannelVariant]channel
-	directories     *state.Directories
-	errLog          *log.Logger
-	mediaFiles      *state.MediaFiles // TODO: this state passing from the user is very iffy - consider using either callbacks or builder pattern.
-	observersChange chan<- ObserversChange
-	outLog          *log.Logger
-	playback        *state.Playback
-	playlists       *state.Playlists
-	status          *state.Status
+	channels         map[state.SSEChannelVariant]channel
+	directories      *state.Directories
+	errLog           *log.Logger
+	mediaFiles       *state.MediaFiles // TODO: this state passing from the user is very iffy - consider using either callbacks or builder pattern.
+	observersChanges chan ObserversChange
+	outLog           *log.Logger
+	playback         *state.Playback
+	playlists        *state.Playlists
+	status           *state.Status
 }
 
 // Config controls behaviour of the SSE server.
 type Config struct {
-	Directories      *state.Directories
-	ErrWriter        io.Writer
-	MediaFiles       *state.MediaFiles
-	ObserversChanges chan<- ObserversChange
-	OutWriter        io.Writer
-	Playback         *state.Playback
-	Playlists        *state.Playlists
-	Status           *state.Status
+	Directories *state.Directories
+	ErrWriter   io.Writer
+	MediaFiles  *state.MediaFiles
+	OutWriter   io.Writer
+	Playback    *state.Playback
+	Playlists   *state.Playlists
+	Status      *state.Status
 }
 
 // NewServer prepares and returns SSE server to handle SSE connections and observers.
@@ -49,14 +48,14 @@ func NewServer(cfg Config) *Server {
 			playlistsSSEChannelVariant:   newPlaylistsChannel(cfg.Playback, cfg.Playlists),
 			statusSSEChannelVariant:      newStatusChannel(cfg.Status),
 		},
-		directories:     cfg.Directories,
-		errLog:          log.New(cfg.ErrWriter, logPrefix, log.LstdFlags),
-		mediaFiles:      cfg.MediaFiles,
-		observersChange: cfg.ObserversChanges,
-		outLog:          log.New(cfg.OutWriter, logPrefix, log.LstdFlags),
-		playback:        cfg.Playback,
-		playlists:       cfg.Playlists,
-		status:          cfg.Status,
+		directories:      cfg.Directories,
+		errLog:           log.New(cfg.ErrWriter, logPrefix, log.LstdFlags),
+		mediaFiles:       cfg.MediaFiles,
+		observersChanges: make(chan ObserversChange),
+		outLog:           log.New(cfg.OutWriter, logPrefix, log.LstdFlags),
+		playback:         cfg.Playback,
+		playlists:        cfg.Playlists,
+		status:           cfg.Status,
 	}
 }
 
@@ -88,4 +87,20 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc(registerPath, s.createSseRegisterHandler(sseCfg))
 
 	return mux
+}
+
+func (s Server) WatchSSEObserversChanges() {
+	for {
+		change, open := <-s.observersChanges
+		if !open {
+			return
+		}
+
+		switch change.ChangeVariant {
+		case ObserverAdded:
+			s.status.AddObservingAddress(change.RemoteAddr, change.ChannelVariant)
+		case ObserverRemoved:
+			s.status.RemoveObservingAddress(change.RemoteAddr, change.ChannelVariant)
+		}
+	}
 }
