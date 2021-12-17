@@ -18,7 +18,8 @@ import (
 )
 
 const (
-	logPrefix = "api.Server#"
+	logPrefix           = "api.Server#"
+	defaultPlaylistUUID = ""
 )
 
 type observePropertyHandler = func(res mpv.ObservePropertyResponse) error
@@ -86,14 +87,13 @@ func NewServer(cfg Config) (*Server, error) {
 
 	sseObserversChanges := make(chan sse.ObserversChange)
 	sseCfg := sse.Config{
-		Directories:      directories,
-		ErrWriter:        cfg.ErrWriter,
-		MediaFiles:       mediaFiles,
-		OutWriter:        cfg.OutWriter,
-		ObserversChanges: sseObserversChanges,
-		Playback:         playback,
-		Playlists:        playlists,
-		Status:           status,
+		Directories: directories,
+		ErrWriter:   cfg.ErrWriter,
+		MediaFiles:  mediaFiles,
+		OutWriter:   cfg.OutWriter,
+		Playback:    playback,
+		Playlists:   playlists,
+		Status:      status,
 	}
 	sseServer := sse.NewServer(sseCfg)
 
@@ -111,22 +111,22 @@ func NewServer(cfg Config) (*Server, error) {
 	restServer := rest.NewServer(restCfg)
 
 	server := &Server{
-		cfg.Address,
-		"",
-		directories,
-		log.New(cfg.ErrWriter, logPrefix, log.LstdFlags),
-		watcher,
-		mediaFiles,
-		mpvManager,
-		cfg.MpvSocketPath,
-		log.New(cfg.OutWriter, logPrefix, log.LstdFlags),
-		playback,
-		playlists,
-		cfg.PlaylistFilesPrefixes,
-		restServer,
-		sseObserversChanges,
-		sseServer,
-		status,
+		address:               cfg.Address,
+		defaultPlaylistUUID:   defaultPlaylistUUID,
+		directories:           directories,
+		errLog:                log.New(cfg.ErrWriter, logPrefix, log.LstdFlags),
+		fsWatcher:             watcher,
+		mediaFiles:            mediaFiles,
+		mpvManager:            mpvManager,
+		mpvSocketPath:         cfg.MpvSocketPath,
+		outLog:                log.New(cfg.OutWriter, logPrefix, log.LstdFlags),
+		playback:              playback,
+		playlists:             playlists,
+		playlistFilesPrefixes: cfg.PlaylistFilesPrefixes,
+		restServer:            restServer,
+		sseObserverChanges:    sseObserversChanges,
+		sseServer:             sseServer,
+		status:                status,
 	}
 
 	restServer.SetAddDirectoriesCallback(server.AddRootDirectories)
@@ -189,7 +189,7 @@ func (s *Server) Serve() error {
 }
 
 func (s *Server) initWatchers() error {
-	go s.watchSSEObserversChanges()
+	go s.sseServer.WatchSSEObserversChanges()
 	s.sseServer.SubscribeToStateChanges()
 	s.playback.Subscribe(s.handlePlaylistRelatedPlaybackChanges, func(err error) {})
 
@@ -226,22 +226,6 @@ func (s Server) watchObservePropertyResponses(handlers map[string]observePropert
 		err := observeHandler(observePropertyResponse)
 		if err != nil {
 			s.errLog.Printf("error during '%s' property observer handling: %s\n", observePropertyResponse.Property, err)
-		}
-	}
-}
-
-func (s Server) watchSSEObserversChanges() {
-	for {
-		change, open := <-s.sseObserverChanges
-		if !open {
-			return
-		}
-
-		switch change.ChangeVariant {
-		case sse.ObserverAdded:
-			s.status.AddObservingAddress(change.RemoteAddr, change.ChannelVariant)
-		case sse.ObserverRemoved:
-			s.status.RemoveObservingAddress(change.RemoteAddr, change.ChannelVariant)
 		}
 	}
 }

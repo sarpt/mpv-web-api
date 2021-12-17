@@ -85,8 +85,8 @@ func (s *Server) observeChannelVariant(res ResponseWriter, req *http.Request, ss
 	remoteAddr := req.RemoteAddr
 	sseChannel.AddObserver(remoteAddr)
 
-	if s.observersChange != nil {
-		s.observersChange <- ObserversChange{
+	if s.observersChanges != nil {
+		s.observersChanges <- ObserversChange{
 			ChangeVariant:  ObserverAdded,
 			RemoteAddr:     remoteAddr,
 			ChannelVariant: sseChannel.Variant(),
@@ -130,8 +130,8 @@ func (s *Server) waitForConnectionClosure(req *http.Request, done chan<- bool, s
 	<-req.Context().Done()
 	sseChannel.RemoveObserver(req.RemoteAddr)
 
-	if s.observersChange != nil {
-		s.observersChange <- ObserversChange{
+	if s.observersChanges != nil {
+		s.observersChanges <- ObserversChange{
 			ChangeVariant:  ObserverRemoved,
 			RemoteAddr:     req.RemoteAddr,
 			ChannelVariant: sseChannel.Variant(),
