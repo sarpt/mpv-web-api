@@ -1,21 +1,15 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 )
 
-const (
-	ssePath  = "/sse/"
-	restPath = "/rest/"
-)
-
 func (s *Server) mainHandler() *http.ServeMux {
-	sseHandlers := s.sseServer.Handler()
-	restHandler := s.restServer.Handler()
-
 	mux := http.NewServeMux()
-	mux.Handle(ssePath, sseHandlers)
-	mux.Handle(restPath, restHandler)
+	for _, server := range s.pluginServers {
+		mux.Handle(fmt.Sprintf("/%s/", server.PathBase()), server.Handler())
+	}
 
 	return mux
 }

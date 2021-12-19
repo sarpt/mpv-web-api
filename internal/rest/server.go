@@ -4,25 +4,23 @@ import (
 	"io"
 	"log"
 
+	"github.com/sarpt/mpv-web-api/pkg/api"
 	"github.com/sarpt/mpv-web-api/pkg/mpv"
 	"github.com/sarpt/mpv-web-api/pkg/state"
 )
 
 const (
 	logPrefix = "rest.Server#"
+
+	name     = "REST Server"
+	pathBase = "rest"
 )
 
 // Config controls behaviour of the REST server.
 type Config struct {
-	AllowCORS   bool
-	Directories *state.Directories
-	ErrWriter   io.Writer
-	MediaFiles  *state.MediaFiles
-	MPVManger   *mpv.Manager
-	Playback    *state.Playback
-	Playlists   *state.Playlists
-	OutWriter   io.Writer
-	Status      *state.Status
+	AllowCORS bool
+	ErrWriter io.Writer
+	OutWriter io.Writer
 }
 
 // Server is responsible for creating REST handlers, argument parsing and validation.
@@ -48,14 +46,32 @@ type Server struct {
 // NewServer returns rest.Server instance.
 func NewServer(cfg Config) *Server {
 	return &Server{
-		allowCORS:   cfg.AllowCORS,
-		errLog:      log.New(cfg.ErrWriter, logPrefix, log.LstdFlags),
-		directories: cfg.Directories,
-		mediaFiles:  cfg.MediaFiles,
-		mpvManager:  cfg.MPVManger,
-		playback:    cfg.Playback,
-		playlists:   cfg.Playlists,
-		outLog:      log.New(cfg.OutWriter, logPrefix, log.LstdFlags),
-		status:      cfg.Status,
+		allowCORS: cfg.AllowCORS,
+		errLog:    log.New(cfg.ErrWriter, logPrefix, log.LstdFlags),
+		outLog:    log.New(cfg.OutWriter, logPrefix, log.LstdFlags),
 	}
+}
+
+func (s *Server) Init(apiServer *api.Server) error {
+	s.directories = apiServer.Directories()
+	s.mediaFiles = apiServer.MediaFiles()
+	s.playback = apiServer.Playback()
+	s.playlists = apiServer.Playlists()
+	s.status = apiServer.Status()
+
+	s.mpvManager = apiServer.MpvManager()
+
+	s.addDirectoriesCallback = apiServer.AddRootDirectories
+	s.removeDirectoriesCallback = apiServer.TakeDirectory
+	s.loadPlaylistCallback = apiServer.LoadPlaylist
+
+	return nil
+}
+
+func (s *Server) Name() string {
+	return name
+}
+
+func (s *Server) PathBase() string {
+	return pathBase
 }

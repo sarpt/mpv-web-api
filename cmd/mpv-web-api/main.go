@@ -9,6 +9,8 @@ import (
 
 	"github.com/sarpt/goutils/pkg/listflag"
 
+	"github.com/sarpt/mpv-web-api/internal/rest"
+	"github.com/sarpt/mpv-web-api/internal/sse"
 	"github.com/sarpt/mpv-web-api/pkg/api"
 	"github.com/sarpt/mpv-web-api/pkg/state"
 )
@@ -69,15 +71,35 @@ func init() {
 }
 
 func main() {
-	errLog := log.New(os.Stderr, logPrefix, log.LstdFlags)
-	outLog := log.New(os.Stdout, logPrefix, log.LstdFlags)
+	errWriter := os.Stderr
+	outWriter := os.Stdout
+
+	errLog := log.New(errWriter, logPrefix, log.LstdFlags)
+	outLog := log.New(outWriter, logPrefix, log.LstdFlags)
+
+	sseCfg := sse.Config{
+		ErrWriter: errWriter,
+		OutWriter: outWriter,
+	}
+	sseServer := sse.NewServer(sseCfg)
+
+	restCfg := rest.Config{
+		AllowCORS: *allowCORS,
+		ErrWriter: errWriter,
+		OutWriter: outWriter,
+	}
+	restServer := rest.NewServer(restCfg)
 
 	socketConnectionTimeout := time.Duration(time.Duration(*socketTimeoutSec) * time.Second)
 	cfg := api.Config{
-		Address:                 *address,
-		AllowCORS:               *allowCORS,
-		MpvSocketPath:           *mpvSocketPath,
-		PlaylistFilesPrefixes:   playlistPrefix.Values(),
+		Address:               *address,
+		AllowCORS:             *allowCORS,
+		MpvSocketPath:         *mpvSocketPath,
+		PlaylistFilesPrefixes: playlistPrefix.Values(),
+		PluginServers: map[string]api.PluginServer{
+			sseServer.Name():  sseServer,
+			restServer.Name(): restServer,
+		},
 		StartMpvInstance:        *startMpvInstance,
 		SocketConnectionTimeout: socketConnectionTimeout,
 	}

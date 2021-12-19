@@ -22,10 +22,6 @@ const (
 	subtitleIDArg   = "subtitleID"
 )
 
-func (s *Server) SetLoadPlaylistCallback(cb LoadPlaylistCallback) {
-	s.loadPlaylistCallback = cb
-}
-
 func (s *Server) getPlaybackHandler(res http.ResponseWriter, req *http.Request) {
 	json, err := json.Marshal(s.playback)
 	if err != nil {
