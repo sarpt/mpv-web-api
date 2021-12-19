@@ -11,8 +11,6 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
-	"github.com/sarpt/mpv-web-api/internal/rest"
-	"github.com/sarpt/mpv-web-api/internal/sse"
 	"github.com/sarpt/mpv-web-api/pkg/mpv"
 	"github.com/sarpt/mpv-web-api/pkg/state"
 )
@@ -38,10 +36,15 @@ type Server struct {
 	playback              *state.Playback
 	playlists             *state.Playlists
 	playlistFilesPrefixes []string
-	restServer            *rest.Server
-	sseObserverChanges    chan sse.ObserversChange
-	sseServer             *sse.Server
+	pluginServers         map[string]PluginServer
 	status                *state.Status
+}
+
+type PluginServer interface {
+	Init(serv *Server) error // TODO: Init should take interface that exposes only what's necessary instead of a whole Server class
+	Handler() http.Handler
+	PathBase() string
+	Name() string
 }
 
 // Config controls behaviour of the api server.
@@ -54,6 +57,7 @@ type Config struct {
 	OutWriter               io.Writer
 	SocketConnectionTimeout time.Duration
 	StartMpvInstance        bool
+	PluginServers           map[string]PluginServer
 }
 
 // NewServer prepares and returns a server that can be used to handle API calls.
@@ -70,71 +74,29 @@ func NewServer(cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("could not initialize filesystem watcher: %w", err)
 	}
 
-	managerCfg := mpv.ManagerConfig{
+	mpvManagerCfg := mpv.ManagerConfig{
 		ErrWriter:               cfg.ErrWriter,
 		MpvSocketPath:           cfg.MpvSocketPath,
 		OutWriter:               cfg.OutWriter,
 		SocketConnectionTimeout: cfg.SocketConnectionTimeout,
 		StartMpvInstance:        cfg.StartMpvInstance,
 	}
-	mpvManager := mpv.NewManager(managerCfg)
-
-	directories := state.NewDirectories()
-	mediaFiles := state.NewMediaFiles()
-	playback := state.NewPlayback()
-	playlists := state.NewPlaylists()
-	status := state.NewStatus()
-
-	sseObserversChanges := make(chan sse.ObserversChange)
-	sseCfg := sse.Config{
-		Directories: directories,
-		ErrWriter:   cfg.ErrWriter,
-		MediaFiles:  mediaFiles,
-		OutWriter:   cfg.OutWriter,
-		Playback:    playback,
-		Playlists:   playlists,
-		Status:      status,
-	}
-	sseServer := sse.NewServer(sseCfg)
-
-	restCfg := rest.Config{
-		AllowCORS:   cfg.AllowCORS,
-		Directories: directories,
-		ErrWriter:   cfg.ErrWriter,
-		MediaFiles:  mediaFiles,
-		MPVManger:   mpvManager,
-		OutWriter:   cfg.OutWriter,
-		Playback:    playback,
-		Playlists:   playlists,
-		Status:      status,
-	}
-	restServer := rest.NewServer(restCfg)
 
 	server := &Server{
 		address:               cfg.Address,
 		defaultPlaylistUUID:   defaultPlaylistUUID,
-		directories:           directories,
+		directories:           state.NewDirectories(),
 		errLog:                log.New(cfg.ErrWriter, logPrefix, log.LstdFlags),
 		fsWatcher:             watcher,
-		mediaFiles:            mediaFiles,
-		mpvManager:            mpvManager,
+		mediaFiles:            state.NewMediaFiles(),
+		mpvManager:            mpv.NewManager(mpvManagerCfg),
 		mpvSocketPath:         cfg.MpvSocketPath,
 		outLog:                log.New(cfg.OutWriter, logPrefix, log.LstdFlags),
-		playback:              playback,
-		playlists:             playlists,
+		playback:              state.NewPlayback(),
+		playlists:             state.NewPlaylists(),
 		playlistFilesPrefixes: cfg.PlaylistFilesPrefixes,
-		restServer:            restServer,
-		sseObserverChanges:    sseObserversChanges,
-		sseServer:             sseServer,
-		status:                status,
-	}
-
-	restServer.SetAddDirectoriesCallback(server.AddRootDirectories)
-	restServer.SetDeleteDirectoriesCallback(server.TakeDirectory)
-	restServer.SetLoadPlaylistCallback(server.LoadPlaylist)
-	err = server.initWatchers()
-	if err != nil {
-		return server, errors.New("could not start watching for properties")
+		pluginServers:         cfg.PluginServers,
+		status:                state.NewStatus(),
 	}
 
 	defaultPlaylistUUID, err := server.createDefaultPlaylist()
@@ -148,11 +110,33 @@ func NewServer(cfg Config) (*Server, error) {
 	return server, nil
 }
 
+func (s *Server) init() error {
+	for name, server := range s.pluginServers {
+		s.outLog.Printf("initializing plugin server '%s' ...", name)
+		err := server.Init(s)
+		if err != nil {
+			return fmt.Errorf("could not initialise plugin server '%s': %w", name, err)
+		}
+	}
+
+	err := s.initWatchers()
+	if err != nil {
+		return fmt.Errorf("could not start watching for properties: %w", err)
+	}
+
+	s.watchForFsChanges()
+
+	return nil
+}
+
 // Serve starts handling API endpoints - both REST and SSE.
 // It also starts mpv manager.
 // Blocks until either mpv manager or http server stops serving (with error or nil).
 func (s *Server) Serve() error {
-	s.watchForFsChanges()
+	err := s.init()
+	if err != nil {
+		return err
+	}
 
 	mpvManagerErr := make(chan error)
 	httpServErr := make(chan error)
@@ -189,8 +173,6 @@ func (s *Server) Serve() error {
 }
 
 func (s *Server) initWatchers() error {
-	go s.sseServer.WatchSSEObserversChanges()
-	s.sseServer.SubscribeToStateChanges()
 	s.playback.Subscribe(s.handlePlaylistRelatedPlaybackChanges, func(err error) {})
 
 	observePropertyResponses := make(chan mpv.ObservePropertyResponse)
@@ -239,4 +221,29 @@ func (s Server) subscribeToMpvProperties(observeResponses chan mpv.ObserveProper
 	}
 
 	return nil
+}
+
+func (s Server) Directories() *state.Directories {
+	return s.directories
+}
+
+func (s Server) MediaFiles() *state.MediaFiles {
+	return s.mediaFiles
+}
+
+func (s Server) Playback() *state.Playback {
+	return s.playback
+}
+
+func (s Server) Playlists() *state.Playlists {
+	return s.playlists
+}
+
+func (s Server) Status() *state.Status {
+	return s.status
+}
+
+// TODO: this should not be exposed as is, instead having wrapper methods that call mpv manager
+func (s Server) MpvManager() *mpv.Manager {
+	return s.mpvManager
 }

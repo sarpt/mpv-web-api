@@ -23,14 +23,6 @@ type getDirectoriesRespone struct {
 	Directories map[string]state.Directory `json:"directories"`
 }
 
-func (s *Server) SetAddDirectoriesCallback(callback AddDirectoriesCallback) {
-	s.addDirectoriesCallback = callback
-}
-
-func (s *Server) SetDeleteDirectoriesCallback(callback RemoveDirectoriesCallback) {
-	s.removeDirectoriesCallback = callback
-}
-
 func (s *Server) getDirectoriesHandler(res http.ResponseWriter, req *http.Request) {
 	directoriesResponse := getDirectoriesRespone{
 		Directories: s.directories.All(),
