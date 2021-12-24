@@ -25,6 +25,7 @@ type observePropertyHandler = func(res mpv.ObservePropertyResponse) error
 // Server is used to serve API and hold state accessible to the API.
 type Server struct {
 	address               string
+	closeConnection       chan string
 	defaultPlaylistUUID   string
 	directories           *state.Directories
 	errLog                *log.Logger
@@ -41,7 +42,7 @@ type Server struct {
 }
 
 type PluginServer interface {
-	Init(serv *Server) error // TODO: Init should take interface that exposes only what's necessary instead of a whole Server class
+	Init(apiServ *Server) error // TODO: Init should take interface that exposes only what's necessary instead of a whole Server class
 	Handler() http.Handler
 	PathBase() string
 	Name() string
@@ -129,8 +130,18 @@ func (s *Server) init() error {
 	return nil
 }
 
-// Serve starts handling API endpoints - both REST and SSE.
-// It also starts mpv manager.
+// Close instructs server to close API servers & mpv manager with a reason.
+func (s *Server) Close(reason string) error {
+	if s.closeConnection == nil {
+		return fmt.Errorf("server close unsuccessful - server has not started yet or was closed already")
+	}
+
+	s.closeConnection <- reason
+	return nil
+}
+
+// Serve starts handling plugin API servers passed to the server.
+// It also starts mpv manager and (if neccessary).
 // Blocks until either mpv manager or http server stops serving (with error or nil).
 func (s *Server) Serve() error {
 	err := s.init()
@@ -140,6 +151,9 @@ func (s *Server) Serve() error {
 
 	mpvManagerErr := make(chan error)
 	httpServErr := make(chan error)
+
+	s.closeConnection = make(chan string)
+	defer func() { s.closeConnection = nil }() // when Serve stops, whatever the reason, nothing will listen on the chan until Serve is called again
 
 	serv := http.Server{
 		Addr:    s.address,
@@ -163,11 +177,32 @@ func (s *Server) Serve() error {
 	}()
 
 	select {
+	case reason := <-s.closeConnection:
+		s.outLog.Printf("shutting down the server, reason: %s", reason)
+
+		servErr := serv.Shutdown(context.Background())
+		if err != nil {
+			s.errLog.Printf("http server closed with an error: %s\n", servErr)
+		} else {
+			s.outLog.Println("http server closed successfully")
+		}
+
+		mpvManagerErr := s.mpvManager.Close()
+		if mpvManagerErr != nil {
+			s.errLog.Printf("mpvManager closed with an error: %s\n", mpvManagerErr)
+		} else {
+			s.outLog.Println("mpvManager closed successfully")
+		}
+
+		return nil
 	case err := <-mpvManagerErr:
 		serv.Shutdown(context.Background())
 		return err
 	case err := <-httpServErr:
-		s.mpvManager.Close()
+		mpvManagerErr := s.mpvManager.Close()
+		if mpvManagerErr != nil {
+			s.errLog.Printf("mpvManager closed with an error: %s\n", mpvManagerErr)
+		}
 		return err
 	}
 }

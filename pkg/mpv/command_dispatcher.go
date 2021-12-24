@@ -128,8 +128,8 @@ func newCommandDispatcher(cfg commandDispatcherConfig) *commandDispatcher {
 }
 
 // Close makes connection by ipc to the mpv closed.
-func (cd commandDispatcher) Close() {
-	cd.conn.Close()
+func (cd commandDispatcher) Close() error {
+	return cd.conn.Close()
 }
 
 // Connect attempts to connect to the unix socket through which dispatcher will communicate with MPV.
