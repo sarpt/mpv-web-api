@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/sarpt/goutils/pkg/listflag"
@@ -23,30 +25,32 @@ const (
 	defaultAddress           = "localhost:3001"
 	defaultSocketTimeoutSec  = 15
 	defaultMpvSocketFilename = "mpvsocket"
-	addressFlag              = "addr"
-	allowCorsFlag            = "allow-cors"
-	dirFlag                  = "dir"
-	dirRecursiveFlag         = "dir-recursive"
-	mpvSocketPathFlag        = "mpv-socket-path"
-	playlistPrefixFlag       = "playlist-prefix"
-	socketTimeoutSecFlag     = "socket-timeout"
-	startMpvInstanceFlag     = "start-mpv-instance"
-	watchDirFlag             = "watch-dir"
-	watchDirRecursiveFlag    = "watch-dir-recursive"
+
+	addressFlag           = "addr"
+	allowCorsFlag         = "allow-cors"
+	dirFlag               = "dir"
+	dirRecursiveFlag      = "dir-recursive"
+	mpvSocketPathFlag     = "mpv-socket-path"
+	playlistPrefixFlag    = "playlist-prefix"
+	socketTimeoutSecFlag  = "socket-timeout"
+	startMpvInstanceFlag  = "start-mpv-instance"
+	watchDirFlag          = "watch-dir"
+	watchDirRecursiveFlag = "watch-dir-recursive"
 )
 
 var (
-	address              *string
-	allowCORS            *bool
 	defaultMpvSocketPath = fmt.Sprintf("%s%c%s", os.TempDir(), os.PathSeparator, defaultMpvSocketFilename)
-	dir                  *listflag.StringList
-	dirRecursive         *listflag.StringList
-	mpvSocketPath        *string
-	playlistPrefix       *listflag.StringList
-	socketTimeoutSec     *int64
-	startMpvInstance     *bool
-	watchDir             *listflag.StringList
-	watchDirRecursive    *listflag.StringList
+
+	address           *string
+	allowCORS         *bool
+	dir               *listflag.StringList
+	dirRecursive      *listflag.StringList
+	mpvSocketPath     *string
+	playlistPrefix    *listflag.StringList
+	socketTimeoutSec  *int64
+	startMpvInstance  *bool
+	watchDir          *listflag.StringList
+	watchDirRecursive *listflag.StringList
 )
 
 func init() {
@@ -157,12 +161,26 @@ func main() {
 		}
 	}
 
+	// add root directories but do not wait for server to start serving
 	go func() {
 		server.AddRootDirectories(mediaFilesDirectories)
+	}()
+
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		sig := <-sigs
+		err := server.Close(sig.String())
+		if err != nil {
+			errLog.Printf("")
+		}
 	}()
 
 	err = server.Serve()
 	if err != nil {
 		errLog.Printf("API server finished with following error: %s\n", err)
+	} else {
+		outLog.Println("API server finished successfully")
 	}
 }

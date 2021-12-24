@@ -135,7 +135,7 @@ func (s *Server) stopHandler(res http.ResponseWriter, req *http.Request) error {
 	}
 
 	s.outLog.Printf("stopping playback due to request from %s\n", req.RemoteAddr)
-	return s.mpvManager.Stop()
+	return s.mpvManager.StopPlayback()
 }
 
 func getAppendArgument(req *http.Request) (bool, error) {

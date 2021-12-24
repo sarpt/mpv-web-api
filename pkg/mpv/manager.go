@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"os/exec"
+	"syscall"
 	"time"
 )
 
@@ -28,6 +29,7 @@ type ManagerConfig struct {
 // Manager handles dispatching of commands, while exposing MPV command API as a facade.
 type Manager struct {
 	cd               *commandDispatcher
+	closed           bool
 	errLog           *log.Logger
 	mpvCmd           *exec.Cmd
 	outLog           *log.Logger
@@ -97,9 +99,18 @@ func (m Manager) ChangePause(paused bool) error {
 	return err
 }
 
-// Close cleans up manager's resources.
-func (m Manager) Close() {
-	m.cd.Close()
+// Close cleans up manager's resources - killing mpv process when started, and closing a command dispatcher.
+func (m *Manager) Close() error {
+	m.closed = true
+
+	if m.mpvCmd != nil {
+		err := m.mpvCmd.Process.Signal(syscall.SIGTERM)
+		if err != nil {
+			m.errLog.Printf("mpv process closed with error: %s", err)
+		}
+	}
+
+	return m.cd.Close()
 }
 
 // LoadFile instructs mpv to start playing the file from provided filepath.
@@ -243,15 +254,25 @@ func (m Manager) PlaylistMove(fromIdx uint, toIdx uint) error {
 
 // Serve starts handling requests to and responses from mpv.
 // If necessary, Serve also spawns and handles mpv process lifetime.
-func (m Manager) Serve() error {
+func (m *Manager) Serve() error {
+	m.closed = false
 	mpvErrors := make(chan error)
 	cdErrors := make(chan error)
 
 	if m.startMpvInstance {
 		go func() {
-			err := m.manageOwnMpvProcess()
-			if err != nil {
-				mpvErrors <- err
+			for {
+				err := m.manageOwnMpvProcess()
+				if err != nil {
+					mpvErrors <- err
+					break
+				}
+
+				if m.closed {
+					break
+				}
+
+				m.outLog.Println("restarting mpv process...")
 			}
 
 			close(mpvErrors)
@@ -259,9 +280,18 @@ func (m Manager) Serve() error {
 	}
 
 	go func() {
-		err := m.serveCommandDispatcher()
-		if err != nil {
-			cdErrors <- err
+		for {
+			err := m.serveCommandDispatcher()
+			if err != nil {
+				cdErrors <- err
+				break
+			}
+
+			if m.closed {
+				break
+			}
+
+			m.outLog.Println("restarting command dispatcher...")
 		}
 
 		close(cdErrors)
@@ -287,8 +317,8 @@ func (m Manager) SetProperty(property string, value interface{}) (Response, erro
 	return m.cd.Request(cmd)
 }
 
-// Stop instructs mpv to stop the playback without quitting.
-func (m Manager) Stop() error {
+// StopPlayback instructs mpv to stop the playback without quitting.
+func (m Manager) StopPlayback() error {
 	cmd := command{
 		name:     stopCommand,
 		elements: []interface{}{},
@@ -315,46 +345,38 @@ func (m *Manager) startMpv() error {
 }
 
 func (m *Manager) manageOwnMpvProcess() error {
-	var err error
-	for {
-		if m.mpvCmd != nil {
-			m.outLog.Println("watching for mpv process exit...")
-
-			err = m.mpvCmd.Wait()
-			if err != nil {
-				return fmt.Errorf("mpv process finished with error: %w", err)
-			} else {
-				m.outLog.Println("mpv process finished successfully (closed by user)")
-			}
-
-			m.outLog.Println("restarting mpv process...")
-		}
-
-		err = m.startMpv()
-		if err != nil {
-			return fmt.Errorf("could not start mpv process due to error: %w", err)
-		}
-		m.outLog.Println("mpv process started")
+	err := m.startMpv()
+	if err != nil {
+		return fmt.Errorf("could not start mpv process due to error: %w", err)
 	}
+	m.outLog.Println("mpv process started")
+
+	m.outLog.Println("watching for mpv process exit...")
+
+	err = m.mpvCmd.Wait()
+	if err != nil {
+		return fmt.Errorf("mpv process finished with error: %w", err)
+	}
+
+	m.outLog.Println("mpv process finished successfully (closed by user)")
+	return nil
 }
 
 func (m *Manager) serveCommandDispatcher() error {
-	var err error
-	for {
-		m.outLog.Println("connecting command dispatcher...")
+	m.outLog.Println("connecting command dispatcher...")
 
-		err = m.cd.Connect()
-		if errors.Is(err, ErrCheckConnectionFailure) {
-			continue
-		} else if err != nil {
-			return err
-		}
-
-		err = m.cd.Serve()
-		if err != nil {
-			return err
-		}
-
-		m.cd.Close()
+	err := m.cd.Connect()
+	if errors.Is(err, ErrCheckConnectionFailure) {
+		return nil
+	} else if err != nil {
+		return err
 	}
+
+	err = m.cd.Serve()
+	if err != nil {
+		return err
+	}
+
+	m.cd.Close()
+	return nil
 }
