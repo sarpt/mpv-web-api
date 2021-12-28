@@ -171,7 +171,7 @@ func main() {
 
 	go func() {
 		sig := <-sigs
-		err := server.Close(sig.String())
+		err := server.StopServing(sig.String())
 		if err != nil {
 			errLog.Printf("")
 		}

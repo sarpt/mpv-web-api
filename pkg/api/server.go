@@ -25,7 +25,7 @@ type observePropertyHandler = func(res mpv.ObservePropertyResponse) error
 // Server is used to serve API and hold state accessible to the API.
 type Server struct {
 	address               string
-	closeConnection       chan string
+	stopServing           chan string
 	defaultPlaylistUUID   string
 	directories           *state.Directories
 	errLog                *log.Logger
@@ -130,13 +130,13 @@ func (s *Server) init() error {
 	return nil
 }
 
-// Close instructs server to close API servers & mpv manager with a reason.
-func (s *Server) Close(reason string) error {
-	if s.closeConnection == nil {
-		return fmt.Errorf("server close unsuccessful - server has not started yet or was closed already")
+// StopServing instructs server to close API servers & mpv manager with a provided reason.
+func (s *Server) StopServing(reason string) error {
+	if s.stopServing == nil {
+		return fmt.Errorf("server stop unsuccessful - server is not running")
 	}
 
-	s.closeConnection <- reason
+	s.stopServing <- reason
 	return nil
 }
 
@@ -152,13 +152,13 @@ func (s *Server) Serve() error {
 	mpvManagerErr := make(chan error)
 	httpServErr := make(chan error)
 
-	s.closeConnection = make(chan string)
-	defer func() { s.closeConnection = nil }() // when Serve stops, whatever the reason, nothing will listen on the chan until Serve is called again
-
 	serv := http.Server{
 		Addr:    s.address,
 		Handler: s.mainHandler(),
 	}
+
+	s.stopServing = make(chan string)
+	defer func() { s.stopServing = nil }() // when Serve stops, whatever the reason, nothing will listen on the chan until Serve is called again
 
 	go func() {
 		mpvManagerErr <- s.mpvManager.Serve()
@@ -177,34 +177,34 @@ func (s *Server) Serve() error {
 	}()
 
 	select {
-	case reason := <-s.closeConnection:
+	case reason := <-s.stopServing:
 		s.outLog.Printf("shutting down the server, reason: %s", reason)
-
-		servErr := serv.Shutdown(context.Background())
-		if err != nil {
-			s.errLog.Printf("http server closed with an error: %s\n", servErr)
-		} else {
-			s.outLog.Println("http server closed successfully")
-		}
-
-		mpvManagerErr := s.mpvManager.Close()
-		if mpvManagerErr != nil {
-			s.errLog.Printf("mpvManager closed with an error: %s\n", mpvManagerErr)
-		} else {
-			s.outLog.Println("mpvManager closed successfully")
-		}
-
-		return nil
 	case err := <-mpvManagerErr:
-		serv.Shutdown(context.Background())
-		return err
+		s.outLog.Printf("shutting down the server due to mpv manager error: %s", err)
 	case err := <-httpServErr:
-		mpvManagerErr := s.mpvManager.Close()
-		if mpvManagerErr != nil {
-			s.errLog.Printf("mpvManager closed with an error: %s\n", mpvManagerErr)
-		}
-		return err
+		s.outLog.Printf("shutting down the server due to http server error: %s", err)
 	}
+
+	err = s.saveCurrentPlaylist()
+	if err != nil {
+		s.errLog.Printf("saving of current playlist unsuccessful: %s\n", err)
+	}
+
+	err = serv.Shutdown(context.Background())
+	if err != nil {
+		s.errLog.Printf("http server closed with an error: %s\n", err)
+	} else {
+		s.outLog.Println("http server closed successfully")
+	}
+
+	err = s.mpvManager.StopServing("API server shutting down")
+	if err != nil {
+		s.errLog.Printf("mpvManager closed with an error: %s\n", err)
+	} else {
+		s.outLog.Println("mpvManager closed successfully")
+	}
+
+	return nil
 }
 
 func (s *Server) initWatchers() error {
