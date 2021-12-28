@@ -170,6 +170,15 @@ func (s *Server) handlePlaylistRelatedPlaybackChanges(change state.PlaybackChang
 	}
 }
 
+func (s *Server) saveCurrentPlaylist() error {
+	uuid := s.playback.PlaylistUUID()
+	if s.DefaultPlaylistSelected() { // TODO: default/unnamed playlist could be saved to a home directory to be restored when mpv-web-api is ran again, to be considered
+		return fmt.Errorf("save of current playlist unsuccessful - cannot save current playlist")
+	}
+
+	return s.savePlaylist(uuid)
+}
+
 func (s *Server) savePlaylist(uuid string) error {
 	playlist, err := s.playlists.ByUUID(uuid)
 	if err != nil {

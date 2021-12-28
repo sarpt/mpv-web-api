@@ -129,6 +129,10 @@ func newCommandDispatcher(cfg commandDispatcherConfig) *commandDispatcher {
 
 // Close makes connection by ipc to the mpv closed.
 func (cd commandDispatcher) Close() error {
+	if cd.conn == nil {
+		return fmt.Errorf("cannot close command dispatcher - it is not running")
+	}
+
 	return cd.conn.Close()
 }
 

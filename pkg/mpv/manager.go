@@ -1,6 +1,7 @@
 package mpv
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -8,6 +9,8 @@ import (
 	"os/exec"
 	"syscall"
 	"time"
+
+	"github.com/sarpt/mpv-web-api/internal/common"
 )
 
 const (
@@ -29,7 +32,8 @@ type ManagerConfig struct {
 // Manager handles dispatching of commands, while exposing MPV command API as a facade.
 type Manager struct {
 	cd               *commandDispatcher
-	closed           bool
+	stopServing      chan string
+	serveStop        chan error
 	errLog           *log.Logger
 	mpvCmd           *exec.Cmd
 	outLog           *log.Logger
@@ -99,18 +103,19 @@ func (m Manager) ChangePause(paused bool) error {
 	return err
 }
 
-// Close cleans up manager's resources - killing mpv process when started, and closing a command dispatcher.
-func (m *Manager) Close() error {
-	m.closed = true
-
-	if m.mpvCmd != nil {
-		err := m.mpvCmd.Process.Signal(syscall.SIGTERM)
-		if err != nil {
-			m.errLog.Printf("mpv process closed with error: %s", err)
-		}
+// StopServing instructs Manager to stop serving.
+// Stopping a running manager results in command dispatcher being closed,
+// and if manager handles an mpv instance, stopping the mpv instance.
+// Stopping a not running manager results in an error.
+func (m *Manager) StopServing(reason string) error {
+	if m.stopServing == nil {
+		return fmt.Errorf("stop unsuccessful - manager is not running")
 	}
 
-	return m.cd.Close()
+	m.serveStop = make(chan error)
+	m.stopServing <- reason
+
+	return <-m.serveStop
 }
 
 // LoadFile instructs mpv to start playing the file from provided filepath.
@@ -255,54 +260,41 @@ func (m Manager) PlaylistMove(fromIdx uint, toIdx uint) error {
 // Serve starts handling requests to and responses from mpv.
 // If necessary, Serve also spawns and handles mpv process lifetime.
 func (m *Manager) Serve() error {
-	m.closed = false
 	mpvErrors := make(chan error)
 	cdErrors := make(chan error)
 
-	if m.startMpvInstance {
-		go func() {
-			for {
-				err := m.manageOwnMpvProcess()
-				if err != nil {
-					mpvErrors <- err
-					break
-				}
+	m.stopServing = make(chan string)
+	defer func() { m.stopServing = nil }()
 
-				if m.closed {
-					break
-				}
-
-				m.outLog.Println("restarting mpv process...")
-			}
-
-			close(mpvErrors)
-		}()
-	}
-
-	go func() {
-		for {
-			err := m.serveCommandDispatcher()
-			if err != nil {
-				cdErrors <- err
-				break
-			}
-
-			if m.closed {
-				break
-			}
-
-			m.outLog.Println("restarting command dispatcher...")
-		}
-
-		close(cdErrors)
-	}()
+	serveCtx, serveCancel := context.WithCancel(context.Background())
+	go common.RestartWithContext(serveCtx, m.manageOwnMpvProcess, func() { m.outLog.Println("restarting mpv process...") }, mpvErrors)
+	go common.RestartWithContext(serveCtx, m.serveCommandDispatcher, func() { m.outLog.Println("restarting command dispatcher...") }, cdErrors)
 
 	select {
+	case reason := <-m.stopServing:
+		m.outLog.Printf("stopping the manager, reason: %s", reason)
 	case err := <-mpvErrors:
-		return err
+		if err != nil {
+			m.errLog.Printf("stopping the manager due to mpv error: %s", err)
+		}
 	case err := <-cdErrors:
-		return err
+		if err != nil {
+			m.errLog.Printf("stopping the manager due to command dispatcher error: %s", err)
+		}
 	}
+
+	serveCancel()
+	if m.mpvCmd != nil {
+		err := m.mpvCmd.Process.Signal(syscall.SIGTERM)
+		if err != nil {
+			m.errLog.Printf("SIGTERM to mpv resulted with error: %s", err)
+		}
+	}
+
+	err := m.cd.Close()
+	m.serveStop <- err
+
+	return err
 }
 
 // SetProperty sets the value of a property.
@@ -335,6 +327,7 @@ func (m Manager) SubscribeToProperty(propertyName string, out chan<- ObserveProp
 
 func (m *Manager) startMpv() error {
 	cmd := exec.Command(mpvName, idleArg, fmt.Sprintf("%s=%s", inputIpcServerArg, m.socketPath))
+
 	err := cmd.Start()
 	if err != nil {
 		return fmt.Errorf("could not start mpv process: %w", err)
