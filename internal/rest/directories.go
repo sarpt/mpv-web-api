@@ -15,9 +15,11 @@ const (
 	watchedArg = "watched"
 )
 
-type AddDirectoriesCallback = func([]state.Directory)
-type LoadPlaylistCallback = func(string, bool) error
-type RemoveDirectoriesCallback = func(string) (state.Directory, error)
+type (
+	addDirectoriesCb    = func([]state.Directory)
+	loadPlaylistCb      = func(string, bool) error
+	removeDirectoriesCb = func(string) (state.Directory, error)
+)
 
 type getDirectoriesRespone struct {
 	Directories map[string]state.Directory `json:"directories"`
@@ -70,7 +72,7 @@ func (s *Server) deleteDirectoriesHandler(res http.ResponseWriter, req *http.Req
 	}
 
 	for _, path := range paths {
-		_, err := s.removeDirectoriesCallback(path)
+		_, err := s.removeDirectoriesCb(path)
 		if err != nil {
 			s.errLog.Printf("couldn't remove directory at path '%s' due to error: %s\n", path, err)
 			res.WriteHeader(404)
@@ -93,7 +95,7 @@ func (s *Server) directoriesPathHandler(res http.ResponseWriter, req *http.Reque
 		s.outLog.Printf("reading directory '%s' due to request from %s\n", path, req.RemoteAddr)
 	}
 
-	s.addDirectoriesCallback([]state.Directory{
+	s.addDirectoriesCb([]state.Directory{
 		{
 			Path:    path,
 			Watched: watchedDir,

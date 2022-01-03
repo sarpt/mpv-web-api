@@ -197,7 +197,7 @@ func (s *Server) Serve() error {
 		s.outLog.Println("http server closed successfully")
 	}
 
-	err = s.mpvManager.StopServing("API server shutting down")
+	err = s.mpvManager.Shutdown("API server shutting down")
 	if err != nil {
 		s.errLog.Printf("mpvManager closed with an error: %s\n", err)
 	} else {
@@ -276,9 +276,4 @@ func (s Server) Playlists() *state.Playlists {
 
 func (s Server) Status() *state.Status {
 	return s.status
-}
-
-// TODO: this should not be exposed as is, instead having wrapper methods that call mpv manager
-func (s Server) MpvManager() *mpv.Manager {
-	return s.mpvManager
 }

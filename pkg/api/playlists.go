@@ -36,7 +36,7 @@ func (s *Server) DefaultPlaylistSelected() bool {
 // LoadPlaylist instructs mpv to add entries of a playlist to the mpv internal playlist.
 // UUID is a key of a playlist that is unique in the scope of a server's instance.
 // Append specifies whether the playlist should be added to the end of the currently played playlist.
-// When append is false, the  new playlist overwrites current playlist and starts playing it immediately.
+// When append is false, the new playlist overwrites current playlist and starts playing it immediately.
 // When append is true, a default playlist will be selected and updated with entries from both previously
 // selected playlist and a new appended one (mpv will emit change to playlist property which will set the entries
 // on the default playlist).

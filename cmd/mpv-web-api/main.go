@@ -173,7 +173,7 @@ func main() {
 		sig := <-sigs
 		err := server.StopServing(sig.String())
 		if err != nil {
-			errLog.Printf("")
+			errLog.Printf("stop of API server finished with an error: %s", err)
 		}
 	}()
 

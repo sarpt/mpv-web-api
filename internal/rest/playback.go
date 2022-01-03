@@ -22,6 +22,18 @@ const (
 	subtitleIDArg   = "subtitleID"
 )
 
+type (
+	loadFileCb          func(string, bool) error
+	changeFullscreenCb  func(bool) error
+	changeAudioCb       func(string) error
+	changeChapterCb     func(int64) error
+	changeSubtitleCb    func(string) error
+	loopFileCb          func(bool) error
+	changePauseCb       func(bool) error
+	playlistPlayIndexCb func(int) error
+	stopPlaybackCb      func() error
+)
+
 func (s *Server) getPlaybackHandler(res http.ResponseWriter, req *http.Request) {
 	json, err := json.Marshal(s.playback)
 	if err != nil {
@@ -45,7 +57,7 @@ func (s *Server) pathHandler(res http.ResponseWriter, req *http.Request) error {
 
 	s.outLog.Printf("loading file '%s' with '%t' argument due to request from %s\n", filePath, append, req.RemoteAddr)
 
-	return s.mpvManager.LoadFile(filePath, append)
+	return s.loadFileCb(filePath, append)
 }
 
 func (s *Server) fullscreenHandler(res http.ResponseWriter, req *http.Request) error {
@@ -55,14 +67,14 @@ func (s *Server) fullscreenHandler(res http.ResponseWriter, req *http.Request) e
 	}
 
 	s.outLog.Printf("changing fullscreen to %t due to request from %s\n", fullscreen, req.RemoteAddr)
-	return s.mpvManager.ChangeFullscreen(fullscreen)
+	return s.changeFullscreenCb(fullscreen)
 }
 
 func (s *Server) audioIDHandler(res http.ResponseWriter, req *http.Request) error {
 	audioID := req.PostFormValue(audioIDArg)
 
 	s.outLog.Printf("changing audio id to %s due to request from %s\n", audioID, req.RemoteAddr)
-	return s.mpvManager.ChangeAudio(audioID)
+	return s.changeAudioCb(audioID)
 }
 
 func (s *Server) chapterHandler(res http.ResponseWriter, req *http.Request) error {
@@ -72,14 +84,14 @@ func (s *Server) chapterHandler(res http.ResponseWriter, req *http.Request) erro
 	}
 
 	s.outLog.Printf("changing chapter id to %d due to request from %s\n", chapterIdx, req.RemoteAddr)
-	return s.mpvManager.ChangeChapter(chapterIdx)
+	return s.changeChapterCb(chapterIdx)
 }
 
 func (s *Server) subtitleIDHandler(res http.ResponseWriter, req *http.Request) error {
 	subtitleID := req.PostFormValue(subtitleIDArg)
 
 	s.outLog.Printf("changing subtitle id to %s due to request from %s\n", subtitleID, req.RemoteAddr)
-	return s.mpvManager.ChangeSubtitle(subtitleID)
+	return s.changeSubtitleCb(subtitleID)
 }
 
 func (s *Server) loopFileHandler(res http.ResponseWriter, req *http.Request) error {
@@ -89,7 +101,7 @@ func (s *Server) loopFileHandler(res http.ResponseWriter, req *http.Request) err
 	}
 
 	s.outLog.Printf("changing file looping to %t due to request from %s\n", loopFile, req.RemoteAddr)
-	return s.mpvManager.LoopFile(loopFile)
+	return s.loopFileCb(loopFile)
 }
 
 func (s *Server) pauseHandler(res http.ResponseWriter, req *http.Request) error {
@@ -99,7 +111,7 @@ func (s *Server) pauseHandler(res http.ResponseWriter, req *http.Request) error 
 	}
 
 	s.outLog.Printf("changing pause to %t due to request from %s\n", pause, req.RemoteAddr)
-	return s.mpvManager.ChangePause(pause)
+	return s.changePauseCb(pause)
 }
 
 func (s *Server) playlistIdxHandler(res http.ResponseWriter, req *http.Request) error {
@@ -109,7 +121,7 @@ func (s *Server) playlistIdxHandler(res http.ResponseWriter, req *http.Request) 
 	}
 
 	s.outLog.Printf("changing playlist idx to %d due to request from %s\n", idx, req.RemoteAddr)
-	return s.mpvManager.PlaylistPlayIndex(idx)
+	return s.playlistPlayIndexCb(idx)
 }
 
 func (s *Server) playlistUUIDHandler(res http.ResponseWriter, req *http.Request) error {
@@ -121,7 +133,7 @@ func (s *Server) playlistUUIDHandler(res http.ResponseWriter, req *http.Request)
 	}
 
 	s.outLog.Printf("loading playlist with uuid '%s' and append '%t' due to request from %s\n", uuid, append, req.RemoteAddr)
-	return s.loadPlaylistCallback(uuid, append)
+	return s.loadPlaylistCb(uuid, append)
 }
 
 func (s *Server) stopHandler(res http.ResponseWriter, req *http.Request) error {
@@ -135,7 +147,7 @@ func (s *Server) stopHandler(res http.ResponseWriter, req *http.Request) error {
 	}
 
 	s.outLog.Printf("stopping playback due to request from %s\n", req.RemoteAddr)
-	return s.mpvManager.StopPlayback()
+	return s.stopPlaybackCb()
 }
 
 func getAppendArgument(req *http.Request) (bool, error) {
