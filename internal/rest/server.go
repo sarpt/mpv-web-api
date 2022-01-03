@@ -5,7 +5,6 @@ import (
 	"log"
 
 	"github.com/sarpt/mpv-web-api/pkg/api"
-	"github.com/sarpt/mpv-web-api/pkg/mpv"
 	"github.com/sarpt/mpv-web-api/pkg/state"
 )
 
@@ -23,24 +22,36 @@ type Config struct {
 	OutWriter io.Writer
 }
 
+type Callbacks struct {
+	addDirectoriesCb
+	removeDirectoriesCb
+	loadPlaylistCb
+	loadFileCb
+	changeFullscreenCb
+	changeAudioCb
+	changeChapterCb
+	changeSubtitleCb
+	loopFileCb
+	changePauseCb
+	playlistPlayIndexCb
+	stopPlaybackCb
+}
+
 // Server is responsible for creating REST handlers, argument parsing and validation.
 // TODO: In the future, REST package might fullfill a function of a wrapper for OpenAPI generated code
 // (if that ever will be implemented, not sure if it's not an overkill atm).
 // TODO#2: As in SSE case, the pointers to the state should be replaced with a more separated approach
 // - rest package should not have unlimited access to the whole state.
 type Server struct {
-	addDirectoriesCallback    AddDirectoriesCallback
-	allowCORS                 bool
-	removeDirectoriesCallback RemoveDirectoriesCallback
-	directories               *state.Directories
-	errLog                    *log.Logger
-	loadPlaylistCallback      LoadPlaylistCallback
-	mediaFiles                *state.MediaFiles
-	mpvManager                *mpv.Manager
-	playback                  *state.Playback
-	playlists                 *state.Playlists
-	outLog                    *log.Logger
-	status                    *state.Status
+	Callbacks
+	allowCORS   bool
+	directories *state.Directories
+	errLog      *log.Logger
+	mediaFiles  *state.MediaFiles
+	playback    *state.Playback
+	playlists   *state.Playlists
+	outLog      *log.Logger
+	status      *state.Status
 }
 
 // NewServer returns rest.Server instance.
@@ -59,11 +70,19 @@ func (s *Server) Init(apiServer *api.Server) error {
 	s.playlists = apiServer.Playlists()
 	s.status = apiServer.Status()
 
-	s.mpvManager = apiServer.MpvManager()
+	s.addDirectoriesCb = apiServer.AddRootDirectories
+	s.removeDirectoriesCb = apiServer.TakeDirectory
+	s.loadPlaylistCb = apiServer.LoadPlaylist
 
-	s.addDirectoriesCallback = apiServer.AddRootDirectories
-	s.removeDirectoriesCallback = apiServer.TakeDirectory
-	s.loadPlaylistCallback = apiServer.LoadPlaylist
+	s.loadFileCb = apiServer.LoadFile
+	s.changeFullscreenCb = apiServer.ChangeFullscreen
+	s.changeAudioCb = apiServer.ChangeAudio
+	s.changeChapterCb = apiServer.ChangeChapter
+	s.changeSubtitleCb = apiServer.ChangeSubtitle
+	s.loopFileCb = apiServer.LoopFile
+	s.changePauseCb = apiServer.ChangePause
+	s.playlistPlayIndexCb = apiServer.PlaylistPlayIndex
+	s.stopPlaybackCb = apiServer.StopPlayback
 
 	return nil
 }

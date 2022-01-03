@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/sarpt/mpv-web-api/internal/common"
+	"github.com/sarpt/goutils/pkg/cil"
 )
 
 const (
@@ -32,8 +32,8 @@ type ManagerConfig struct {
 // Manager handles dispatching of commands, while exposing MPV command API as a facade.
 type Manager struct {
 	cd               *commandDispatcher
-	stopServing      chan string
-	serveStop        chan error
+	shutdown         chan string
+	serveStopped     chan error
 	errLog           *log.Logger
 	mpvCmd           *exec.Cmd
 	outLog           *log.Logger
@@ -103,19 +103,21 @@ func (m Manager) ChangePause(paused bool) error {
 	return err
 }
 
-// StopServing instructs Manager to stop serving.
-// Stopping a running manager results in command dispatcher being closed,
-// and if manager handles an mpv instance, stopping the mpv instance.
-// Stopping a not running manager results in an error.
-func (m *Manager) StopServing(reason string) error {
-	if m.stopServing == nil {
-		return fmt.Errorf("stop unsuccessful - manager is not running")
+// Shutdown instructs Manager to stop serving/running.
+// Stopping a running Manager results in command dispatcher being closed,
+// and if Manager handles an mpv instance, stopping the mpv instance.
+// Stopping a not running Manager results in an error.
+// Invocation is blocking since it awaits for Manager to return result of shutdown.
+// After the function returns it's ensured that Manager is no longer serving/running.
+func (m *Manager) Shutdown(reason string) error {
+	if m.shutdown == nil {
+		return fmt.Errorf("shutdown unsuccessful - manager is not running")
 	}
 
-	m.serveStop = make(chan error)
-	m.stopServing <- reason
+	m.serveStopped = make(chan error)
+	m.shutdown <- reason
 
-	return <-m.serveStop
+	return <-m.serveStopped
 }
 
 // LoadFile instructs mpv to start playing the file from provided filepath.
@@ -263,15 +265,29 @@ func (m *Manager) Serve() error {
 	mpvErrors := make(chan error)
 	cdErrors := make(chan error)
 
-	m.stopServing = make(chan string)
-	defer func() { m.stopServing = nil }()
+	m.shutdown = make(chan string)
+	defer func() { m.shutdown = nil }()
 
 	serveCtx, serveCancel := context.WithCancel(context.Background())
-	go common.RestartWithContext(serveCtx, m.manageOwnMpvProcess, func() { m.outLog.Println("restarting mpv process...") }, mpvErrors)
-	go common.RestartWithContext(serveCtx, m.serveCommandDispatcher, func() { m.outLog.Println("restarting command dispatcher...") }, cdErrors)
+	go cil.ControlledInfiniteLoop(
+		serveCtx,
+		cil.Cfg{
+			AfterLoopCb: func() { m.outLog.Println("restarting mpv process...") },
+			Cb:          m.manageOwnMpvProcess,
+			Result:      mpvErrors,
+		},
+	)
+	go cil.ControlledInfiniteLoop(
+		serveCtx,
+		cil.Cfg{
+			Cb:          m.serveCommandDispatcher,
+			AfterLoopCb: func() { m.outLog.Println("restarting command dispatcher...") },
+			Result:      cdErrors,
+		},
+	)
 
 	select {
-	case reason := <-m.stopServing:
+	case reason := <-m.shutdown:
 		m.outLog.Printf("stopping the manager, reason: %s", reason)
 	case err := <-mpvErrors:
 		if err != nil {
@@ -292,7 +308,7 @@ func (m *Manager) Serve() error {
 	}
 
 	err := m.cd.Close()
-	m.serveStop <- err
+	m.serveStopped <- err
 
 	return err
 }
