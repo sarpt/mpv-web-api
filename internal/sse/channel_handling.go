@@ -110,9 +110,13 @@ func (s *Server) observeChannelVariant(res ResponseWriter, req *http.Request, ss
 	for {
 		select {
 		case err := <-channelErrors:
-			s.errLog.Printf("error occured on channel %s for remote address %s: %s", sseChannel.Variant(), remoteAddr, err)
+			s.errLog.Printf("error occured on channel '%s' for remote address %s: %s\n", sseChannel.Variant(), remoteAddr, err)
 		case <-channelDone:
-			s.outLog.Printf("sse observation on channel %s done for %s due to changes channel being closed\n", sseChannel.Variant(), remoteAddr)
+			s.outLog.Printf("sse observation on channel '%s' done for remote address %s due to changes channel being closed\n", sseChannel.Variant(), remoteAddr)
+
+			return
+		case <-s.ctx.Done():
+			s.outLog.Printf("sse observation on channel '%s' done for remote address %s due to server being stopped\n", sseChannel.Variant(), remoteAddr)
 
 			return
 		case <-connectionDone:

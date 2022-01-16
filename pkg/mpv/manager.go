@@ -308,7 +308,9 @@ func (m *Manager) Serve() error {
 	}
 
 	err := m.cd.Close()
-	m.serveStopped <- err
+	if m.serveStopped != nil {
+		m.serveStopped <- err
+	}
 
 	return err
 }
