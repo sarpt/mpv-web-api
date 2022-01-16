@@ -1,6 +1,7 @@
 package sse
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -32,6 +33,8 @@ type Server struct {
 	playback         *state.Playback
 	playlists        *state.Playlists
 	status           *state.Status
+	ctx              context.Context
+	cancel           context.CancelFunc
 }
 
 // Config controls behaviour of the SSE server.
@@ -42,8 +45,11 @@ type Config struct {
 
 // NewServer prepares and returns SSE server to handle SSE connections and observers.
 func NewServer(cfg Config) *Server {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &Server{
 		channels:         map[state.SSEChannelVariant]channel{},
+		ctx:              ctx,
+		cancel:           cancel,
 		errLog:           log.New(cfg.ErrWriter, logPrefix, log.LstdFlags),
 		observersChanges: make(chan ObserversChange),
 		outLog:           log.New(cfg.OutWriter, logPrefix, log.LstdFlags),
@@ -87,6 +93,10 @@ func (s *Server) Name() string {
 
 func (s *Server) PathBase() string {
 	return pathBase
+}
+
+func (s *Server) Shutdown() {
+	s.cancel()
 }
 
 // subscribeToStateChanges starts listening on state changes channels for further distribution to its observers.

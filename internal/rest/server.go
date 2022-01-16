@@ -94,3 +94,5 @@ func (s *Server) Name() string {
 func (s *Server) PathBase() string {
 	return pathBase
 }
+
+func (s *Server) Shutdown() {}

@@ -46,6 +46,7 @@ type PluginServer interface {
 	Handler() http.Handler
 	PathBase() string
 	Name() string
+	Shutdown()
 }
 
 // Config controls behaviour of the api server.
@@ -190,18 +191,23 @@ func (s *Server) Serve() error {
 		s.errLog.Printf("saving of current playlist unsuccessful: %s\n", err)
 	}
 
-	err = serv.Shutdown(context.Background())
-	if err != nil {
-		s.errLog.Printf("http server closed with an error: %s\n", err)
-	} else {
-		s.outLog.Println("http server closed successfully")
-	}
-
 	err = s.mpvManager.Shutdown("API server shutting down")
 	if err != nil {
 		s.errLog.Printf("mpvManager closed with an error: %s\n", err)
 	} else {
 		s.outLog.Println("mpvManager closed successfully")
+	}
+
+	for name, serv := range s.pluginServers {
+		s.outLog.Printf("shutting down '%s' plugin server\n", name)
+		serv.Shutdown()
+	}
+
+	err = serv.Shutdown(context.Background())
+	if err != nil {
+		s.errLog.Printf("http server closed with an error: %s\n", err)
+	} else {
+		s.outLog.Println("http server closed successfully")
 	}
 
 	return nil
