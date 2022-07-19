@@ -12,25 +12,25 @@ const (
 	statusSSEChannelVariant state_sse.ChannelVariant = "status"
 
 	// statusReplay notifies about replay of status state.
-	statusReplay status.StatusChangeVariant = "replay"
+	statusReplay status.ChangeVariant = "replay"
 )
 
 type statusChannel struct {
-	status    *status.Status
+	status    *status.Storage
 	lock      *sync.RWMutex
-	observers map[string]chan status.StatusChange
+	observers map[string]chan status.Change
 }
 
-func newStatusChannel(statusStorage *status.Status) *statusChannel {
+func newStatusChannel(statusStorage *status.Storage) *statusChannel {
 	return &statusChannel{
 		status:    statusStorage,
-		observers: map[string]chan status.StatusChange{},
+		observers: map[string]chan status.Change{},
 		lock:      &sync.RWMutex{},
 	}
 }
 
 func (sc *statusChannel) AddObserver(address string) {
-	changes := make(chan status.StatusChange)
+	changes := make(chan status.Change)
 
 	sc.lock.Lock()
 	defer sc.lock.Unlock()
@@ -82,11 +82,11 @@ func (sc *statusChannel) ServeObserver(address string, res ResponseWriter, done 
 	}
 }
 
-func (sc *statusChannel) changeHandler(res ResponseWriter, change status.StatusChange) error {
+func (sc *statusChannel) changeHandler(res ResponseWriter, change status.Change) error {
 	return res.SendChange(sc.status, sc.Variant(), string(change.Variant))
 }
 
-func (sc *statusChannel) BroadcastToChannelObservers(change status.StatusChange) {
+func (sc *statusChannel) BroadcastToChannelObservers(change status.Change) {
 	sc.lock.RLock()
 	defer sc.lock.RUnlock()
 

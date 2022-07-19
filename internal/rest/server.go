@@ -55,7 +55,7 @@ type Server struct {
 	playback    *playback.Storage
 	playlists   *playlists.Storage
 	outLog      *log.Logger
-	status      *status.Status
+	status      *status.Storage
 }
 
 // NewServer returns rest.Server instance.
