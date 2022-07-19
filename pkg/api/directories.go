@@ -49,7 +49,7 @@ func (s *Server) readDirectory(path string) error {
 		}
 
 		mediaFile := media_files.MapProbeResultToMediaFile(result)
-		s.mediaFiles.Add(mediaFile)
+		s.statesRepository.MediaFiles().Add(mediaFile)
 
 		entry := playlists.Entry{
 			Path: mediaFile.Path(),
@@ -58,7 +58,7 @@ func (s *Server) readDirectory(path string) error {
 	}
 
 	for _, uuid := range playlistUUIDs {
-		playlist, err := s.playlists.ByUUID(uuid)
+		playlist, err := s.statesRepository.Playlists().ByUUID(uuid)
 		if err != nil {
 			s.errLog.Printf("could not find playlists with provided uuid '%s': %s", uuid, err)
 
@@ -69,7 +69,7 @@ func (s *Server) readDirectory(path string) error {
 			continue
 		}
 
-		s.playlists.SetPlaylistEntries(uuid, playlistEntries)
+		s.statesRepository.Playlists().SetPlaylistEntries(uuid, playlistEntries)
 	}
 
 	return err
@@ -122,7 +122,7 @@ func (s *Server) AddRootDirectories(rootDirectories []directories.Entry) {
 }
 
 func (s *Server) AddDirectory(dir directories.Entry) error {
-	prevDir, err := s.directories.ByPath(dir.Path)
+	prevDir, err := s.statesRepository.Directories().ByPath(dir.Path)
 	if err == nil && prevDir.Watched {
 		err := s.fsWatcher.Remove(prevDir.Path)
 		if err != nil {
@@ -142,13 +142,13 @@ func (s *Server) AddDirectory(dir directories.Entry) error {
 		return err
 	}
 
-	s.directories.Add(dir)
+	s.statesRepository.Directories().Add(dir)
 
 	return nil
 }
 
 func (s *Server) TakeDirectory(path string) (directories.Entry, error) {
-	dir, err := s.directories.ByPath(path)
+	dir, err := s.statesRepository.Directories().ByPath(path)
 	if err != nil {
 		return directories.Entry{}, fmt.Errorf("could not remove directory '%s' - directory was not added", path)
 	}
@@ -159,13 +159,13 @@ func (s *Server) TakeDirectory(path string) (directories.Entry, error) {
 		}
 	}
 
-	dir, err = s.directories.Take(path)
+	dir, err = s.statesRepository.Directories().Take(path)
 	if err != nil {
 		return dir, fmt.Errorf("could not take directory '%s': %s", path, err)
 	}
 
-	filesToRemove := s.mediaFiles.PathsUnderParent(path)
-	removedFiles, skippedFiles := s.mediaFiles.TakeMultiple(filesToRemove)
+	filesToRemove := s.statesRepository.MediaFiles().PathsUnderParent(path)
+	removedFiles, skippedFiles := s.statesRepository.MediaFiles().TakeMultiple(filesToRemove)
 	if len(skippedFiles) != 0 {
 		s.errLog.Printf("could not take following %d files: %s\n", len(skippedFiles), strings.Join(skippedFiles, ", "))
 	}

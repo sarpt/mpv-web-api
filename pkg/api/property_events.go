@@ -32,7 +32,7 @@ func (s *Server) handleFullscreenEvent(res mpv.ObservePropertyResponse) error {
 		return ErrResponseDataNotString
 	}
 
-	s.playback.SetFullscreen(enabled == mpv.YesValue)
+	s.statesRepository.Playback().SetFullscreen(enabled == mpv.YesValue)
 	return nil
 }
 
@@ -42,7 +42,7 @@ func (s *Server) handleLoopFileEvent(res mpv.ObservePropertyResponse) error {
 		return ErrResponseDataNotString
 	}
 
-	s.playback.SetLoopFile(enabled != mpv.NoValue)
+	s.statesRepository.Playback().SetLoopFile(enabled != mpv.NoValue)
 	return nil
 }
 
@@ -52,7 +52,7 @@ func (s *Server) handlePauseEvent(res mpv.ObservePropertyResponse) error {
 		return ErrResponseDataNotString
 	}
 
-	s.playback.SetPause(paused == mpv.YesValue)
+	s.statesRepository.Playback().SetPause(paused == mpv.YesValue)
 	return nil
 }
 
@@ -62,12 +62,12 @@ func (s *Server) handleAudioIDChangeEvent(res mpv.ObservePropertyResponse) error
 		return ErrResponseDataNotString
 	}
 
-	s.playback.SetAudioID(aid)
+	s.statesRepository.Playback().SetAudioID(aid)
 	return nil
 }
 
 func (s *Server) handlePlaylistProperty(res mpv.ObservePropertyResponse) error {
-	currentPlaylist, err := s.playlists.ByUUID(s.playback.PlaylistUUID())
+	currentPlaylist, err := s.statesRepository.Playlists().ByUUID(s.statesRepository.Playback().PlaylistUUID())
 	if err != nil {
 		return fmt.Errorf("selected playlist UUID does not point to an existing playlist: %s", err)
 	}
@@ -92,11 +92,11 @@ func (s *Server) handlePlaylistProperty(res mpv.ObservePropertyResponse) error {
 		// To prevent unwanted changes to a named playlist when entries don't match, a default playlist
 		// should be selected and modified. Mismatched entries for a named playlist suggest
 		// changes introduced from outside the server.
-		s.outLog.Printf("entries do not match for a named, not-default playlist (uuid: %s) - switching to a default playlist", s.playback.PlaylistUUID())
-		s.playback.SelectPlaylist(s.defaultPlaylistUUID)
+		s.outLog.Printf("entries do not match for a named, not-default playlist (uuid: %s) - switching to a default playlist", s.statesRepository.Playback().PlaylistUUID())
+		s.statesRepository.Playback().SelectPlaylist(s.defaultPlaylistUUID)
 	}
 
-	return s.playlists.SetPlaylistEntries(s.playback.PlaylistUUID(), entries)
+	return s.statesRepository.Playlists().SetPlaylistEntries(s.statesRepository.Playback().PlaylistUUID(), entries)
 }
 
 func (s *Server) handlePlaylistPlayingPosEvent(res mpv.ObservePropertyResponse) error {
@@ -110,7 +110,7 @@ func (s *Server) handlePlaylistPlayingPosEvent(res mpv.ObservePropertyResponse) 
 		return ErrResponseDataNotInt
 	}
 
-	s.playback.SelectPlaylistCurrentIdx(idx)
+	s.statesRepository.Playback().SelectPlaylistCurrentIdx(idx)
 	return nil
 }
 
@@ -120,7 +120,7 @@ func (s *Server) handleSubtitleIDChangeEvent(res mpv.ObservePropertyResponse) er
 		return ErrResponseDataNotString
 	}
 
-	s.playback.SetSubtitleID(sid)
+	s.statesRepository.Playback().SetSubtitleID(sid)
 	return nil
 }
 
@@ -130,13 +130,13 @@ func (s *Server) handleChapterChangeEvent(res mpv.ObservePropertyResponse) error
 		return ErrResponseDataNotInt
 	}
 
-	s.playback.SetCurrentChapter(chapterIdx)
+	s.statesRepository.Playback().SetCurrentChapter(chapterIdx)
 	return nil
 }
 
 func (s *Server) handlePathEvent(res mpv.ObservePropertyResponse) error {
 	if res.Data == nil {
-		s.playback.Stop()
+		s.statesRepository.Playback().Stop()
 
 		return nil
 	}
@@ -146,12 +146,12 @@ func (s *Server) handlePathEvent(res mpv.ObservePropertyResponse) error {
 		return ErrResponseDataNotString
 	}
 
-	mediaFile, err := s.mediaFiles.ByPath(path)
+	mediaFile, err := s.statesRepository.MediaFiles().ByPath(path)
 	if err != nil {
 		return fmt.Errorf("%w:%s", ErrPlaybackPathNotServed, path)
 	}
 
-	s.playback.SetMediaFile(mediaFile)
+	s.statesRepository.Playback().SetMediaFile(mediaFile)
 	return nil
 }
 
@@ -162,7 +162,7 @@ func (s *Server) handlePlaybackTimeEvent(res mpv.ObservePropertyResponse) error 
 	}
 
 	if currentTime == "" {
-		s.playback.SetPlaybackTime(0)
+		s.statesRepository.Playback().SetPlaybackTime(0)
 
 		return nil
 	}
@@ -172,6 +172,6 @@ func (s *Server) handlePlaybackTimeEvent(res mpv.ObservePropertyResponse) error 
 		return ErrPlaybackTimeNotFloat
 	}
 
-	s.playback.SetPlaybackTime(currentTimeNum)
+	s.statesRepository.Playback().SetPlaybackTime(currentTimeNum)
 	return nil
 }

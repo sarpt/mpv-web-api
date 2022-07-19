@@ -14,6 +14,7 @@ import (
 	"github.com/sarpt/mpv-web-api/internal/rest"
 	"github.com/sarpt/mpv-web-api/internal/sse"
 	"github.com/sarpt/mpv-web-api/pkg/api"
+	"github.com/sarpt/mpv-web-api/pkg/state"
 	"github.com/sarpt/mpv-web-api/pkg/state/pkg/directories"
 )
 
@@ -81,16 +82,19 @@ func main() {
 	errLog := log.New(errWriter, logPrefix, log.LstdFlags)
 	outLog := log.New(outWriter, logPrefix, log.LstdFlags)
 
+	statesRepository := state.NewRepository()
 	sseCfg := sse.Config{
-		ErrWriter: errWriter,
-		OutWriter: outWriter,
+		ErrWriter:        errWriter,
+		OutWriter:        outWriter,
+		StatesRepository: statesRepository,
 	}
 	sseServer := sse.NewServer(sseCfg)
 
 	restCfg := rest.Config{
-		AllowCORS: *allowCORS,
-		ErrWriter: errWriter,
-		OutWriter: outWriter,
+		AllowCORS:        *allowCORS,
+		ErrWriter:        errWriter,
+		OutWriter:        outWriter,
+		StatesRepository: statesRepository,
 	}
 	restServer := rest.NewServer(restCfg)
 
@@ -105,6 +109,7 @@ func main() {
 			restServer.Name(): restServer,
 		},
 		StartMpvInstance:        *startMpvInstance,
+		StatesRepository:        statesRepository,
 		SocketConnectionTimeout: socketConnectionTimeout,
 	}
 

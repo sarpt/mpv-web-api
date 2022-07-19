@@ -14,7 +14,7 @@ type getMediaFilesRespone struct {
 
 func (s *Server) getMediaFilesHandler(res http.ResponseWriter, req *http.Request) {
 	mediaFilesResponse := getMediaFilesRespone{
-		MediaFiles: s.mediaFiles.All(),
+		MediaFiles: s.statesRepository.MediaFiles().All(),
 	}
 
 	response, err := json.Marshal(&mediaFilesResponse)

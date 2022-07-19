@@ -27,7 +27,7 @@ type getDirectoriesRespone struct {
 
 func (s *Server) getDirectoriesHandler(res http.ResponseWriter, req *http.Request) {
 	directoriesResponse := getDirectoriesRespone{
-		Directories: s.directories.All(),
+		Directories: s.statesRepository.Directories().All(),
 	}
 
 	response, err := json.Marshal(&directoriesResponse)
@@ -61,7 +61,7 @@ func (s *Server) deleteDirectoriesHandler(res http.ResponseWriter, req *http.Req
 			return
 		}
 
-		if !s.directories.Exists(path) {
+		if !s.statesRepository.Directories().Exists(path) {
 			res.WriteHeader(404)
 			res.Write([]byte(fmt.Sprintf("directory not found at path '%s'", encodedPath)))
 

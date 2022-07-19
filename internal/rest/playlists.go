@@ -14,7 +14,7 @@ type getPlaylistsRespone struct {
 
 func (s *Server) getPlaylistsHandler(res http.ResponseWriter, req *http.Request) {
 	playlistsResponse := getPlaylistsRespone{
-		Playlists: s.playlists.All(),
+		Playlists: s.statesRepository.Playlists().All(),
 	}
 
 	response, err := json.Marshal(&playlistsResponse)

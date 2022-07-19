@@ -12,11 +12,7 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/sarpt/mpv-web-api/pkg/mpv"
-	"github.com/sarpt/mpv-web-api/pkg/state/pkg/directories"
-	"github.com/sarpt/mpv-web-api/pkg/state/pkg/media_files"
-	"github.com/sarpt/mpv-web-api/pkg/state/pkg/playback"
-	"github.com/sarpt/mpv-web-api/pkg/state/pkg/playlists"
-	"github.com/sarpt/mpv-web-api/pkg/state/pkg/status"
+	"github.com/sarpt/mpv-web-api/pkg/state"
 )
 
 const (
@@ -31,18 +27,14 @@ type Server struct {
 	address               string
 	stopServing           chan string
 	defaultPlaylistUUID   string
-	directories           *directories.Storage
 	errLog                *log.Logger
 	fsWatcher             *fsnotify.Watcher
-	mediaFiles            *media_files.Storage
 	mpvManager            *mpv.Manager
 	mpvSocketPath         string
 	outLog                *log.Logger
-	playback              *playback.Storage
-	playlists             *playlists.Storage
+	statesRepository      state.Repository
 	playlistFilesPrefixes []string
 	pluginServers         map[string]PluginServer
-	status                *status.Storage
 }
 
 type PluginServer interface {
@@ -63,6 +55,7 @@ type Config struct {
 	OutWriter               io.Writer
 	SocketConnectionTimeout time.Duration
 	StartMpvInstance        bool
+	StatesRepository        state.Repository
 	PluginServers           map[string]PluginServer
 }
 
@@ -91,18 +84,14 @@ func NewServer(cfg Config) (*Server, error) {
 	server := &Server{
 		address:               cfg.Address,
 		defaultPlaylistUUID:   defaultPlaylistUUID,
-		directories:           directories.NewStorage(),
 		errLog:                log.New(cfg.ErrWriter, logPrefix, log.LstdFlags),
 		fsWatcher:             watcher,
-		mediaFiles:            media_files.NewStorage(),
 		mpvManager:            mpv.NewManager(mpvManagerCfg),
 		mpvSocketPath:         cfg.MpvSocketPath,
 		outLog:                log.New(cfg.OutWriter, logPrefix, log.LstdFlags),
-		playback:              playback.NewStorage(),
-		playlists:             playlists.NewPlaylists(),
+		statesRepository:      cfg.StatesRepository,
 		playlistFilesPrefixes: cfg.PlaylistFilesPrefixes,
 		pluginServers:         cfg.PluginServers,
-		status:                status.NewStorage(),
 	}
 
 	defaultPlaylistUUID, err := server.createDefaultPlaylist()
@@ -111,7 +100,7 @@ func NewServer(cfg Config) (*Server, error) {
 	}
 
 	server.defaultPlaylistUUID = defaultPlaylistUUID
-	server.playback.SelectPlaylist(defaultPlaylistUUID)
+	server.statesRepository.Playback().SelectPlaylist(defaultPlaylistUUID)
 
 	return server, nil
 }
@@ -218,7 +207,7 @@ func (s *Server) Serve() error {
 }
 
 func (s *Server) initWatchers() error {
-	s.playback.Subscribe(s.handlePlaylistRelatedPlaybackChanges, func(err error) {})
+	s.statesRepository.Playback().Subscribe(s.handlePlaylistRelatedPlaybackChanges, func(err error) {})
 
 	observePropertyResponses := make(chan mpv.ObservePropertyResponse)
 	observePropertyHandlers := map[string]observePropertyHandler{
@@ -266,24 +255,4 @@ func (s Server) subscribeToMpvProperties(observeResponses chan mpv.ObserveProper
 	}
 
 	return nil
-}
-
-func (s Server) Directories() *directories.Storage {
-	return s.directories
-}
-
-func (s Server) MediaFiles() *media_files.Storage {
-	return s.mediaFiles
-}
-
-func (s Server) Playback() *playback.Storage {
-	return s.playback
-}
-
-func (s Server) Playlists() *playlists.Storage {
-	return s.playlists
-}
-
-func (s Server) Status() *status.Storage {
-	return s.status
 }
