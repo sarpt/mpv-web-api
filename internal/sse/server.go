@@ -29,35 +29,41 @@ var (
 
 // Server holds information about handled SSE connections and their observers.
 type Server struct {
+	cancel           context.CancelFunc
 	channels         map[state_sse.ChannelVariant]channel
-	directories      *directories.Storage
+	ctx              context.Context
 	errLog           *log.Logger
-	mediaFiles       *media_files.Storage // TODO: this state passing from the user is very iffy - consider using either callbacks or builder pattern.
 	observersChanges chan ObserversChange
 	outLog           *log.Logger
-	playback         *playback.Storage
-	playlists        *playlists.Storage
-	status           *status.Storage
-	ctx              context.Context
-	cancel           context.CancelFunc
+	statesRepository StatesRepository
+}
+
+type StatesRepository interface {
+	Directories() *directories.Storage
+	MediaFiles() *media_files.Storage
+	Playback() *playback.Storage
+	Playlists() *playlists.Storage
+	Status() *status.Storage
 }
 
 // Config controls behaviour of the SSE server.
 type Config struct {
-	ErrWriter io.Writer
-	OutWriter io.Writer
+	ErrWriter        io.Writer
+	OutWriter        io.Writer
+	StatesRepository StatesRepository
 }
 
 // NewServer prepares and returns SSE server to handle SSE connections and observers.
 func NewServer(cfg Config) *Server {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Server{
+		cancel:           cancel,
 		channels:         map[state_sse.ChannelVariant]channel{},
 		ctx:              ctx,
-		cancel:           cancel,
 		errLog:           log.New(cfg.ErrWriter, logPrefix, log.LstdFlags),
 		observersChanges: make(chan ObserversChange),
 		outLog:           log.New(cfg.OutWriter, logPrefix, log.LstdFlags),
+		statesRepository: cfg.StatesRepository,
 	}
 }
 
@@ -74,11 +80,11 @@ func (s *Server) Handler() http.Handler {
 }
 
 func (s *Server) Init(apiServer *api.Server) error {
-	s.channels[directoriesSSEChannelVariant] = newDirectoriesChannel(s.directories)
-	s.channels[mediaFilesSSEChannelVariant] = newMediaFilesChannel(s.mediaFiles)
-	s.channels[playbackSSEChannelVariant] = newPlaybackChannel(s.playback)
-	s.channels[playlistsSSEChannelVariant] = newPlaylistsChannel(s.playback, s.playlists)
-	s.channels[statusSSEChannelVariant] = newStatusChannel(s.status)
+	s.channels[directoriesSSEChannelVariant] = newDirectoriesChannel(s.statesRepository.Directories())
+	s.channels[mediaFilesSSEChannelVariant] = newMediaFilesChannel(s.statesRepository.MediaFiles())
+	s.channels[playbackSSEChannelVariant] = newPlaybackChannel(s.statesRepository.Playback())
+	s.channels[playlistsSSEChannelVariant] = newPlaylistsChannel(s.statesRepository.Playback(), s.statesRepository.Playlists())
+	s.channels[statusSSEChannelVariant] = newStatusChannel(s.statesRepository.Status())
 
 	go s.watchSSEObserversChanges()
 	s.subscribeToStateChanges()
@@ -101,19 +107,19 @@ func (s *Server) Shutdown() {
 // subscribeToStateChanges starts listening on state changes channels for further distribution to its observers.
 func (s *Server) subscribeToStateChanges() {
 	directoriesChannel := s.channels[directoriesSSEChannelVariant].(*directoriesChannel)
-	s.directories.Subscribe(directoriesChannel.BroadcastToChannelObservers, func(err error) {})
+	s.statesRepository.Directories().Subscribe(directoriesChannel.BroadcastToChannelObservers, func(err error) {})
 
 	playbackChannel := s.channels[playbackSSEChannelVariant].(*playbackChannel)
-	s.playback.Subscribe(playbackChannel.BroadcastToChannelObservers, func(err error) {})
+	s.statesRepository.Playback().Subscribe(playbackChannel.BroadcastToChannelObservers, func(err error) {})
 
 	playlistsChannel := s.channels[playlistsSSEChannelVariant].(*playlistsChannel)
-	s.playlists.Subscribe(playlistsChannel.BroadcastToChannelObservers, func(err error) {})
+	s.statesRepository.Playlists().Subscribe(playlistsChannel.BroadcastToChannelObservers, func(err error) {})
 
 	mediaFilesChannel := s.channels[mediaFilesSSEChannelVariant].(*mediaFilesChannel)
-	s.mediaFiles.Subscribe(mediaFilesChannel.BroadcastToChannelObservers, func(err error) {})
+	s.statesRepository.MediaFiles().Subscribe(mediaFilesChannel.BroadcastToChannelObservers, func(err error) {})
 
 	statusChannel := s.channels[statusSSEChannelVariant].(*statusChannel)
-	s.status.Subscribe(statusChannel.BroadcastToChannelObservers, func(err error) {})
+	s.statesRepository.Status().Subscribe(statusChannel.BroadcastToChannelObservers, func(err error) {})
 }
 
 func (s Server) watchSSEObserversChanges() {
@@ -125,9 +131,9 @@ func (s Server) watchSSEObserversChanges() {
 
 		switch change.ChangeVariant {
 		case ObserverAdded:
-			s.status.AddObservingAddress(change.RemoteAddr, change.ChannelVariant)
+			s.statesRepository.Status().AddObservingAddress(change.RemoteAddr, change.ChannelVariant)
 		case ObserverRemoved:
-			s.status.RemoveObservingAddress(change.RemoteAddr, change.ChannelVariant)
+			s.statesRepository.Status().RemoveObservingAddress(change.RemoteAddr, change.ChannelVariant)
 		}
 	}
 }
