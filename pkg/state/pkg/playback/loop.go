@@ -10,22 +10,22 @@ const (
 
 type loopVariant string
 
-// PlaybackLoop contains information about playback loop
-type PlaybackLoop struct {
+// Loop contains information about playback loop
+type Loop struct {
 	variant loopVariant
 	aTime   int
 	bTime   int
 }
 
-type playbackLoopJSON struct {
+type loopJSON struct {
 	Variant loopVariant `json:"Variant"`
 	ATime   int         `json:"ATime"`
 	BTime   int         `json:"BTime"`
 }
 
 // MarshalJSON satisifes json.Marshaller
-func (pl PlaybackLoop) MarshalJSON() ([]byte, error) {
-	plJSON := playbackLoopJSON{
+func (pl Loop) MarshalJSON() ([]byte, error) {
+	plJSON := loopJSON{
 		Variant: pl.variant,
 		ATime:   pl.aTime,
 		BTime:   pl.bTime,

@@ -7,63 +7,63 @@ import (
 	"github.com/sarpt/mpv-web-api/pkg/state/pkg/media_files"
 )
 
-type PlaybackSubscriber = func(change PlaybackChange)
+type Subscriber = func(change Change)
 
-// PlaybackChangeVariant specifies type of change that happened to playback.
-type PlaybackChangeVariant string
+// ChangeVariant specifies type of change that happened to playback.
+type ChangeVariant string
 
 const (
 	// FullscreenChange notifies about fullscreen state change.
-	FullscreenChange PlaybackChangeVariant = "fullscreenChange"
+	FullscreenChange ChangeVariant = "fullscreenChange"
 
 	// LoopFileChange notifies about change to the looping of current file.
-	LoopFileChange PlaybackChangeVariant = "loopFileChange"
+	LoopFileChange ChangeVariant = "loopFileChange"
 
 	// PauseChange notifies about change to the playback pause state.
-	PauseChange PlaybackChangeVariant = "pauseChange"
+	PauseChange ChangeVariant = "pauseChange"
 
 	// AudioIDChange notifies about change of currently played audio.
-	AudioIDChange PlaybackChangeVariant = "audioIdChange"
+	AudioIDChange ChangeVariant = "audioIdChange"
 
 	// PlaybackStoppedChange notifies about playbck being stopped completely.
-	PlaybackStoppedChange PlaybackChangeVariant = "playbackStoppedChange"
+	PlaybackStoppedChange ChangeVariant = "playbackStoppedChange"
 
 	// SubtitleIDChange notifies about change of currently shown subtitles.
-	SubtitleIDChange PlaybackChangeVariant = "subtitleIdChange"
+	SubtitleIDChange ChangeVariant = "subtitleIdChange"
 
 	// CurrentChapterIdxChange notifies about change of currently played chapter.
-	CurrentChapterIdxChange PlaybackChangeVariant = "currentChapterIndexChange"
+	CurrentChapterIdxChange ChangeVariant = "currentChapterIndexChange"
 
 	// MediaFileChange notifies about change of currently played mediaFile.
-	MediaFileChange PlaybackChangeVariant = "mediaFileChange"
+	MediaFileChange ChangeVariant = "mediaFileChange"
 
 	// PlaybackTimeChange notifies about current timestamp change.
-	PlaybackTimeChange PlaybackChangeVariant = "playbackTimeChange"
+	PlaybackTimeChange ChangeVariant = "playbackTimeChange"
 
 	// PlaylistSelectionChange notifies about change of currently played playlist.
-	PlaylistSelectionChange PlaybackChangeVariant = "playlistSelectionChange"
+	PlaylistSelectionChange ChangeVariant = "playlistSelectionChange"
 
 	// PlaylistUnloadChange notifies about unload of playlist.
-	PlaylistUnloadChange PlaybackChangeVariant = "playlistUnloadChange"
+	PlaylistUnloadChange ChangeVariant = "playlistUnloadChange"
 
 	// PlaylistCurrentIdxChange notifies about change of currently played entry in a selected playlist.
-	PlaylistCurrentIdxChange PlaybackChangeVariant = "playlistCurrentIdxChange"
+	PlaylistCurrentIdxChange ChangeVariant = "playlistCurrentIdxChange"
 )
 
-// PlaybackChange is used to inform about changes to the Playback.
+// Change is used to inform about changes to the Playback.
 // TODO: implement playback change to carry information on the change (using either interfaces or generics in go2).
-type PlaybackChange struct {
-	Variant PlaybackChangeVariant
+type Change struct {
+	Variant ChangeVariant
 	Value   interface{}
 }
 
-// Playback contains information about currently played media file.
-type Playback struct {
+// Storage contains information about currently played media file.
+type Storage struct {
 	currentTime        float64
 	currentChapterIdx  int64
 	broadcaster        *common.ChangesBroadcaster
 	fullscreen         bool
-	loop               PlaybackLoop
+	loop               Loop
 	mediaFilePath      string
 	paused             bool
 	playlistCurrentIdx int
@@ -73,25 +73,25 @@ type Playback struct {
 	Stopped            bool
 }
 
-type playbackJSON struct {
-	CurrentTime        float64      `json:"CurrentTime"`
-	CurrentChapterIdx  int64        `json:"CurrentChapterIdx"`
-	Fullscreen         bool         `json:"Fullscreen"`
-	Loop               PlaybackLoop `json:"Loop"`
-	MediaFilePath      string       `json:"MediaFilePath"`
-	Paused             bool         `json:"Paused"`
-	PlaylistCurrentIdx int          `json:"PlaylistCurrentIdx"`
-	PlaylistUUID       string       `json:"PlaylistUUID"`
-	SelectedAudioID    string       `json:"SelectedAudioID"`
-	SelectedSubtitleID string       `json:"SelectedSubtitleID"`
+type storageJSON struct {
+	CurrentTime        float64 `json:"CurrentTime"`
+	CurrentChapterIdx  int64   `json:"CurrentChapterIdx"`
+	Fullscreen         bool    `json:"Fullscreen"`
+	Loop               Loop    `json:"Loop"`
+	MediaFilePath      string  `json:"MediaFilePath"`
+	Paused             bool    `json:"Paused"`
+	PlaylistCurrentIdx int     `json:"PlaylistCurrentIdx"`
+	PlaylistUUID       string  `json:"PlaylistUUID"`
+	SelectedAudioID    string  `json:"SelectedAudioID"`
+	SelectedSubtitleID string  `json:"SelectedSubtitleID"`
 }
 
-// NewPlayback constructs Playback state.
-func NewPlayback() *Playback {
+// NewStorage constructs Playback state.
+func NewStorage() *Storage {
 	broadcaster := common.NewChangesBroadcaster()
 	broadcaster.Broadcast()
 
-	return &Playback{
+	return &Storage{
 		broadcaster:        broadcaster,
 		playlistCurrentIdx: -1,
 		Stopped:            true,
@@ -99,15 +99,15 @@ func NewPlayback() *Playback {
 }
 
 // Clear clears all playback information.
-func (p *Playback) Clear() {
-	*p = Playback{
+func (p *Storage) Clear() {
+	*p = Storage{
 		broadcaster: p.broadcaster,
 	}
 }
 
 // MarshalJSON satisifes json.Marshaller.
-func (p *Playback) MarshalJSON() ([]byte, error) {
-	pJSON := playbackJSON{
+func (p *Storage) MarshalJSON() ([]byte, error) {
+	pJSON := storageJSON{
 		CurrentTime:        p.currentTime,
 		CurrentChapterIdx:  p.currentChapterIdx,
 		Fullscreen:         p.fullscreen,
@@ -122,106 +122,106 @@ func (p *Playback) MarshalJSON() ([]byte, error) {
 	return json.Marshal(pJSON)
 }
 
-func (p *Playback) PlaylistCurrentIdx() int {
+func (p *Storage) PlaylistCurrentIdx() int {
 	return p.playlistCurrentIdx
 }
 
-func (p *Playback) PlaylistUUID() string {
+func (p *Storage) PlaylistUUID() string {
 	return p.playlistUUID
 }
 
-func (p *Playback) PlaylistSelected() bool {
+func (p *Storage) PlaylistSelected() bool {
 	return p.PlaylistUUID() != ""
 }
 
 // SetAudioID changes played audio id.
-func (p *Playback) SetAudioID(aid string) {
+func (p *Storage) SetAudioID(aid string) {
 	p.selectedAudioID = aid
-	p.broadcaster.Send(PlaybackChange{
+	p.broadcaster.Send(Change{
 		Variant: AudioIDChange,
 	})
 }
 
 // SetCurrentChapter changes currently played chapter index.
-func (p *Playback) SetCurrentChapter(idx int64) {
+func (p *Storage) SetCurrentChapter(idx int64) {
 	p.currentChapterIdx = idx
-	p.broadcaster.Send(PlaybackChange{
+	p.broadcaster.Send(Change{
 		Variant: CurrentChapterIdxChange,
 	})
 }
 
 // SetFullscreen changes state of the fullscreen in playback.
-func (p *Playback) SetFullscreen(enabled bool) {
+func (p *Storage) SetFullscreen(enabled bool) {
 	p.fullscreen = enabled
-	p.broadcaster.Send(PlaybackChange{
+	p.broadcaster.Send(Change{
 		Variant: FullscreenChange,
 	})
 }
 
 // SetLoopFile changes whether file should be looped.
-func (p *Playback) SetLoopFile(enabled bool) {
+func (p *Storage) SetLoopFile(enabled bool) {
 	if enabled {
 		p.loop.variant = fileLoop
 	} else {
 		p.loop.variant = offLoop
 	}
-	p.broadcaster.Send(PlaybackChange{
+	p.broadcaster.Send(Change{
 		Variant: LoopFileChange,
 	})
 }
 
 // SetMediaFile changes currently played mediaFile, changing playback to not stopped.
-func (p *Playback) SetMediaFile(mediaFile media_files.Entry) {
+func (p *Storage) SetMediaFile(mediaFile media_files.Entry) {
 	p.mediaFilePath = mediaFile.Path()
 	p.Stopped = false
-	p.broadcaster.Send(PlaybackChange{
+	p.broadcaster.Send(Change{
 		Variant: MediaFileChange,
 	})
 }
 
 // SetPause changes whether playback should paused.
-func (p *Playback) SetPause(paused bool) {
+func (p *Storage) SetPause(paused bool) {
 	p.paused = paused
-	p.broadcaster.Send(PlaybackChange{
+	p.broadcaster.Send(Change{
 		Variant: PauseChange,
 	})
 }
 
 // SelectPlaylist sets currently played uuid of a playlist.
-func (p *Playback) SelectPlaylist(uuid string) {
-	p.broadcaster.Send(PlaybackChange{
+func (p *Storage) SelectPlaylist(uuid string) {
+	p.broadcaster.Send(Change{
 		Variant: PlaylistUnloadChange,
 		Value:   p.playlistUUID,
 	})
 
 	p.playlistUUID = uuid
 
-	p.broadcaster.Send(PlaybackChange{
+	p.broadcaster.Send(Change{
 		Variant: PlaylistSelectionChange,
 	})
 }
 
 // SelectPlaylistCurrentIdx sets currently played idx of a selected playlist.
-func (p *Playback) SelectPlaylistCurrentIdx(idx int) {
+func (p *Storage) SelectPlaylistCurrentIdx(idx int) {
 	p.playlistCurrentIdx = idx
 
-	p.broadcaster.Send(PlaybackChange{
+	p.broadcaster.Send(Change{
 		Variant: PlaylistCurrentIdxChange,
 	})
 }
 
 // SetPlaybackTime changes current time of a playback.
-func (p *Playback) SetPlaybackTime(time float64) {
+func (p *Storage) SetPlaybackTime(time float64) {
 	p.currentTime = time
-	p.broadcaster.Send(PlaybackChange{
+	p.broadcaster.Send(Change{
 		Variant: PlaybackTimeChange,
 	})
 }
 
 // SetSubtitleID changes shown subtitles id.
-func (p *Playback) SetSubtitleID(sid string) {
+func (p *Storage) SetSubtitleID(sid string) {
 	p.selectedSubtitleID = sid
-	p.broadcaster.Send(PlaybackChange{
+	p.broadcaster.Send(Change{
 		Variant: SubtitleIDChange,
 	})
 }
@@ -233,23 +233,23 @@ func (p *Playback) SetSubtitleID(sid string) {
 // TODO: to consider not clearing the outdated information, since it will be updated after new media playback change,
 // as such the clearing of playback method seems redundant, and the result potentialy unwanted
 // (the payload will not be sent when Stopped is true, so the outdated information will not be sent on changes chan).
-func (p *Playback) Stop() {
+func (p *Storage) Stop() {
 	playlistUUID := p.playlistUUID
 
 	p.Clear()
 	p.playlistCurrentIdx = -1
 	p.playlistUUID = playlistUUID
 
-	p.broadcaster.Send(PlaybackChange{
+	p.broadcaster.Send(Change{
 		Variant: PlaybackStoppedChange,
 	})
 
 	p.Stopped = true
 }
 
-func (p *Playback) Subscribe(sub PlaybackSubscriber, onError func(err error)) {
+func (p *Storage) Subscribe(sub Subscriber, onError func(err error)) {
 	p.broadcaster.Subscribe(func(change interface{}) {
-		playbackChange, ok := change.(PlaybackChange)
+		playbackChange, ok := change.(Change)
 		if !ok {
 			onError(common.ErrIncorrectChangesType)
 

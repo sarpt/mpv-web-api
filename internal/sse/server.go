@@ -35,7 +35,7 @@ type Server struct {
 	mediaFiles       *media_files.Storage // TODO: this state passing from the user is very iffy - consider using either callbacks or builder pattern.
 	observersChanges chan ObserversChange
 	outLog           *log.Logger
-	playback         *playback.Playback
+	playback         *playback.Storage
 	playlists        *playlists.Playlists
 	status           *status.Status
 	ctx              context.Context

@@ -52,7 +52,7 @@ type Server struct {
 	directories *directories.Storage
 	errLog      *log.Logger
 	mediaFiles  *media_files.Storage
-	playback    *playback.Playback
+	playback    *playback.Storage
 	playlists   *playlists.Playlists
 	outLog      *log.Logger
 	status      *status.Status

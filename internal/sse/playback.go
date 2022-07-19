@@ -16,21 +16,21 @@ const (
 )
 
 type playbackChannel struct {
-	playback  *playback.Playback
+	playback  *playback.Storage
 	lock      *sync.RWMutex
-	observers map[string]chan playback.PlaybackChange
+	observers map[string]chan playback.Change
 }
 
-func newPlaybackChannel(playbackStorage *playback.Playback) *playbackChannel {
+func newPlaybackChannel(playbackStorage *playback.Storage) *playbackChannel {
 	return &playbackChannel{
 		playback:  playbackStorage,
-		observers: map[string]chan playback.PlaybackChange{},
+		observers: map[string]chan playback.Change{},
 		lock:      &sync.RWMutex{},
 	}
 }
 
 func (pc *playbackChannel) AddObserver(address string) {
-	changes := make(chan playback.PlaybackChange)
+	changes := make(chan playback.Change)
 
 	pc.lock.Lock()
 	defer pc.lock.Unlock()
@@ -82,7 +82,7 @@ func (pc *playbackChannel) ServeObserver(address string, res ResponseWriter, don
 	}
 }
 
-func (pc *playbackChannel) changeHandler(res ResponseWriter, change playback.PlaybackChange) error {
+func (pc *playbackChannel) changeHandler(res ResponseWriter, change playback.Change) error {
 	if pc.playback.Stopped { // TODO: the changes are shot by state.Playback even after the mediaFilePath is cleared, as such it may be wasteful to push further changes through SSE. to think of a way to reduce number of those blank data calls after closing stopping playback
 		return res.SendEmptyChange(pc.Variant(), string(change.Variant))
 	}
@@ -90,7 +90,7 @@ func (pc *playbackChannel) changeHandler(res ResponseWriter, change playback.Pla
 	return res.SendChange(pc.playback, pc.Variant(), string(change.Variant))
 }
 
-func (pc *playbackChannel) BroadcastToChannelObservers(change playback.PlaybackChange) {
+func (pc *playbackChannel) BroadcastToChannelObservers(change playback.Change) {
 	pc.lock.RLock()
 	defer pc.lock.RUnlock()
 
