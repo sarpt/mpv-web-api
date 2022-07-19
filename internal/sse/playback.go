@@ -4,32 +4,33 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/sarpt/mpv-web-api/pkg/state"
+	"github.com/sarpt/mpv-web-api/pkg/state/pkg/playback"
+	state_sse "github.com/sarpt/mpv-web-api/pkg/state/pkg/sse"
 )
 
 const (
-	playbackSSEChannelVariant state.SSEChannelVariant = "playback"
+	playbackSSEChannelVariant state_sse.ChannelVariant = "playback"
 
 	playbackAllSseEvent    = "all"
 	playbackReplaySseEvent = "replay"
 )
 
 type playbackChannel struct {
-	playback  *state.Playback
+	playback  *playback.Playback
 	lock      *sync.RWMutex
-	observers map[string]chan state.PlaybackChange
+	observers map[string]chan playback.PlaybackChange
 }
 
-func newPlaybackChannel(playback *state.Playback) *playbackChannel {
+func newPlaybackChannel(playbackStorage *playback.Playback) *playbackChannel {
 	return &playbackChannel{
-		playback:  playback,
-		observers: map[string]chan state.PlaybackChange{},
+		playback:  playbackStorage,
+		observers: map[string]chan playback.PlaybackChange{},
 		lock:      &sync.RWMutex{},
 	}
 }
 
 func (pc *playbackChannel) AddObserver(address string) {
-	changes := make(chan state.PlaybackChange)
+	changes := make(chan playback.PlaybackChange)
 
 	pc.lock.Lock()
 	defer pc.lock.Unlock()
@@ -81,7 +82,7 @@ func (pc *playbackChannel) ServeObserver(address string, res ResponseWriter, don
 	}
 }
 
-func (pc *playbackChannel) changeHandler(res ResponseWriter, change state.PlaybackChange) error {
+func (pc *playbackChannel) changeHandler(res ResponseWriter, change playback.PlaybackChange) error {
 	if pc.playback.Stopped { // TODO: the changes are shot by state.Playback even after the mediaFilePath is cleared, as such it may be wasteful to push further changes through SSE. to think of a way to reduce number of those blank data calls after closing stopping playback
 		return res.SendEmptyChange(pc.Variant(), string(change.Variant))
 	}
@@ -89,7 +90,7 @@ func (pc *playbackChannel) changeHandler(res ResponseWriter, change state.Playba
 	return res.SendChange(pc.playback, pc.Variant(), string(change.Variant))
 }
 
-func (pc *playbackChannel) BroadcastToChannelObservers(change state.PlaybackChange) {
+func (pc *playbackChannel) BroadcastToChannelObservers(change playback.PlaybackChange) {
 	pc.lock.RLock()
 	defer pc.lock.RUnlock()
 
@@ -98,6 +99,6 @@ func (pc *playbackChannel) BroadcastToChannelObservers(change state.PlaybackChan
 	}
 }
 
-func (pc playbackChannel) Variant() state.SSEChannelVariant {
+func (pc playbackChannel) Variant() state_sse.ChannelVariant {
 	return playbackSSEChannelVariant
 }

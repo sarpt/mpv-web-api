@@ -317,7 +317,6 @@ func (m *Manager) Serve() error {
 
 // SetProperty sets the value of a property.
 // Value is of any type since various mpv commands expect different types of values.
-// TODO: rewrite to generics when those are out.
 func (m Manager) SetProperty(property string, value interface{}) (Response, error) {
 	cmd := command{
 		name:     setPropertyCommand,

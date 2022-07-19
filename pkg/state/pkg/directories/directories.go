@@ -1,4 +1,4 @@
-package state
+package directories
 
 import (
 	"encoding/json"
@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"path/filepath"
 	"sync"
+
+	"github.com/sarpt/mpv-web-api/pkg/state/internal/common"
 )
 
 var (
@@ -40,14 +42,14 @@ func (d DirectoriesChange) MarshalJSON() ([]byte, error) {
 type DirectoriesChangeVariant string
 
 type Directories struct {
-	broadcaster *ChangesBroadcaster
+	broadcaster *common.ChangesBroadcaster
 	items       map[string]Directory
 	lock        *sync.RWMutex
 }
 
 // NewDirectories counstructs Directories state.
 func NewDirectories() *Directories {
-	broadcaster := NewChangesBroadcaster()
+	broadcaster := common.NewChangesBroadcaster()
 	broadcaster.Broadcast()
 
 	return &Directories{
@@ -72,12 +74,12 @@ func (d *Directories) Add(dir Directory) {
 		d.items[path] = dir
 	}()
 
-	d.broadcaster.changes <- DirectoriesChange{
+	d.broadcaster.Send(DirectoriesChange{
 		variant: AddedDirectoriesChange,
 		items: map[string]Directory{
 			path: dir,
 		},
-	}
+	})
 }
 
 // All returns a copy of all Directories being handled by the instance of the server.
@@ -132,7 +134,7 @@ func (p *Directories) Subscribe(sub DirectoriesSubscriber, onError func(err erro
 	p.broadcaster.Subscribe(func(change interface{}) {
 		directoriesChange, ok := change.(DirectoriesChange)
 		if !ok {
-			onError(errIncorrectChangesType)
+			onError(common.ErrIncorrectChangesType)
 
 			return
 		}
@@ -156,12 +158,12 @@ func (d *Directories) Take(path string) (Directory, error) {
 	delete(d.items, keyPath)
 	d.lock.Unlock()
 
-	d.broadcaster.changes <- DirectoriesChange{
+	d.broadcaster.Send(DirectoriesChange{
 		variant: RemovedDirectoriesChange,
 		items: map[string]Directory{
 			keyPath: dir,
 		},
-	}
+	})
 
 	return dir, nil
 }

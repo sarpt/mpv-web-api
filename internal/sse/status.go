@@ -4,32 +4,33 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/sarpt/mpv-web-api/pkg/state"
+	state_sse "github.com/sarpt/mpv-web-api/pkg/state/pkg/sse"
+	"github.com/sarpt/mpv-web-api/pkg/state/pkg/status"
 )
 
 const (
-	statusSSEChannelVariant state.SSEChannelVariant = "status"
+	statusSSEChannelVariant state_sse.ChannelVariant = "status"
 
 	// statusReplay notifies about replay of status state.
-	statusReplay state.StatusChangeVariant = "replay"
+	statusReplay status.StatusChangeVariant = "replay"
 )
 
 type statusChannel struct {
-	status    *state.Status
+	status    *status.Status
 	lock      *sync.RWMutex
-	observers map[string]chan state.StatusChange
+	observers map[string]chan status.StatusChange
 }
 
-func newStatusChannel(status *state.Status) *statusChannel {
+func newStatusChannel(statusStorage *status.Status) *statusChannel {
 	return &statusChannel{
-		status:    status,
-		observers: map[string]chan state.StatusChange{},
+		status:    statusStorage,
+		observers: map[string]chan status.StatusChange{},
 		lock:      &sync.RWMutex{},
 	}
 }
 
 func (sc *statusChannel) AddObserver(address string) {
-	changes := make(chan state.StatusChange)
+	changes := make(chan status.StatusChange)
 
 	sc.lock.Lock()
 	defer sc.lock.Unlock()
@@ -81,11 +82,11 @@ func (sc *statusChannel) ServeObserver(address string, res ResponseWriter, done 
 	}
 }
 
-func (sc *statusChannel) changeHandler(res ResponseWriter, change state.StatusChange) error {
+func (sc *statusChannel) changeHandler(res ResponseWriter, change status.StatusChange) error {
 	return res.SendChange(sc.status, sc.Variant(), string(change.Variant))
 }
 
-func (sc *statusChannel) BroadcastToChannelObservers(change state.StatusChange) {
+func (sc *statusChannel) BroadcastToChannelObservers(change status.StatusChange) {
 	sc.lock.RLock()
 	defer sc.lock.RUnlock()
 
@@ -94,6 +95,6 @@ func (sc *statusChannel) BroadcastToChannelObservers(change state.StatusChange) 
 	}
 }
 
-func (sc statusChannel) Variant() state.SSEChannelVariant {
+func (sc statusChannel) Variant() state_sse.ChannelVariant {
 	return statusSSEChannelVariant
 }

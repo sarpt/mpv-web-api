@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/sarpt/mpv-web-api/pkg/state"
+	state_sse "github.com/sarpt/mpv-web-api/pkg/state/pkg/sse"
 )
 
 // ResponseWriter is used to send data through keep-alive SSE connection.
@@ -31,7 +31,7 @@ func (f *ResponseWriter) Write(data []byte) (int, error) {
 }
 
 // SendChange is responsible for propgating change payload through SSE connection.
-func (f *ResponseWriter) SendChange(changePayload json.Marshaler, channelVariant state.SSEChannelVariant, changeVariant string) error {
+func (f *ResponseWriter) SendChange(changePayload json.Marshaler, channelVariant state_sse.ChannelVariant, changeVariant string) error {
 	out, err := json.Marshal(changePayload)
 	if err != nil {
 		return fmt.Errorf("%w: %s", errResponseJSONCreationFailed, err)
@@ -42,12 +42,12 @@ func (f *ResponseWriter) SendChange(changePayload json.Marshaler, channelVariant
 }
 
 // SendEmptyChange is responsible for propagating change without any payload (without "data") through SSE connection.
-func (f *ResponseWriter) SendEmptyChange(channelVariant state.SSEChannelVariant, changeVariant string) error {
+func (f *ResponseWriter) SendEmptyChange(channelVariant state_sse.ChannelVariant, changeVariant string) error {
 	_, err := f.writeChange([]byte{}, channelVariant, changeVariant)
 	return err
 }
 
-func (f *ResponseWriter) writeChange(out []byte, channelVariant state.SSEChannelVariant, changeVariant string) (int, error) {
+func (f *ResponseWriter) writeChange(out []byte, channelVariant state_sse.ChannelVariant, changeVariant string) (int, error) {
 	n, err := f.Write(formatSseEvent(channelVariant, string(changeVariant), out))
 	if err != nil {
 		return n, fmt.Errorf("writing change %s on %s channel failed: %w: %s", changeVariant, channelVariant, errClientWritingFailed, err)

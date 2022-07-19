@@ -1,4 +1,4 @@
-package state
+package playlists
 
 type PlaylistEntry struct {
 	Path              string  `json:"Path"`

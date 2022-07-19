@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/sarpt/mpv-web-api/pkg/state"
+	state_sse "github.com/sarpt/mpv-web-api/pkg/state/pkg/sse"
 )
 
 var (
@@ -36,14 +36,14 @@ type ObserverChangeVariant string
 type ObserversChange struct {
 	ChangeVariant  ObserverChangeVariant
 	RemoteAddr     string
-	ChannelVariant state.SSEChannelVariant
+	ChannelVariant state_sse.ChannelVariant
 }
 
 type getSseHandler = func(res http.ResponseWriter, req *http.Request)
 
 // handlerConfig is used to control creation of SSE handler for Server
 type handlerConfig struct {
-	Channels map[state.SSEChannelVariant]channel
+	Channels map[state_sse.ChannelVariant]channel
 }
 
 func (s *Server) createSseRegisterHandler(cfg handlerConfig) getSseHandler {
@@ -63,7 +63,7 @@ func (s *Server) createSseRegisterHandler(cfg handlerConfig) getSseHandler {
 
 		channelVariants := req.URL.Query()[sseChannelArg]
 		for _, reqChannel := range channelVariants {
-			channelVariant := state.SSEChannelVariant(reqChannel)
+			channelVariant := state_sse.ChannelVariant(reqChannel)
 
 			channel, ok := cfg.Channels[channelVariant]
 			if !ok {
@@ -171,7 +171,7 @@ func replaySseState(req *http.Request) bool {
 	return ok && len(replay) > 0 && replay[0] == "true"
 }
 
-func formatSseEvent(channel state.SSEChannelVariant, eventName string, data []byte) []byte {
+func formatSseEvent(channel state_sse.ChannelVariant, eventName string, data []byte) []byte {
 	var out []byte
 
 	channelEvent := fmt.Sprintf("%s.%s", channel, eventName)

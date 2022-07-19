@@ -1,4 +1,4 @@
-package state
+package playlists
 
 import (
 	"encoding/json"
@@ -7,15 +7,12 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
-)
-
-var (
-	errIncorrectChangesType = errors.New("changes of incorrect type provided to the change handler")
+	"github.com/sarpt/mpv-web-api/pkg/state/internal/common"
 )
 
 type PlaylistSubscriber = func(playlist PlaylistsChange)
 type Playlists struct {
-	broadcaster *ChangesBroadcaster
+	broadcaster *common.ChangesBroadcaster
 	items       map[string]*Playlist
 	lock        *sync.RWMutex
 }
@@ -51,7 +48,7 @@ type PlaylistsChange struct {
 }
 
 func NewPlaylists() *Playlists {
-	broadcaster := NewChangesBroadcaster()
+	broadcaster := common.NewChangesBroadcaster()
 	broadcaster.Broadcast()
 
 	return &Playlists{
@@ -107,10 +104,10 @@ func (p *Playlists) SetPlaylistCurrentEntryIdx(uuid string, idx int) error {
 
 	playlist.setCurrentEntryIdx(idx)
 
-	p.broadcaster.changes <- PlaylistsChange{
+	p.broadcaster.Send(PlaylistsChange{
 		Variant:  PlaylistsCurrentEntryIdxChange,
 		Playlist: playlist,
-	}
+	})
 	return nil
 }
 
@@ -123,10 +120,10 @@ func (p *Playlists) SetPlaylistEntries(uuid string, entries []PlaylistEntry) err
 
 	playlist.setEntries(entries)
 
-	p.broadcaster.changes <- PlaylistsChange{
+	p.broadcaster.Send(PlaylistsChange{
 		Variant:  PlaylistsEntriesChange,
 		Playlist: playlist,
-	}
+	})
 	return nil
 }
 
@@ -134,7 +131,7 @@ func (p *Playlists) Subscribe(sub PlaylistSubscriber, onError func(err error)) {
 	p.broadcaster.Subscribe(func(change interface{}) {
 		playlistChange, ok := change.(PlaylistsChange)
 		if !ok {
-			onError(errIncorrectChangesType)
+			onError(common.ErrIncorrectChangesType)
 
 			return
 		}
@@ -158,10 +155,10 @@ func (p *Playlists) AddPlaylist(playlist *Playlist) (string, error) {
 	p.items[playlist.uuid] = playlist
 	p.lock.Unlock()
 
-	p.broadcaster.changes <- PlaylistsChange{
+	p.broadcaster.Send(PlaylistsChange{
 		Variant:  PlaylistsAdded,
 		Playlist: playlist,
-	}
+	})
 
 	return playlist.uuid, nil
 }

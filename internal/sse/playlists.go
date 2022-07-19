@@ -4,33 +4,35 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/sarpt/mpv-web-api/pkg/state"
+	"github.com/sarpt/mpv-web-api/pkg/state/pkg/playback"
+	"github.com/sarpt/mpv-web-api/pkg/state/pkg/playlists"
+	state_sse "github.com/sarpt/mpv-web-api/pkg/state/pkg/sse"
 )
 
 const (
-	playlistsSSEChannelVariant state.SSEChannelVariant = "playlists"
+	playlistsSSEChannelVariant state_sse.ChannelVariant = "playlists"
 
-	playlistsReplay state.PlaylistsChangeVariant = "replay"
+	playlistsReplay playlists.PlaylistsChangeVariant = "replay"
 )
 
 type playlistsChannel struct {
-	playback  *state.Playback
-	playlists *state.Playlists
+	playback  *playback.Playback
+	playlists *playlists.Playlists
 	lock      *sync.RWMutex
-	observers map[string]chan state.PlaylistsChange
+	observers map[string]chan playlists.PlaylistsChange
 }
 
-func newPlaylistsChannel(playback *state.Playback, playlists *state.Playlists) *playlistsChannel {
+func newPlaylistsChannel(playbackStorage *playback.Playback, playlistsStorage *playlists.Playlists) *playlistsChannel {
 	return &playlistsChannel{
-		playback:  playback,
-		playlists: playlists,
-		observers: map[string]chan state.PlaylistsChange{},
+		playback:  playbackStorage,
+		playlists: playlistsStorage,
+		observers: map[string]chan playlists.PlaylistsChange{},
 		lock:      &sync.RWMutex{},
 	}
 }
 
 func (pc *playlistsChannel) AddObserver(address string) {
-	changes := make(chan state.PlaylistsChange)
+	changes := make(chan playlists.PlaylistsChange)
 
 	pc.lock.Lock()
 	defer pc.lock.Unlock()
@@ -82,7 +84,7 @@ func (pc *playlistsChannel) ServeObserver(address string, res ResponseWriter, do
 	}
 }
 
-func (pc *playlistsChannel) changeHandler(res ResponseWriter, change state.PlaylistsChange) error {
+func (pc *playlistsChannel) changeHandler(res ResponseWriter, change playlists.PlaylistsChange) error {
 	if pc.playback.Stopped { // TODO: the changes are shot by state.Playback even after the mediaFilePath is cleared, as such it may be wasteful to push further changes through SSE. to think of a way to reduce number of those blank data calls after closing stopping playback
 		return res.SendEmptyChange(pc.Variant(), string(change.Variant))
 	}
@@ -90,7 +92,7 @@ func (pc *playlistsChannel) changeHandler(res ResponseWriter, change state.Playl
 	return res.SendChange(change.Playlist, pc.Variant(), string(change.Variant))
 }
 
-func (pc *playlistsChannel) BroadcastToChannelObservers(change state.PlaylistsChange) {
+func (pc *playlistsChannel) BroadcastToChannelObservers(change playlists.PlaylistsChange) {
 	pc.lock.RLock()
 	defer pc.lock.RUnlock()
 
@@ -99,6 +101,6 @@ func (pc *playlistsChannel) BroadcastToChannelObservers(change state.PlaylistsCh
 	}
 }
 
-func (pc playlistsChannel) Variant() state.SSEChannelVariant {
+func (pc playlistsChannel) Variant() state_sse.ChannelVariant {
 	return playlistsSSEChannelVariant
 }

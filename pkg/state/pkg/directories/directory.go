@@ -1,4 +1,4 @@
-package state
+package directories
 
 type Directory struct {
 	Path      string

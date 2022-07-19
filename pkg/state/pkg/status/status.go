@@ -1,17 +1,17 @@
-package state
+package status
 
 import (
 	"encoding/json"
 	"sync"
+
+	"github.com/sarpt/mpv-web-api/pkg/state/internal/common"
+	"github.com/sarpt/mpv-web-api/pkg/state/pkg/sse"
 )
 
 type StatusSubscriber = func(change StatusChange)
 
 // StatusChangeVariant specifies what type of change to server status occurs.
 type StatusChangeVariant string
-
-// SSEChannelVariant specifies type of observer (mediaFiles, playback, etc.)
-type SSEChannelVariant string
 
 const (
 	// ClientObserverAdded notifies about addition of new client observer.
@@ -26,7 +26,7 @@ const (
 
 // statusJSON is a status information in JSON form.
 type statusJSON struct {
-	ObservingAddresses map[string][]SSEChannelVariant `json:"ObservingAddresses"`
+	ObservingAddresses map[string][]sse.ChannelVariant `json:"ObservingAddresses"`
 }
 
 // StatusChange holds information about changes to the server misc status.
@@ -36,25 +36,25 @@ type StatusChange struct {
 
 // Status holds information about server misc status.
 type Status struct {
-	broadcaster        *ChangesBroadcaster
-	observingAddresses map[string][]SSEChannelVariant
+	broadcaster        *common.ChangesBroadcaster
+	observingAddresses map[string][]sse.ChannelVariant
 	lock               *sync.RWMutex
 }
 
 // NewStatus constructs Status state.
 func NewStatus() *Status {
-	broadcaster := NewChangesBroadcaster()
+	broadcaster := common.NewChangesBroadcaster()
 	broadcaster.Broadcast()
 
 	return &Status{
 		broadcaster:        broadcaster,
-		observingAddresses: map[string][]SSEChannelVariant{},
+		observingAddresses: map[string][]sse.ChannelVariant{},
 		lock:               &sync.RWMutex{},
 	}
 }
 
 // ObservingAddresses returns a mapping of a remote address to the channel variants.
-func (s *Status) ObservingAddresses() map[string][]SSEChannelVariant {
+func (s *Status) ObservingAddresses() map[string][]sse.ChannelVariant {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
@@ -62,22 +62,22 @@ func (s *Status) ObservingAddresses() map[string][]SSEChannelVariant {
 }
 
 // AddObservingAddress adds remote address listening on specific channel variant to the status state.
-func (s *Status) AddObservingAddress(remoteAddr string, observerVariant SSEChannelVariant) {
-	var observers []SSEChannelVariant
+func (s *Status) AddObservingAddress(remoteAddr string, observerVariant sse.ChannelVariant) {
+	var observers []sse.ChannelVariant
 	var ok bool
 
 	s.lock.Lock()
 	observers, ok = s.observingAddresses[remoteAddr]
 	if !ok {
-		observers = []SSEChannelVariant{}
+		observers = []sse.ChannelVariant{}
 	}
 
 	s.observingAddresses[remoteAddr] = append(observers, observerVariant)
 	s.lock.Unlock()
 
-	s.broadcaster.changes <- StatusChange{
+	s.broadcaster.Send(StatusChange{
 		Variant: ClientObserverAdded,
-	}
+	})
 }
 
 // MarshalJSON satisfies json.Marshaller.
@@ -92,8 +92,8 @@ func (s *Status) MarshalJSON() ([]byte, error) {
 }
 
 // RemoveObservingAddress removes remote address listening on specific channel variant from the state.
-func (s *Status) RemoveObservingAddress(remoteAddr string, observerVariant SSEChannelVariant) {
-	var observers []SSEChannelVariant
+func (s *Status) RemoveObservingAddress(remoteAddr string, observerVariant sse.ChannelVariant) {
+	var observers []sse.ChannelVariant
 	var ok bool
 
 	s.lock.Lock()
@@ -103,7 +103,7 @@ func (s *Status) RemoveObservingAddress(remoteAddr string, observerVariant SSECh
 		return
 	}
 
-	filteredObservers := []SSEChannelVariant{}
+	filteredObservers := []sse.ChannelVariant{}
 	for _, observer := range observers {
 		if observer != observerVariant {
 			filteredObservers = append(filteredObservers, observer)
@@ -118,16 +118,16 @@ func (s *Status) RemoveObservingAddress(remoteAddr string, observerVariant SSECh
 
 	s.lock.Unlock()
 
-	s.broadcaster.changes <- StatusChange{
+	s.broadcaster.Send(StatusChange{
 		Variant: ClientObserverRemoved,
-	}
+	})
 }
 
 func (p *Status) Subscribe(sub StatusSubscriber, onError func(err error)) {
 	p.broadcaster.Subscribe(func(change interface{}) {
 		statusChange, ok := change.(StatusChange)
 		if !ok {
-			onError(errIncorrectChangesType)
+			onError(common.ErrIncorrectChangesType)
 
 			return
 		}

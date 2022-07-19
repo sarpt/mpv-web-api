@@ -5,7 +5,11 @@ import (
 	"log"
 
 	"github.com/sarpt/mpv-web-api/pkg/api"
-	"github.com/sarpt/mpv-web-api/pkg/state"
+	"github.com/sarpt/mpv-web-api/pkg/state/pkg/directories"
+	"github.com/sarpt/mpv-web-api/pkg/state/pkg/media_files"
+	"github.com/sarpt/mpv-web-api/pkg/state/pkg/playback"
+	"github.com/sarpt/mpv-web-api/pkg/state/pkg/playlists"
+	"github.com/sarpt/mpv-web-api/pkg/state/pkg/status"
 )
 
 const (
@@ -45,13 +49,13 @@ type Callbacks struct {
 type Server struct {
 	Callbacks
 	allowCORS   bool
-	directories *state.Directories
+	directories *directories.Directories
 	errLog      *log.Logger
-	mediaFiles  *state.MediaFiles
-	playback    *state.Playback
-	playlists   *state.Playlists
+	mediaFiles  *media_files.MediaFiles
+	playback    *playback.Playback
+	playlists   *playlists.Playlists
 	outLog      *log.Logger
-	status      *state.Status
+	status      *status.Status
 }
 
 // NewServer returns rest.Server instance.

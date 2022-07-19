@@ -1,6 +1,13 @@
-package state
+package common
 
-import "sync"
+import (
+	"errors"
+	"sync"
+)
+
+var (
+	ErrIncorrectChangesType = errors.New("changes of incorrect type provided to the change handler")
+)
 
 type ChangesSubscriber = func(change interface{})
 
@@ -23,6 +30,10 @@ func (cb *ChangesBroadcaster) Subscribe(sub ChangesSubscriber) {
 	defer cb.lock.Unlock()
 
 	cb.subscribers = append(cb.subscribers, sub)
+}
+
+func (cb *ChangesBroadcaster) Send(payload any) {
+	cb.changes <- payload
 }
 
 func (cb *ChangesBroadcaster) Broadcast() {

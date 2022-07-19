@@ -5,15 +5,16 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/sarpt/mpv-web-api/pkg/state"
+	"github.com/sarpt/mpv-web-api/pkg/state/pkg/media_files"
+	state_sse "github.com/sarpt/mpv-web-api/pkg/state/pkg/sse"
 )
 
 const (
-	mediaFilesSSEChannelVariant state.SSEChannelVariant = "mediaFiles"
+	mediaFilesSSEChannelVariant state_sse.ChannelVariant = "mediaFiles"
 )
 
 type mediaFilesMapChange struct {
-	MediaFiles map[string]state.MediaFile
+	MediaFiles map[string]media_files.MediaFile
 }
 
 func (mmc mediaFilesMapChange) MarshalJSON() ([]byte, error) {
@@ -21,21 +22,21 @@ func (mmc mediaFilesMapChange) MarshalJSON() ([]byte, error) {
 }
 
 type mediaFilesChannel struct {
-	mediaFiles *state.MediaFiles
+	mediaFiles *media_files.MediaFiles
 	lock       *sync.RWMutex
-	observers  map[string]chan state.MediaFilesChange
+	observers  map[string]chan media_files.MediaFilesChange
 }
 
-func newMediaFilesChannel(mediaFiles *state.MediaFiles) *mediaFilesChannel {
+func newMediaFilesChannel(mediaFilesStorage *media_files.MediaFiles) *mediaFilesChannel {
 	return &mediaFilesChannel{
-		mediaFiles: mediaFiles,
-		observers:  map[string]chan state.MediaFilesChange{},
+		mediaFiles: mediaFilesStorage,
+		observers:  map[string]chan media_files.MediaFilesChange{},
 		lock:       &sync.RWMutex{},
 	}
 }
 
 func (mfc *mediaFilesChannel) AddObserver(address string) {
-	changes := make(chan state.MediaFilesChange)
+	changes := make(chan media_files.MediaFilesChange)
 
 	mfc.lock.Lock()
 	defer mfc.lock.Unlock()
@@ -57,7 +58,7 @@ func (mfc *mediaFilesChannel) RemoveObserver(address string) {
 }
 
 func (mfc *mediaFilesChannel) Replay(res ResponseWriter) error {
-	return res.SendChange(mediaFilesMapChange{MediaFiles: mfc.mediaFiles.All()}, mfc.Variant(), string(state.AddedMediaFilesChange))
+	return res.SendChange(mediaFilesMapChange{MediaFiles: mfc.mediaFiles.All()}, mfc.Variant(), string(media_files.AddedMediaFilesChange))
 }
 
 func (mfc *mediaFilesChannel) ServeObserver(address string, res ResponseWriter, done chan<- bool, errs chan<- error) {
@@ -87,11 +88,11 @@ func (mfc *mediaFilesChannel) ServeObserver(address string, res ResponseWriter, 
 	}
 }
 
-func (mfc *mediaFilesChannel) changeHandler(res ResponseWriter, change state.MediaFilesChange) error {
+func (mfc *mediaFilesChannel) changeHandler(res ResponseWriter, change media_files.MediaFilesChange) error {
 	return res.SendChange(change, mfc.Variant(), string(change.Variant))
 }
 
-func (mfc *mediaFilesChannel) BroadcastToChannelObservers(change state.MediaFilesChange) {
+func (mfc *mediaFilesChannel) BroadcastToChannelObservers(change media_files.MediaFilesChange) {
 	mfc.lock.RLock()
 	defer mfc.lock.RUnlock()
 
@@ -100,6 +101,6 @@ func (mfc *mediaFilesChannel) BroadcastToChannelObservers(change state.MediaFile
 	}
 }
 
-func (mfc mediaFilesChannel) Variant() state.SSEChannelVariant {
+func (mfc mediaFilesChannel) Variant() state_sse.ChannelVariant {
 	return mediaFilesSSEChannelVariant
 }
