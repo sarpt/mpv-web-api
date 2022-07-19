@@ -34,7 +34,7 @@ func (s *Server) addFsEventTarget(path string) error {
 		return nil
 	}
 
-	dir := directories.Directory{
+	dir := directories.Entry{
 		Path:      path,
 		Recursive: true,
 		Watched:   true,

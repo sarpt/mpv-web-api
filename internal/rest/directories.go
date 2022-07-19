@@ -16,13 +16,13 @@ const (
 )
 
 type (
-	addDirectoriesCb    = func([]directories.Directory)
+	addDirectoriesCb    = func([]directories.Entry)
 	loadPlaylistCb      = func(string, bool) error
-	removeDirectoriesCb = func(string) (directories.Directory, error)
+	removeDirectoriesCb = func(string) (directories.Entry, error)
 )
 
 type getDirectoriesRespone struct {
-	Directories map[string]directories.Directory `json:"directories"`
+	Directories map[string]directories.Entry `json:"directories"`
 }
 
 func (s *Server) getDirectoriesHandler(res http.ResponseWriter, req *http.Request) {
@@ -95,7 +95,7 @@ func (s *Server) directoriesPathHandler(res http.ResponseWriter, req *http.Reque
 		s.outLog.Printf("reading directory '%s' due to request from %s\n", path, req.RemoteAddr)
 	}
 
-	s.addDirectoriesCb([]directories.Directory{
+	s.addDirectoriesCb([]directories.Entry{
 		{
 			Path:    path,
 			Watched: watchedDir,

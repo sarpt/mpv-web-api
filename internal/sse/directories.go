@@ -14,7 +14,7 @@ const (
 )
 
 type directoriesMapChange struct {
-	Directories map[string]directories.Directory
+	Directories map[string]directories.Entry
 }
 
 func (dmc directoriesMapChange) MarshalJSON() ([]byte, error) {
@@ -22,21 +22,21 @@ func (dmc directoriesMapChange) MarshalJSON() ([]byte, error) {
 }
 
 type directoriesChannel struct {
-	directories *directories.Directories
+	directories *directories.Storage
 	lock        *sync.RWMutex
-	observers   map[string]chan directories.DirectoriesChange
+	observers   map[string]chan directories.Change
 }
 
-func newDirectoriesChannel(directoriesStorage *directories.Directories) *directoriesChannel {
+func newDirectoriesChannel(directoriesStorage *directories.Storage) *directoriesChannel {
 	return &directoriesChannel{
 		directories: directoriesStorage,
-		observers:   map[string]chan directories.DirectoriesChange{},
+		observers:   map[string]chan directories.Change{},
 		lock:        &sync.RWMutex{},
 	}
 }
 
 func (dc *directoriesChannel) AddObserver(address string) {
-	changes := make(chan directories.DirectoriesChange)
+	changes := make(chan directories.Change)
 
 	dc.lock.Lock()
 	defer dc.lock.Unlock()
@@ -88,11 +88,11 @@ func (dc *directoriesChannel) ServeObserver(address string, res ResponseWriter, 
 	}
 }
 
-func (dc *directoriesChannel) changeHandler(res ResponseWriter, change directories.DirectoriesChange) error {
+func (dc *directoriesChannel) changeHandler(res ResponseWriter, change directories.Change) error {
 	return res.SendChange(change, dc.Variant(), string(directories.AddedDirectoriesChange))
 }
 
-func (dc *directoriesChannel) BroadcastToChannelObservers(change directories.DirectoriesChange) {
+func (dc *directoriesChannel) BroadcastToChannelObservers(change directories.Change) {
 	dc.lock.RLock()
 	defer dc.lock.RUnlock()
 

@@ -31,7 +31,7 @@ type Server struct {
 	address               string
 	stopServing           chan string
 	defaultPlaylistUUID   string
-	directories           *directories.Directories
+	directories           *directories.Storage
 	errLog                *log.Logger
 	fsWatcher             *fsnotify.Watcher
 	mediaFiles            *media_files.MediaFiles
@@ -91,7 +91,7 @@ func NewServer(cfg Config) (*Server, error) {
 	server := &Server{
 		address:               cfg.Address,
 		defaultPlaylistUUID:   defaultPlaylistUUID,
-		directories:           directories.NewDirectories(),
+		directories:           directories.NewStorage(),
 		errLog:                log.New(cfg.ErrWriter, logPrefix, log.LstdFlags),
 		fsWatcher:             watcher,
 		mediaFiles:            media_files.NewMediaFiles(),
@@ -268,7 +268,7 @@ func (s Server) subscribeToMpvProperties(observeResponses chan mpv.ObserveProper
 	return nil
 }
 
-func (s Server) Directories() *directories.Directories {
+func (s Server) Directories() *directories.Storage {
 	return s.directories
 }
 

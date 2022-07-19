@@ -16,51 +16,51 @@ var (
 
 const (
 	// AddedDirectoriesChange notifies about addition of mediaFiles to the list of mediaFiles handled by the application.
-	AddedDirectoriesChange DirectoriesChangeVariant = "added"
+	AddedDirectoriesChange ChangeVariant = "added"
 
 	// UpdatedDirectoriesChange notifies about updates to the list of mediaFiles.
-	UpdatedDirectoriesChange DirectoriesChangeVariant = "updated"
+	UpdatedDirectoriesChange ChangeVariant = "updated"
 
 	// RemovedDirectoriesChange notifies about removal of mediaFiles from the list.
-	RemovedDirectoriesChange DirectoriesChangeVariant = "removed"
+	RemovedDirectoriesChange ChangeVariant = "removed"
 )
 
-type DirectoriesSubscriber = func(change DirectoriesChange)
+type Subscriber = func(change Change)
 
-// DirectoriesChange holds information about changes to the collection of directories being handled.
-type DirectoriesChange struct {
-	variant DirectoriesChangeVariant
-	items   map[string]Directory
+// Change holds information about changes to the collection of directories being handled.
+type Change struct {
+	variant ChangeVariant
+	items   map[string]Entry
 }
 
 // MarshalJSON returns change items in JSON format. Satisfies json.Marshaller.
-func (d DirectoriesChange) MarshalJSON() ([]byte, error) {
+func (d Change) MarshalJSON() ([]byte, error) {
 	return json.Marshal(d.items)
 }
 
-// DirectoriesChangeVariant specifies what type of change to directories collection belong to in a DirectoriesChange type.
-type DirectoriesChangeVariant string
+// ChangeVariant specifies what type of change to directories collection belong to in a DirectoriesChange type.
+type ChangeVariant string
 
-type Directories struct {
+type Storage struct {
 	broadcaster *common.ChangesBroadcaster
-	items       map[string]Directory
+	items       map[string]Entry
 	lock        *sync.RWMutex
 }
 
-// NewDirectories counstructs Directories state.
-func NewDirectories() *Directories {
+// NewStorage counstructs Directories state.
+func NewStorage() *Storage {
 	broadcaster := common.NewChangesBroadcaster()
 	broadcaster.Broadcast()
 
-	return &Directories{
+	return &Storage{
 		broadcaster: broadcaster,
-		items:       map[string]Directory{},
+		items:       map[string]Entry{},
 		lock:        &sync.RWMutex{},
 	}
 }
 
 // Add appends a directory to the collection of directories handled by current server instance.
-func (d *Directories) Add(dir Directory) {
+func (d *Storage) Add(dir Entry) {
 	path := EnsureDirectoryPath(dir.Path)
 
 	func() {
@@ -74,17 +74,17 @@ func (d *Directories) Add(dir Directory) {
 		d.items[path] = dir
 	}()
 
-	d.broadcaster.Send(DirectoriesChange{
+	d.broadcaster.Send(Change{
 		variant: AddedDirectoriesChange,
-		items: map[string]Directory{
+		items: map[string]Entry{
 			path: dir,
 		},
 	})
 }
 
 // All returns a copy of all Directories being handled by the instance of the server.
-func (d *Directories) All() map[string]Directory {
-	allDirectories := map[string]Directory{}
+func (d *Storage) All() map[string]Entry {
+	allDirectories := map[string]Entry{}
 
 	d.lock.RLock()
 	defer d.lock.RUnlock()
@@ -98,7 +98,7 @@ func (d *Directories) All() map[string]Directory {
 
 // ByPath returns a directory by a provided path.
 // When directory cannot be found, the error is being reported.
-func (d *Directories) ByPath(path string) (Directory, error) {
+func (d *Storage) ByPath(path string) (Entry, error) {
 	keyPath := EnsureDirectoryPath(path)
 
 	d.lock.RLock()
@@ -106,14 +106,14 @@ func (d *Directories) ByPath(path string) (Directory, error) {
 
 	dir, ok := d.items[keyPath]
 	if !ok {
-		return Directory{}, errNoDirectoryAvailable
+		return Entry{}, errNoDirectoryAvailable
 	}
 
 	return dir, nil
 }
 
 // Exists checks wheter directory under path is handled.
-func (d *Directories) Exists(path string) bool {
+func (d *Storage) Exists(path string) bool {
 	_, err := d.ByPath(path)
 
 	return err == nil
@@ -121,18 +121,18 @@ func (d *Directories) Exists(path string) bool {
 
 // ParentByPath returns direct parent of the path.
 // If not found, returns error errNoDirectoryAvailable.
-func (d *Directories) ParentByPath(path string) (Directory, error) {
+func (d *Storage) ParentByPath(path string) (Entry, error) {
 	dir, err := d.ByPath(filepath.Dir(path))
 	if err != nil {
-		return Directory{}, err
+		return Entry{}, err
 	}
 
 	return dir, nil
 }
 
-func (p *Directories) Subscribe(sub DirectoriesSubscriber, onError func(err error)) {
+func (p *Storage) Subscribe(sub Subscriber, onError func(err error)) {
 	p.broadcaster.Subscribe(func(change interface{}) {
-		directoriesChange, ok := change.(DirectoriesChange)
+		directoriesChange, ok := change.(Change)
 		if !ok {
 			onError(common.ErrIncorrectChangesType)
 
@@ -146,21 +146,21 @@ func (p *Directories) Subscribe(sub DirectoriesSubscriber, onError func(err erro
 // Take removes directory by a provided path from the state,
 // returning the object for use after removal.
 // When directory cannot be found, the error is being reported.
-func (d *Directories) Take(path string) (Directory, error) {
+func (d *Storage) Take(path string) (Entry, error) {
 	keyPath := EnsureDirectoryPath(path)
 
 	dir, err := d.ByPath(keyPath)
 	if err != nil {
-		return Directory{}, err
+		return Entry{}, err
 	}
 
 	d.lock.Lock()
 	delete(d.items, keyPath)
 	d.lock.Unlock()
 
-	d.broadcaster.Send(DirectoriesChange{
+	d.broadcaster.Send(Change{
 		variant: RemovedDirectoriesChange,
-		items: map[string]Directory{
+		items: map[string]Entry{
 			keyPath: dir,
 		},
 	})
