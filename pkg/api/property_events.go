@@ -77,9 +77,9 @@ func (s *Server) handlePlaylistProperty(res mpv.ObservePropertyResponse) error {
 		return ErrResponseDataNotExpectedFormatNode
 	}
 
-	entries := []playlists.PlaylistEntry{}
+	entries := []playlists.Entry{}
 	for _, playlistItem := range playlistItems {
-		entries = append(entries, playlists.PlaylistEntry{
+		entries = append(entries, playlists.Entry{
 			Path: playlistItem.Filename,
 		})
 	}

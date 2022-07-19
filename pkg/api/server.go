@@ -39,7 +39,7 @@ type Server struct {
 	mpvSocketPath         string
 	outLog                *log.Logger
 	playback              *playback.Storage
-	playlists             *playlists.Playlists
+	playlists             *playlists.Storage
 	playlistFilesPrefixes []string
 	pluginServers         map[string]PluginServer
 	status                *status.Status
@@ -280,7 +280,7 @@ func (s Server) Playback() *playback.Storage {
 	return s.playback
 }
 
-func (s Server) Playlists() *playlists.Playlists {
+func (s Server) Playlists() *playlists.Storage {
 	return s.playlists
 }
 

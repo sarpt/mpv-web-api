@@ -12,27 +12,27 @@ import (
 const (
 	playlistsSSEChannelVariant state_sse.ChannelVariant = "playlists"
 
-	playlistsReplay playlists.PlaylistsChangeVariant = "replay"
+	playlistsReplay playlists.ChangeVariant = "replay"
 )
 
 type playlistsChannel struct {
 	playback  *playback.Storage
-	playlists *playlists.Playlists
+	playlists *playlists.Storage
 	lock      *sync.RWMutex
-	observers map[string]chan playlists.PlaylistsChange
+	observers map[string]chan playlists.Change
 }
 
-func newPlaylistsChannel(playbackStorage *playback.Storage, playlistsStorage *playlists.Playlists) *playlistsChannel {
+func newPlaylistsChannel(playbackStorage *playback.Storage, playlistsStorage *playlists.Storage) *playlistsChannel {
 	return &playlistsChannel{
 		playback:  playbackStorage,
 		playlists: playlistsStorage,
-		observers: map[string]chan playlists.PlaylistsChange{},
+		observers: map[string]chan playlists.Change{},
 		lock:      &sync.RWMutex{},
 	}
 }
 
 func (pc *playlistsChannel) AddObserver(address string) {
-	changes := make(chan playlists.PlaylistsChange)
+	changes := make(chan playlists.Change)
 
 	pc.lock.Lock()
 	defer pc.lock.Unlock()
@@ -84,7 +84,7 @@ func (pc *playlistsChannel) ServeObserver(address string, res ResponseWriter, do
 	}
 }
 
-func (pc *playlistsChannel) changeHandler(res ResponseWriter, change playlists.PlaylistsChange) error {
+func (pc *playlistsChannel) changeHandler(res ResponseWriter, change playlists.Change) error {
 	if pc.playback.Stopped { // TODO: the changes are shot by state.Playback even after the mediaFilePath is cleared, as such it may be wasteful to push further changes through SSE. to think of a way to reduce number of those blank data calls after closing stopping playback
 		return res.SendEmptyChange(pc.Variant(), string(change.Variant))
 	}
@@ -92,7 +92,7 @@ func (pc *playlistsChannel) changeHandler(res ResponseWriter, change playlists.P
 	return res.SendChange(change.Playlist, pc.Variant(), string(change.Variant))
 }
 
-func (pc *playlistsChannel) BroadcastToChannelObservers(change playlists.PlaylistsChange) {
+func (pc *playlistsChannel) BroadcastToChannelObservers(change playlists.Change) {
 	pc.lock.RLock()
 	defer pc.lock.RUnlock()
 

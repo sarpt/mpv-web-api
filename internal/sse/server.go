@@ -36,7 +36,7 @@ type Server struct {
 	observersChanges chan ObserversChange
 	outLog           *log.Logger
 	playback         *playback.Storage
-	playlists        *playlists.Playlists
+	playlists        *playlists.Storage
 	status           *status.Status
 	ctx              context.Context
 	cancel           context.CancelFunc

@@ -24,7 +24,7 @@ func (s *Server) readDirectory(path string) error {
 
 	s.outLog.Printf("reading directory %s\n", path)
 	var playlistUUIDs []string
-	var playlistEntries []playlists.PlaylistEntry
+	var playlistEntries []playlists.Entry
 	for _, entry := range dirEntries {
 		if entry.IsDir() {
 			continue
@@ -51,7 +51,7 @@ func (s *Server) readDirectory(path string) error {
 		mediaFile := media_files.MapProbeResultToMediaFile(result)
 		s.mediaFiles.Add(mediaFile)
 
-		entry := playlists.PlaylistEntry{
+		entry := playlists.Entry{
 			Path: mediaFile.Path(),
 		}
 		playlistEntries = append(playlistEntries, entry)

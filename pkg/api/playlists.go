@@ -22,12 +22,12 @@ const (
 )
 
 type PlaylistFile struct {
-	CurrentEntryIdx            int                       `json:"CurrentEntryIdx"`
-	DirectoryContentsAsEntries bool                      `json:"DirectoryContentsAsEntries"`
-	Entries                    []playlists.PlaylistEntry `json:"Entries"`
-	MpvWebApiPlaylist          bool                      `json:"MpvWebApiPlaylist"`
-	Name                       string                    `json:"Name"`
-	Description                string                    `json:"Description"`
+	CurrentEntryIdx            int               `json:"CurrentEntryIdx"`
+	DirectoryContentsAsEntries bool              `json:"DirectoryContentsAsEntries"`
+	Entries                    []playlists.Entry `json:"Entries"`
+	MpvWebApiPlaylist          bool              `json:"MpvWebApiPlaylist"`
+	Name                       string            `json:"Name"`
+	Description                string            `json:"Description"`
 }
 
 func (s *Server) DefaultPlaylistSelected() bool {
@@ -71,7 +71,7 @@ func (s *Server) LoadPlaylist(uuid string, append bool) error {
 	return nil
 }
 
-func (s *Server) createTempPlaylistFile(filename string, entries []playlists.PlaylistEntry) error {
+func (s *Server) createTempPlaylistFile(filename string, entries []playlists.Entry) error {
 	fileData := []byte{}
 	for _, entry := range entries {
 		fileData = append(fileData, []byte(fmt.Sprintln(entry.Path))...)
@@ -81,7 +81,7 @@ func (s *Server) createTempPlaylistFile(filename string, entries []playlists.Pla
 }
 
 func (s *Server) createDefaultPlaylist() (string, error) {
-	defaultPlaylistCfg := playlists.PlaylistConfig{
+	defaultPlaylistCfg := playlists.Config{
 		Name: defaultPlaylistName,
 	}
 
@@ -106,7 +106,7 @@ func (s *Server) handlePlaylistFile(path string) (string, error) {
 		return "", err
 	}
 
-	playlistCfg := playlists.PlaylistConfig{
+	playlistCfg := playlists.Config{
 		CurrentEntryIdx:            playlistFile.CurrentEntryIdx,
 		Description:                playlistFile.Description,
 		DirectoryContentsAsEntries: playlistFile.DirectoryContentsAsEntries,
