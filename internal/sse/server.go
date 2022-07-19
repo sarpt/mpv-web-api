@@ -8,12 +8,8 @@ import (
 	"net/http"
 
 	"github.com/sarpt/mpv-web-api/pkg/api"
-	"github.com/sarpt/mpv-web-api/pkg/state/pkg/directories"
-	"github.com/sarpt/mpv-web-api/pkg/state/pkg/media_files"
-	"github.com/sarpt/mpv-web-api/pkg/state/pkg/playback"
-	"github.com/sarpt/mpv-web-api/pkg/state/pkg/playlists"
+	"github.com/sarpt/mpv-web-api/pkg/state"
 	state_sse "github.com/sarpt/mpv-web-api/pkg/state/pkg/sse"
-	"github.com/sarpt/mpv-web-api/pkg/state/pkg/status"
 )
 
 const (
@@ -35,22 +31,14 @@ type Server struct {
 	errLog           *log.Logger
 	observersChanges chan ObserversChange
 	outLog           *log.Logger
-	statesRepository StatesRepository
-}
-
-type StatesRepository interface {
-	Directories() *directories.Storage
-	MediaFiles() *media_files.Storage
-	Playback() *playback.Storage
-	Playlists() *playlists.Storage
-	Status() *status.Storage
+	statesRepository state.Repository
 }
 
 // Config controls behaviour of the SSE server.
 type Config struct {
 	ErrWriter        io.Writer
 	OutWriter        io.Writer
-	StatesRepository StatesRepository
+	StatesRepository state.Repository
 }
 
 // NewServer prepares and returns SSE server to handle SSE connections and observers.

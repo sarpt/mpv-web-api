@@ -5,11 +5,7 @@ import (
 	"log"
 
 	"github.com/sarpt/mpv-web-api/pkg/api"
-	"github.com/sarpt/mpv-web-api/pkg/state/pkg/directories"
-	"github.com/sarpt/mpv-web-api/pkg/state/pkg/media_files"
-	"github.com/sarpt/mpv-web-api/pkg/state/pkg/playback"
-	"github.com/sarpt/mpv-web-api/pkg/state/pkg/playlists"
-	"github.com/sarpt/mpv-web-api/pkg/state/pkg/status"
+	"github.com/sarpt/mpv-web-api/pkg/state"
 )
 
 const (
@@ -21,9 +17,10 @@ const (
 
 // Config controls behaviour of the REST server.
 type Config struct {
-	AllowCORS bool
-	ErrWriter io.Writer
-	OutWriter io.Writer
+	AllowCORS        bool
+	ErrWriter        io.Writer
+	OutWriter        io.Writer
+	StatesRepository state.Repository
 }
 
 type Callbacks struct {
@@ -48,32 +45,23 @@ type Callbacks struct {
 // - rest package should not have unlimited access to the whole state.
 type Server struct {
 	Callbacks
-	allowCORS   bool
-	directories *directories.Storage
-	errLog      *log.Logger
-	mediaFiles  *media_files.Storage
-	playback    *playback.Storage
-	playlists   *playlists.Storage
-	outLog      *log.Logger
-	status      *status.Storage
+	allowCORS        bool
+	errLog           *log.Logger
+	outLog           *log.Logger
+	statesRepository state.Repository
 }
 
 // NewServer returns rest.Server instance.
 func NewServer(cfg Config) *Server {
 	return &Server{
-		allowCORS: cfg.AllowCORS,
-		errLog:    log.New(cfg.ErrWriter, logPrefix, log.LstdFlags),
-		outLog:    log.New(cfg.OutWriter, logPrefix, log.LstdFlags),
+		allowCORS:        cfg.AllowCORS,
+		errLog:           log.New(cfg.ErrWriter, logPrefix, log.LstdFlags),
+		outLog:           log.New(cfg.OutWriter, logPrefix, log.LstdFlags),
+		statesRepository: cfg.StatesRepository,
 	}
 }
 
 func (s *Server) Init(apiServer *api.Server) error {
-	s.directories = apiServer.Directories()
-	s.mediaFiles = apiServer.MediaFiles()
-	s.playback = apiServer.Playback()
-	s.playlists = apiServer.Playlists()
-	s.status = apiServer.Status()
-
 	s.addDirectoriesCb = apiServer.AddRootDirectories
 	s.removeDirectoriesCb = apiServer.TakeDirectory
 	s.loadPlaylistCb = apiServer.LoadPlaylist

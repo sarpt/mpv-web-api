@@ -20,12 +20,12 @@ func (s *Server) addFsEventTarget(path string) error {
 			return err
 		}
 
-		s.mediaFiles.Add(mediaFile)
+		s.statesRepository.MediaFiles().Add(mediaFile)
 
 		return nil
 	}
 
-	parentDir, err := s.directories.ParentByPath(path)
+	parentDir, err := s.statesRepository.Directories().ParentByPath(path)
 	if err != nil {
 		return fmt.Errorf("could not handle directory fs event for '%s' due to missing parent: %w", path, err)
 	}
@@ -44,14 +44,14 @@ func (s *Server) addFsEventTarget(path string) error {
 }
 
 func (s *Server) removeFsEventTarget(path string) error {
-	if s.mediaFiles.Exists(path) {
+	if s.statesRepository.MediaFiles().Exists(path) {
 		s.outLog.Printf("removing media file '%s'\n", path)
-		_, err := s.mediaFiles.Take(path)
+		_, err := s.statesRepository.MediaFiles().Take(path)
 
 		return err
 	}
 
-	if s.directories.Exists(path) {
+	if s.statesRepository.Directories().Exists(path) {
 		_, err := s.TakeDirectory(path)
 
 		return err

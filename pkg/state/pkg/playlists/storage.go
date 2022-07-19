@@ -47,7 +47,7 @@ type Change struct {
 	Playlist *Playlist
 }
 
-func NewPlaylists() *Storage {
+func NewStorage() *Storage {
 	broadcaster := common.NewChangesBroadcaster()
 	broadcaster.Broadcast()
 

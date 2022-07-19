@@ -35,7 +35,7 @@ type (
 )
 
 func (s *Server) getPlaybackHandler(res http.ResponseWriter, req *http.Request) {
-	json, err := json.Marshal(s.playback)
+	json, err := json.Marshal(s.statesRepository.Playback())
 	if err != nil {
 		res.WriteHeader(500)
 		res.Write([]byte(fmt.Sprintf("could not marshall to JSON: %s\n", err))) // good enough for poc
