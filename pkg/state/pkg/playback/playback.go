@@ -171,7 +171,7 @@ func (p *Playback) SetLoopFile(enabled bool) {
 }
 
 // SetMediaFile changes currently played mediaFile, changing playback to not stopped.
-func (p *Playback) SetMediaFile(mediaFile media_files.MediaFile) {
+func (p *Playback) SetMediaFile(mediaFile media_files.Entry) {
 	p.mediaFilePath = mediaFile.Path()
 	p.Stopped = false
 	p.broadcaster.Send(PlaybackChange{

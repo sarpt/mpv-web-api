@@ -32,7 +32,7 @@ type Server struct {
 	channels         map[state_sse.ChannelVariant]channel
 	directories      *directories.Storage
 	errLog           *log.Logger
-	mediaFiles       *media_files.MediaFiles // TODO: this state passing from the user is very iffy - consider using either callbacks or builder pattern.
+	mediaFiles       *media_files.Storage // TODO: this state passing from the user is very iffy - consider using either callbacks or builder pattern.
 	observersChanges chan ObserversChange
 	outLog           *log.Logger
 	playback         *playback.Playback

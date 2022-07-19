@@ -9,7 +9,7 @@ import (
 )
 
 type getMediaFilesRespone struct {
-	MediaFiles map[string]media_files.MediaFile `json:"mediaFiles"`
+	MediaFiles map[string]media_files.Entry `json:"mediaFiles"`
 }
 
 func (s *Server) getMediaFilesHandler(res http.ResponseWriter, req *http.Request) {

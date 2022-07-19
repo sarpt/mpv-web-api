@@ -15,53 +15,53 @@ var (
 
 const (
 	// AddedMediaFilesChange notifies about addition of mediaFiles to the list of mediaFiles handled by the application.
-	AddedMediaFilesChange MediaFilesChangeVariant = "added"
+	AddedMediaFilesChange ChangeVariant = "added"
 
 	// UpdatedMediaFilesChange notifies about updates to the list of mediaFiles.
-	UpdatedMediaFilesChange MediaFilesChangeVariant = "updated"
+	UpdatedMediaFilesChange ChangeVariant = "updated"
 
 	// RemovedMediaFilesChange notifies about removal of mediaFiles from the list.
-	RemovedMediaFilesChange MediaFilesChangeVariant = "removed"
+	RemovedMediaFilesChange ChangeVariant = "removed"
 )
 
-type MediaFilesSubscriber = func(change MediaFilesChange)
+type Subscriber = func(change Change)
 
-// MediaFilesChange holds information about changes to the list of mediaFiles being served.
-type MediaFilesChange struct {
-	Variant MediaFilesChangeVariant
-	Items   map[string]MediaFile
+// Change holds information about changes to the list of mediaFiles being served.
+type Change struct {
+	Variant ChangeVariant
+	Items   map[string]Entry
 }
 
 // MarshalJSON returns change items in JSON format. Satisfies json.Marshaller.
-func (mc MediaFilesChange) MarshalJSON() ([]byte, error) {
+func (mc Change) MarshalJSON() ([]byte, error) {
 	return json.Marshal(mc.Items)
 }
 
-// MediaFilesChangeVariant specifies what type of change to mediaFiles list items belong to in a MediaFilesChange type.
-type MediaFilesChangeVariant string
+// ChangeVariant specifies what type of change to mediaFiles list items belong to in a MediaFilesChange type.
+type ChangeVariant string
 
-// MediaFiles is an aggregate state of the media files being served by the server instance.
+// Storage is an aggregate state of the media files being served by the server instance.
 // Any modification done on the state should be done by exposed methods which should guarantee goroutine access safety.
-type MediaFiles struct {
+type Storage struct {
 	broadcaster *common.ChangesBroadcaster
-	items       map[string]MediaFile
+	items       map[string]Entry
 	lock        *sync.RWMutex
 }
 
-// NewMediaFiles counstructs MediaFiles state.
-func NewMediaFiles() *MediaFiles {
+// NewStorage counstructs MediaFiles state.
+func NewStorage() *Storage {
 	broadcaster := common.NewChangesBroadcaster()
 	broadcaster.Broadcast()
 
-	return &MediaFiles{
+	return &Storage{
 		broadcaster: broadcaster,
-		items:       map[string]MediaFile{},
+		items:       map[string]Entry{},
 		lock:        &sync.RWMutex{},
 	}
 }
 
 // Add appends a mediaFile to the list of mediaFiles served on current server instance.
-func (m *MediaFiles) Add(mediaFile MediaFile) {
+func (m *Storage) Add(mediaFile Entry) {
 	path := mediaFile.path
 
 	go func() {
@@ -74,18 +74,18 @@ func (m *MediaFiles) Add(mediaFile MediaFile) {
 		m.items[path] = mediaFile
 	}()
 
-	addedMediaFiles := map[string]MediaFile{
+	addedMediaFiles := map[string]Entry{
 		path: mediaFile,
 	}
-	m.broadcaster.Send(MediaFilesChange{
+	m.broadcaster.Send(Change{
 		Variant: AddedMediaFilesChange,
 		Items:   addedMediaFiles,
 	})
 }
 
 // All returns a copy of all MediaFiles being served by the instance of the server.
-func (m *MediaFiles) All() map[string]MediaFile {
-	allMediaFiles := map[string]MediaFile{}
+func (m *Storage) All() map[string]Entry {
+	allMediaFiles := map[string]Entry{}
 
 	m.lock.RLock()
 	defer m.lock.RUnlock()
@@ -99,13 +99,13 @@ func (m *MediaFiles) All() map[string]MediaFile {
 
 // ByPath returns a MediaFile by a provided path.
 // When media file cannot be found, the error is being reported.
-func (m *MediaFiles) ByPath(path string) (MediaFile, error) {
+func (m *Storage) ByPath(path string) (Entry, error) {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 
 	mediaFile, ok := m.items[path]
 	if !ok {
-		return MediaFile{}, errNoMediaFileAvailable
+		return Entry{}, errNoMediaFileAvailable
 	}
 
 	return mediaFile, nil
@@ -113,11 +113,11 @@ func (m *MediaFiles) ByPath(path string) (MediaFile, error) {
 
 // ByParent returns media files with path under provided parent
 // (path to directory).
-func (m *MediaFiles) ByParent(parentPath string) []MediaFile {
+func (m *Storage) ByParent(parentPath string) []Entry {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 
-	var mediaFiles []MediaFile
+	var mediaFiles []Entry
 	for _, mediaFile := range m.items {
 		if strings.HasPrefix(mediaFile.path, parentPath) {
 			mediaFiles = append(mediaFiles, mediaFile)
@@ -128,7 +128,7 @@ func (m *MediaFiles) ByParent(parentPath string) []MediaFile {
 }
 
 // Exists checks whether media file with provided path exists.
-func (m *MediaFiles) Exists(path string) bool {
+func (m *Storage) Exists(path string) bool {
 	_, err := m.ByPath(path)
 
 	return err == nil
@@ -136,7 +136,7 @@ func (m *MediaFiles) Exists(path string) bool {
 
 // PathsUnderParent returns paths of media files under provided parent
 // (path to directory).
-func (m *MediaFiles) PathsUnderParent(parentPath string) []string {
+func (m *Storage) PathsUnderParent(parentPath string) []string {
 	m.lock.RLock()
 	defer m.lock.RUnlock()
 
@@ -150,9 +150,9 @@ func (m *MediaFiles) PathsUnderParent(parentPath string) []string {
 	return paths
 }
 
-func (p *MediaFiles) Subscribe(sub MediaFilesSubscriber, onError func(err error)) {
+func (p *Storage) Subscribe(sub Subscriber, onError func(err error)) {
 	p.broadcaster.Subscribe(func(change interface{}) {
-		mediaFilesChange, ok := change.(MediaFilesChange)
+		mediaFilesChange, ok := change.(Change)
 		if !ok {
 			onError(common.ErrIncorrectChangesType)
 
@@ -166,19 +166,19 @@ func (p *MediaFiles) Subscribe(sub MediaFilesSubscriber, onError func(err error)
 // Take removes MediaFile by a provided path from the state,
 // returning the object for use after removal.
 // When media file cannot be found, the error is being reported.
-func (m *MediaFiles) Take(path string) (MediaFile, error) {
+func (m *Storage) Take(path string) (Entry, error) {
 	mediaFile, err := m.ByPath(path)
 	if err != nil {
-		return MediaFile{}, err
+		return Entry{}, err
 	}
 
 	m.lock.Lock()
 	delete(m.items, path)
 	m.lock.Unlock()
 
-	m.broadcaster.Send(MediaFilesChange{
+	m.broadcaster.Send(Change{
 		Variant: RemovedMediaFilesChange,
-		Items: map[string]MediaFile{
+		Items: map[string]Entry{
 			mediaFile.path: mediaFile,
 		},
 	})
@@ -189,13 +189,13 @@ func (m *MediaFiles) Take(path string) (MediaFile, error) {
 // TakeMultiple removed MediaFiles with provided paths from the state,
 // returning objects for use after removal as first return value,
 // and skipped paths (not found ones) as a second return value.
-func (m *MediaFiles) TakeMultiple(paths []string) ([]MediaFile, []string) {
+func (m *Storage) TakeMultiple(paths []string) ([]Entry, []string) {
 	var skipped []string
-	var taken []MediaFile
+	var taken []Entry
 
-	change := MediaFilesChange{
+	change := Change{
 		Variant: RemovedMediaFilesChange,
-		Items:   map[string]MediaFile{},
+		Items:   map[string]Entry{},
 	}
 
 	for _, path := range paths {
