@@ -16,13 +16,13 @@ const (
 )
 
 type playlistsChannel struct {
-	playback  *playback.Playback
+	playback  *playback.Storage
 	playlists *playlists.Playlists
 	lock      *sync.RWMutex
 	observers map[string]chan playlists.PlaylistsChange
 }
 
-func newPlaylistsChannel(playbackStorage *playback.Playback, playlistsStorage *playlists.Playlists) *playlistsChannel {
+func newPlaylistsChannel(playbackStorage *playback.Storage, playlistsStorage *playlists.Playlists) *playlistsChannel {
 	return &playlistsChannel{
 		playback:  playbackStorage,
 		playlists: playlistsStorage,

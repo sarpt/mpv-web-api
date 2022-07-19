@@ -38,7 +38,7 @@ type Server struct {
 	mpvManager            *mpv.Manager
 	mpvSocketPath         string
 	outLog                *log.Logger
-	playback              *playback.Playback
+	playback              *playback.Storage
 	playlists             *playlists.Playlists
 	playlistFilesPrefixes []string
 	pluginServers         map[string]PluginServer
@@ -98,7 +98,7 @@ func NewServer(cfg Config) (*Server, error) {
 		mpvManager:            mpv.NewManager(mpvManagerCfg),
 		mpvSocketPath:         cfg.MpvSocketPath,
 		outLog:                log.New(cfg.OutWriter, logPrefix, log.LstdFlags),
-		playback:              playback.NewPlayback(),
+		playback:              playback.NewStorage(),
 		playlists:             playlists.NewPlaylists(),
 		playlistFilesPrefixes: cfg.PlaylistFilesPrefixes,
 		pluginServers:         cfg.PluginServers,
@@ -276,7 +276,7 @@ func (s Server) MediaFiles() *media_files.Storage {
 	return s.mediaFiles
 }
 
-func (s Server) Playback() *playback.Playback {
+func (s Server) Playback() *playback.Storage {
 	return s.playback
 }
 
