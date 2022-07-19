@@ -42,7 +42,7 @@ type Server struct {
 	playlists             *playlists.Storage
 	playlistFilesPrefixes []string
 	pluginServers         map[string]PluginServer
-	status                *status.Status
+	status                *status.Storage
 }
 
 type PluginServer interface {
@@ -102,7 +102,7 @@ func NewServer(cfg Config) (*Server, error) {
 		playlists:             playlists.NewPlaylists(),
 		playlistFilesPrefixes: cfg.PlaylistFilesPrefixes,
 		pluginServers:         cfg.PluginServers,
-		status:                status.NewStatus(),
+		status:                status.NewStorage(),
 	}
 
 	defaultPlaylistUUID, err := server.createDefaultPlaylist()
@@ -284,6 +284,6 @@ func (s Server) Playlists() *playlists.Storage {
 	return s.playlists
 }
 
-func (s Server) Status() *status.Status {
+func (s Server) Status() *status.Storage {
 	return s.status
 }

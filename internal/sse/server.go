@@ -37,7 +37,7 @@ type Server struct {
 	outLog           *log.Logger
 	playback         *playback.Storage
 	playlists        *playlists.Storage
-	status           *status.Status
+	status           *status.Storage
 	ctx              context.Context
 	cancel           context.CancelFunc
 }

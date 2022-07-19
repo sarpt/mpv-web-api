@@ -8,45 +8,45 @@ import (
 	"github.com/sarpt/mpv-web-api/pkg/state/pkg/sse"
 )
 
-type StatusSubscriber = func(change StatusChange)
+type Subscriber = func(change Change)
 
-// StatusChangeVariant specifies what type of change to server status occurs.
-type StatusChangeVariant string
+// ChangeVariant specifies what type of change to server status occurs.
+type ChangeVariant string
 
 const (
 	// ClientObserverAdded notifies about addition of new client observer.
-	ClientObserverAdded StatusChangeVariant = "client-observer-added"
+	ClientObserverAdded ChangeVariant = "client-observer-added"
 
 	// ClientObserverRemoved notifies about removal of connected client observer.
-	ClientObserverRemoved StatusChangeVariant = "client-observer-removed"
+	ClientObserverRemoved ChangeVariant = "client-observer-removed"
 
 	// MPVProcessChanged notifies about change of mpv process (due to restart, forced close, etc.).
-	MPVProcessChanged StatusChangeVariant = "mpv-process-changed"
+	MPVProcessChanged ChangeVariant = "mpv-process-changed"
 )
 
-// statusJSON is a status information in JSON form.
-type statusJSON struct {
+// storageJSON is a status information in JSON form.
+type storageJSON struct {
 	ObservingAddresses map[string][]sse.ChannelVariant `json:"ObservingAddresses"`
 }
 
-// StatusChange holds information about changes to the server misc status.
-type StatusChange struct {
-	Variant StatusChangeVariant
+// Change holds information about changes to the server misc status.
+type Change struct {
+	Variant ChangeVariant
 }
 
-// Status holds information about server misc status.
-type Status struct {
+// Storage holds information about server misc status.
+type Storage struct {
 	broadcaster        *common.ChangesBroadcaster
 	observingAddresses map[string][]sse.ChannelVariant
 	lock               *sync.RWMutex
 }
 
-// NewStatus constructs Status state.
-func NewStatus() *Status {
+// NewStorage constructs Status state.
+func NewStorage() *Storage {
 	broadcaster := common.NewChangesBroadcaster()
 	broadcaster.Broadcast()
 
-	return &Status{
+	return &Storage{
 		broadcaster:        broadcaster,
 		observingAddresses: map[string][]sse.ChannelVariant{},
 		lock:               &sync.RWMutex{},
@@ -54,7 +54,7 @@ func NewStatus() *Status {
 }
 
 // ObservingAddresses returns a mapping of a remote address to the channel variants.
-func (s *Status) ObservingAddresses() map[string][]sse.ChannelVariant {
+func (s *Storage) ObservingAddresses() map[string][]sse.ChannelVariant {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
@@ -62,7 +62,7 @@ func (s *Status) ObservingAddresses() map[string][]sse.ChannelVariant {
 }
 
 // AddObservingAddress adds remote address listening on specific channel variant to the status state.
-func (s *Status) AddObservingAddress(remoteAddr string, observerVariant sse.ChannelVariant) {
+func (s *Storage) AddObservingAddress(remoteAddr string, observerVariant sse.ChannelVariant) {
 	var observers []sse.ChannelVariant
 	var ok bool
 
@@ -75,24 +75,24 @@ func (s *Status) AddObservingAddress(remoteAddr string, observerVariant sse.Chan
 	s.observingAddresses[remoteAddr] = append(observers, observerVariant)
 	s.lock.Unlock()
 
-	s.broadcaster.Send(StatusChange{
+	s.broadcaster.Send(Change{
 		Variant: ClientObserverAdded,
 	})
 }
 
 // MarshalJSON satisfies json.Marshaller.
-func (s *Status) MarshalJSON() ([]byte, error) {
+func (s *Storage) MarshalJSON() ([]byte, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
-	sJSON := statusJSON{
+	sJSON := storageJSON{
 		ObservingAddresses: s.observingAddresses,
 	}
 	return json.Marshal(&sJSON)
 }
 
 // RemoveObservingAddress removes remote address listening on specific channel variant from the state.
-func (s *Status) RemoveObservingAddress(remoteAddr string, observerVariant sse.ChannelVariant) {
+func (s *Storage) RemoveObservingAddress(remoteAddr string, observerVariant sse.ChannelVariant) {
 	var observers []sse.ChannelVariant
 	var ok bool
 
@@ -118,14 +118,14 @@ func (s *Status) RemoveObservingAddress(remoteAddr string, observerVariant sse.C
 
 	s.lock.Unlock()
 
-	s.broadcaster.Send(StatusChange{
+	s.broadcaster.Send(Change{
 		Variant: ClientObserverRemoved,
 	})
 }
 
-func (p *Status) Subscribe(sub StatusSubscriber, onError func(err error)) {
+func (p *Storage) Subscribe(sub Subscriber, onError func(err error)) {
 	p.broadcaster.Subscribe(func(change interface{}) {
-		statusChange, ok := change.(StatusChange)
+		statusChange, ok := change.(Change)
 		if !ok {
 			onError(common.ErrIncorrectChangesType)
 
