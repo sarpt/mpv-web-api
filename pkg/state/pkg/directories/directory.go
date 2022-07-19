@@ -1,6 +1,6 @@
 package directories
 
-type Directory struct {
+type Entry struct {
 	Path      string
 	Recursive bool
 	Watched   bool

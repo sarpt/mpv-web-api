@@ -30,7 +30,7 @@ var (
 // Server holds information about handled SSE connections and their observers.
 type Server struct {
 	channels         map[state_sse.ChannelVariant]channel
-	directories      *directories.Directories
+	directories      *directories.Storage
 	errLog           *log.Logger
 	mediaFiles       *media_files.MediaFiles // TODO: this state passing from the user is very iffy - consider using either callbacks or builder pattern.
 	observersChanges chan ObserversChange

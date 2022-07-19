@@ -81,7 +81,7 @@ func (s *Server) readDirectory(path string) error {
 // TODO2: at the moment no error is being returned from the directories adding,
 // however some information about unsuccessful attempts should be returned
 // in addition to just printing it in server (for example for REST responses).
-func (s *Server) AddRootDirectories(rootDirectories []directories.Directory) {
+func (s *Server) AddRootDirectories(rootDirectories []directories.Entry) {
 	for _, rootDir := range rootDirectories {
 		rootPath := directories.EnsureDirectoryPath(rootDir.Path)
 
@@ -100,7 +100,7 @@ func (s *Server) AddRootDirectories(rootDirectories []directories.Directory) {
 				return fs.SkipDir
 			}
 
-			subDir := directories.Directory{
+			subDir := directories.Entry{
 				Path:      path,
 				Recursive: rootDir.Recursive,
 				Watched:   rootDir.Watched,
@@ -121,7 +121,7 @@ func (s *Server) AddRootDirectories(rootDirectories []directories.Directory) {
 	}
 }
 
-func (s *Server) AddDirectory(dir directories.Directory) error {
+func (s *Server) AddDirectory(dir directories.Entry) error {
 	prevDir, err := s.directories.ByPath(dir.Path)
 	if err == nil && prevDir.Watched {
 		err := s.fsWatcher.Remove(prevDir.Path)
@@ -147,15 +147,15 @@ func (s *Server) AddDirectory(dir directories.Directory) error {
 	return nil
 }
 
-func (s *Server) TakeDirectory(path string) (directories.Directory, error) {
+func (s *Server) TakeDirectory(path string) (directories.Entry, error) {
 	dir, err := s.directories.ByPath(path)
 	if err != nil {
-		return directories.Directory{}, fmt.Errorf("could not remove directory '%s' - directory was not added", path)
+		return directories.Entry{}, fmt.Errorf("could not remove directory '%s' - directory was not added", path)
 	}
 
 	if dir.Watched {
 		if err := s.fsWatcher.Remove(dir.Path); err != nil {
-			return directories.Directory{}, fmt.Errorf("could not stop watching fs changes for a directory '%s': %s", path, err)
+			return directories.Entry{}, fmt.Errorf("could not stop watching fs changes for a directory '%s': %s", path, err)
 		}
 	}
 

@@ -49,7 +49,7 @@ type Callbacks struct {
 type Server struct {
 	Callbacks
 	allowCORS   bool
-	directories *directories.Directories
+	directories *directories.Storage
 	errLog      *log.Logger
 	mediaFiles  *media_files.MediaFiles
 	playback    *playback.Playback
