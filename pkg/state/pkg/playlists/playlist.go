@@ -1,4 +1,4 @@
-package state
+package playlists
 
 import (
 	"encoding/json"

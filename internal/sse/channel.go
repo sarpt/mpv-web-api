@@ -1,7 +1,7 @@
 package sse
 
 import (
-	"github.com/sarpt/mpv-web-api/pkg/state"
+	state_sse "github.com/sarpt/mpv-web-api/pkg/state/pkg/sse"
 )
 
 type channel interface {
@@ -9,5 +9,5 @@ type channel interface {
 	RemoveObserver(address string)
 	Replay(res ResponseWriter) error
 	ServeObserver(address string, res ResponseWriter, done chan<- bool, errors chan<- error)
-	Variant() state.SSEChannelVariant
+	Variant() state_sse.ChannelVariant
 }

@@ -1,4 +1,4 @@
-package state
+package media_files
 
 import (
 	"encoding/json"

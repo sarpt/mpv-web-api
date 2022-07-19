@@ -1,7 +1,10 @@
-package state
+package playback
 
 import (
 	"encoding/json"
+
+	"github.com/sarpt/mpv-web-api/pkg/state/internal/common"
+	"github.com/sarpt/mpv-web-api/pkg/state/pkg/media_files"
 )
 
 type PlaybackSubscriber = func(change PlaybackChange)
@@ -58,7 +61,7 @@ type PlaybackChange struct {
 type Playback struct {
 	currentTime        float64
 	currentChapterIdx  int64
-	broadcaster        *ChangesBroadcaster
+	broadcaster        *common.ChangesBroadcaster
 	fullscreen         bool
 	loop               PlaybackLoop
 	mediaFilePath      string
@@ -85,7 +88,7 @@ type playbackJSON struct {
 
 // NewPlayback constructs Playback state.
 func NewPlayback() *Playback {
-	broadcaster := NewChangesBroadcaster()
+	broadcaster := common.NewChangesBroadcaster()
 	broadcaster.Broadcast()
 
 	return &Playback{
@@ -134,25 +137,25 @@ func (p *Playback) PlaylistSelected() bool {
 // SetAudioID changes played audio id.
 func (p *Playback) SetAudioID(aid string) {
 	p.selectedAudioID = aid
-	p.broadcaster.changes <- PlaybackChange{
+	p.broadcaster.Send(PlaybackChange{
 		Variant: AudioIDChange,
-	}
+	})
 }
 
 // SetCurrentChapter changes currently played chapter index.
 func (p *Playback) SetCurrentChapter(idx int64) {
 	p.currentChapterIdx = idx
-	p.broadcaster.changes <- PlaybackChange{
+	p.broadcaster.Send(PlaybackChange{
 		Variant: CurrentChapterIdxChange,
-	}
+	})
 }
 
 // SetFullscreen changes state of the fullscreen in playback.
 func (p *Playback) SetFullscreen(enabled bool) {
 	p.fullscreen = enabled
-	p.broadcaster.changes <- PlaybackChange{
+	p.broadcaster.Send(PlaybackChange{
 		Variant: FullscreenChange,
-	}
+	})
 }
 
 // SetLoopFile changes whether file should be looped.
@@ -162,65 +165,65 @@ func (p *Playback) SetLoopFile(enabled bool) {
 	} else {
 		p.loop.variant = offLoop
 	}
-	p.broadcaster.changes <- PlaybackChange{
+	p.broadcaster.Send(PlaybackChange{
 		Variant: LoopFileChange,
-	}
+	})
 }
 
 // SetMediaFile changes currently played mediaFile, changing playback to not stopped.
-func (p *Playback) SetMediaFile(mediaFile MediaFile) {
-	p.mediaFilePath = mediaFile.path
+func (p *Playback) SetMediaFile(mediaFile media_files.MediaFile) {
+	p.mediaFilePath = mediaFile.Path()
 	p.Stopped = false
-	p.broadcaster.changes <- PlaybackChange{
+	p.broadcaster.Send(PlaybackChange{
 		Variant: MediaFileChange,
-	}
+	})
 }
 
 // SetPause changes whether playback should paused.
 func (p *Playback) SetPause(paused bool) {
 	p.paused = paused
-	p.broadcaster.changes <- PlaybackChange{
+	p.broadcaster.Send(PlaybackChange{
 		Variant: PauseChange,
-	}
+	})
 }
 
 // SelectPlaylist sets currently played uuid of a playlist.
 func (p *Playback) SelectPlaylist(uuid string) {
-	p.broadcaster.changes <- PlaybackChange{
+	p.broadcaster.Send(PlaybackChange{
 		Variant: PlaylistUnloadChange,
 		Value:   p.playlistUUID,
-	}
+	})
 
 	p.playlistUUID = uuid
 
-	p.broadcaster.changes <- PlaybackChange{
+	p.broadcaster.Send(PlaybackChange{
 		Variant: PlaylistSelectionChange,
-	}
+	})
 }
 
 // SelectPlaylistCurrentIdx sets currently played idx of a selected playlist.
 func (p *Playback) SelectPlaylistCurrentIdx(idx int) {
 	p.playlistCurrentIdx = idx
 
-	p.broadcaster.changes <- PlaybackChange{
+	p.broadcaster.Send(PlaybackChange{
 		Variant: PlaylistCurrentIdxChange,
-	}
+	})
 }
 
 // SetPlaybackTime changes current time of a playback.
 func (p *Playback) SetPlaybackTime(time float64) {
 	p.currentTime = time
-	p.broadcaster.changes <- PlaybackChange{
+	p.broadcaster.Send(PlaybackChange{
 		Variant: PlaybackTimeChange,
-	}
+	})
 }
 
 // SetSubtitleID changes shown subtitles id.
 func (p *Playback) SetSubtitleID(sid string) {
 	p.selectedSubtitleID = sid
-	p.broadcaster.changes <- PlaybackChange{
+	p.broadcaster.Send(PlaybackChange{
 		Variant: SubtitleIDChange,
-	}
+	})
 }
 
 // Stop clears outdated playback information related to played mediaFile and sets playback to stopped.
@@ -237,9 +240,9 @@ func (p *Playback) Stop() {
 	p.playlistCurrentIdx = -1
 	p.playlistUUID = playlistUUID
 
-	p.broadcaster.changes <- PlaybackChange{
+	p.broadcaster.Send(PlaybackChange{
 		Variant: PlaybackStoppedChange,
-	}
+	})
 
 	p.Stopped = true
 }
@@ -248,7 +251,7 @@ func (p *Playback) Subscribe(sub PlaybackSubscriber, onError func(err error)) {
 	p.broadcaster.Subscribe(func(change interface{}) {
 		playbackChange, ok := change.(PlaybackChange)
 		if !ok {
-			onError(errIncorrectChangesType)
+			onError(common.ErrIncorrectChangesType)
 
 			return
 		}

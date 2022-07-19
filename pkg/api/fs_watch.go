@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/fsnotify/fsnotify"
-	"github.com/sarpt/mpv-web-api/pkg/state"
+	"github.com/sarpt/mpv-web-api/pkg/state/pkg/directories"
 )
 
 func (s *Server) addFsEventTarget(path string) error {
@@ -34,7 +34,7 @@ func (s *Server) addFsEventTarget(path string) error {
 		return nil
 	}
 
-	dir := state.Directory{
+	dir := directories.Directory{
 		Path:      path,
 		Recursive: true,
 		Watched:   true,

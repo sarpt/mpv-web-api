@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/sarpt/mpv-web-api/pkg/state"
+	"github.com/sarpt/mpv-web-api/pkg/state/pkg/playlists"
 )
 
 type getPlaylistsRespone struct {
-	Playlists map[string]*state.Playlist `json:"playlists"`
+	Playlists map[string]*playlists.Playlist `json:"playlists"`
 }
 
 func (s *Server) getPlaylistsHandler(res http.ResponseWriter, req *http.Request) {

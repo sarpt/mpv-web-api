@@ -8,7 +8,12 @@ import (
 	"net/http"
 
 	"github.com/sarpt/mpv-web-api/pkg/api"
-	"github.com/sarpt/mpv-web-api/pkg/state"
+	"github.com/sarpt/mpv-web-api/pkg/state/pkg/directories"
+	"github.com/sarpt/mpv-web-api/pkg/state/pkg/media_files"
+	"github.com/sarpt/mpv-web-api/pkg/state/pkg/playback"
+	"github.com/sarpt/mpv-web-api/pkg/state/pkg/playlists"
+	state_sse "github.com/sarpt/mpv-web-api/pkg/state/pkg/sse"
+	"github.com/sarpt/mpv-web-api/pkg/state/pkg/status"
 )
 
 const (
@@ -24,15 +29,15 @@ var (
 
 // Server holds information about handled SSE connections and their observers.
 type Server struct {
-	channels         map[state.SSEChannelVariant]channel
-	directories      *state.Directories
+	channels         map[state_sse.ChannelVariant]channel
+	directories      *directories.Directories
 	errLog           *log.Logger
-	mediaFiles       *state.MediaFiles // TODO: this state passing from the user is very iffy - consider using either callbacks or builder pattern.
+	mediaFiles       *media_files.MediaFiles // TODO: this state passing from the user is very iffy - consider using either callbacks or builder pattern.
 	observersChanges chan ObserversChange
 	outLog           *log.Logger
-	playback         *state.Playback
-	playlists        *state.Playlists
-	status           *state.Status
+	playback         *playback.Playback
+	playlists        *playlists.Playlists
+	status           *status.Status
 	ctx              context.Context
 	cancel           context.CancelFunc
 }
@@ -47,7 +52,7 @@ type Config struct {
 func NewServer(cfg Config) *Server {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &Server{
-		channels:         map[state.SSEChannelVariant]channel{},
+		channels:         map[state_sse.ChannelVariant]channel{},
 		ctx:              ctx,
 		cancel:           cancel,
 		errLog:           log.New(cfg.ErrWriter, logPrefix, log.LstdFlags),
@@ -69,12 +74,6 @@ func (s *Server) Handler() http.Handler {
 }
 
 func (s *Server) Init(apiServer *api.Server) error {
-	s.directories = apiServer.Directories()
-	s.mediaFiles = apiServer.MediaFiles()
-	s.playback = apiServer.Playback()
-	s.playlists = apiServer.Playlists()
-	s.status = apiServer.Status()
-
 	s.channels[directoriesSSEChannelVariant] = newDirectoriesChannel(s.directories)
 	s.channels[mediaFilesSSEChannelVariant] = newMediaFilesChannel(s.mediaFiles)
 	s.channels[playbackSSEChannelVariant] = newPlaybackChannel(s.playback)
@@ -101,7 +100,7 @@ func (s *Server) Shutdown() {
 
 // subscribeToStateChanges starts listening on state changes channels for further distribution to its observers.
 func (s *Server) subscribeToStateChanges() {
-	directoriesChannel := s.channels[directoriesSSEChannelVariant].(*directoriesChannel) // TODO: Ooof... Eww... Remove when rewriting with generics
+	directoriesChannel := s.channels[directoriesSSEChannelVariant].(*directoriesChannel)
 	s.directories.Subscribe(directoriesChannel.BroadcastToChannelObservers, func(err error) {})
 
 	playbackChannel := s.channels[playbackSSEChannelVariant].(*playbackChannel)

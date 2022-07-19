@@ -14,7 +14,7 @@ import (
 	"github.com/sarpt/mpv-web-api/internal/rest"
 	"github.com/sarpt/mpv-web-api/internal/sse"
 	"github.com/sarpt/mpv-web-api/pkg/api"
-	"github.com/sarpt/mpv-web-api/pkg/state"
+	"github.com/sarpt/mpv-web-api/pkg/state/pkg/directories"
 )
 
 const (
@@ -115,7 +115,7 @@ func main() {
 		return
 	}
 
-	var mediaFilesDirectories []state.Directory
+	var mediaFilesDirectories []directories.Directory
 	watchWorkingDir := len(dir.Values()) == 0 && len(watchDir.Values()) == 0 && len(dirRecursive.Values()) == 0 && len(watchDirRecursive.Values()) == 0
 	if watchWorkingDir {
 		wd, err := os.Getwd()
@@ -126,21 +126,21 @@ func main() {
 		}
 
 		outLog.Printf("No directories specified for server - watching working directory '%s'\n", wd)
-		mediaFilesDirectories = append(mediaFilesDirectories, state.Directory{
+		mediaFilesDirectories = append(mediaFilesDirectories, directories.Directory{
 			Path:      wd,
 			Recursive: true,
 			Watched:   true,
 		})
 	} else {
 		for _, dir := range watchDir.Values() {
-			mediaFilesDirectories = append(mediaFilesDirectories, state.Directory{
+			mediaFilesDirectories = append(mediaFilesDirectories, directories.Directory{
 				Path:    dir,
 				Watched: true,
 			})
 		}
 
 		for _, dir := range watchDirRecursive.Values() {
-			mediaFilesDirectories = append(mediaFilesDirectories, state.Directory{
+			mediaFilesDirectories = append(mediaFilesDirectories, directories.Directory{
 				Path:      dir,
 				Recursive: true,
 				Watched:   true,
@@ -148,13 +148,13 @@ func main() {
 		}
 
 		for _, dir := range dir.Values() {
-			mediaFilesDirectories = append(mediaFilesDirectories, state.Directory{
+			mediaFilesDirectories = append(mediaFilesDirectories, directories.Directory{
 				Path: dir,
 			})
 		}
 
 		for _, dir := range dirRecursive.Values() {
-			mediaFilesDirectories = append(mediaFilesDirectories, state.Directory{
+			mediaFilesDirectories = append(mediaFilesDirectories, directories.Directory{
 				Path:      dir,
 				Recursive: true,
 			})

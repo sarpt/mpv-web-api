@@ -8,7 +8,7 @@ import (
 	"strconv"
 
 	"github.com/sarpt/mpv-web-api/internal/common"
-	"github.com/sarpt/mpv-web-api/pkg/state"
+	"github.com/sarpt/mpv-web-api/pkg/state/pkg/directories"
 )
 
 const (
@@ -16,13 +16,13 @@ const (
 )
 
 type (
-	addDirectoriesCb    = func([]state.Directory)
+	addDirectoriesCb    = func([]directories.Directory)
 	loadPlaylistCb      = func(string, bool) error
-	removeDirectoriesCb = func(string) (state.Directory, error)
+	removeDirectoriesCb = func(string) (directories.Directory, error)
 )
 
 type getDirectoriesRespone struct {
-	Directories map[string]state.Directory `json:"directories"`
+	Directories map[string]directories.Directory `json:"directories"`
 }
 
 func (s *Server) getDirectoriesHandler(res http.ResponseWriter, req *http.Request) {
@@ -95,7 +95,7 @@ func (s *Server) directoriesPathHandler(res http.ResponseWriter, req *http.Reque
 		s.outLog.Printf("reading directory '%s' due to request from %s\n", path, req.RemoteAddr)
 	}
 
-	s.addDirectoriesCb([]state.Directory{
+	s.addDirectoriesCb([]directories.Directory{
 		{
 			Path:    path,
 			Watched: watchedDir,

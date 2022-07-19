@@ -5,15 +5,16 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/sarpt/mpv-web-api/pkg/state"
+	"github.com/sarpt/mpv-web-api/pkg/state/pkg/directories"
+	state_sse "github.com/sarpt/mpv-web-api/pkg/state/pkg/sse"
 )
 
 const (
-	directoriesSSEChannelVariant state.SSEChannelVariant = "directories"
+	directoriesSSEChannelVariant state_sse.ChannelVariant = "directories"
 )
 
 type directoriesMapChange struct {
-	Directories map[string]state.Directory
+	Directories map[string]directories.Directory
 }
 
 func (dmc directoriesMapChange) MarshalJSON() ([]byte, error) {
@@ -21,21 +22,21 @@ func (dmc directoriesMapChange) MarshalJSON() ([]byte, error) {
 }
 
 type directoriesChannel struct {
-	directories *state.Directories
+	directories *directories.Directories
 	lock        *sync.RWMutex
-	observers   map[string]chan state.DirectoriesChange
+	observers   map[string]chan directories.DirectoriesChange
 }
 
-func newDirectoriesChannel(directories *state.Directories) *directoriesChannel {
+func newDirectoriesChannel(directoriesStorage *directories.Directories) *directoriesChannel {
 	return &directoriesChannel{
-		directories: directories,
-		observers:   map[string]chan state.DirectoriesChange{},
+		directories: directoriesStorage,
+		observers:   map[string]chan directories.DirectoriesChange{},
 		lock:        &sync.RWMutex{},
 	}
 }
 
 func (dc *directoriesChannel) AddObserver(address string) {
-	changes := make(chan state.DirectoriesChange)
+	changes := make(chan directories.DirectoriesChange)
 
 	dc.lock.Lock()
 	defer dc.lock.Unlock()
@@ -57,7 +58,7 @@ func (dc *directoriesChannel) RemoveObserver(address string) {
 }
 
 func (dc *directoriesChannel) Replay(res ResponseWriter) error {
-	return res.SendChange(directoriesMapChange{Directories: dc.directories.All()}, dc.Variant(), string(state.AddedDirectoriesChange))
+	return res.SendChange(directoriesMapChange{Directories: dc.directories.All()}, dc.Variant(), string(directories.AddedDirectoriesChange))
 }
 
 func (dc *directoriesChannel) ServeObserver(address string, res ResponseWriter, done chan<- bool, errs chan<- error) {
@@ -87,11 +88,11 @@ func (dc *directoriesChannel) ServeObserver(address string, res ResponseWriter, 
 	}
 }
 
-func (dc *directoriesChannel) changeHandler(res ResponseWriter, change state.DirectoriesChange) error {
-	return res.SendChange(change, dc.Variant(), string(state.AddedDirectoriesChange))
+func (dc *directoriesChannel) changeHandler(res ResponseWriter, change directories.DirectoriesChange) error {
+	return res.SendChange(change, dc.Variant(), string(directories.AddedDirectoriesChange))
 }
 
-func (dc *directoriesChannel) BroadcastToChannelObservers(change state.DirectoriesChange) {
+func (dc *directoriesChannel) BroadcastToChannelObservers(change directories.DirectoriesChange) {
 	dc.lock.RLock()
 	defer dc.lock.RUnlock()
 
@@ -100,6 +101,6 @@ func (dc *directoriesChannel) BroadcastToChannelObservers(change state.Directori
 	}
 }
 
-func (dc directoriesChannel) Variant() state.SSEChannelVariant {
+func (dc directoriesChannel) Variant() state_sse.ChannelVariant {
 	return directoriesSSEChannelVariant
 }

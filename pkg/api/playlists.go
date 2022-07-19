@@ -9,7 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/sarpt/mpv-web-api/pkg/state"
+	"github.com/sarpt/mpv-web-api/pkg/state/pkg/playback"
+	"github.com/sarpt/mpv-web-api/pkg/state/pkg/playlists"
 )
 
 var (
@@ -21,12 +22,12 @@ const (
 )
 
 type PlaylistFile struct {
-	CurrentEntryIdx            int                   `json:"CurrentEntryIdx"`
-	DirectoryContentsAsEntries bool                  `json:"DirectoryContentsAsEntries"`
-	Entries                    []state.PlaylistEntry `json:"Entries"`
-	MpvWebApiPlaylist          bool                  `json:"MpvWebApiPlaylist"`
-	Name                       string                `json:"Name"`
-	Description                string                `json:"Description"`
+	CurrentEntryIdx            int                       `json:"CurrentEntryIdx"`
+	DirectoryContentsAsEntries bool                      `json:"DirectoryContentsAsEntries"`
+	Entries                    []playlists.PlaylistEntry `json:"Entries"`
+	MpvWebApiPlaylist          bool                      `json:"MpvWebApiPlaylist"`
+	Name                       string                    `json:"Name"`
+	Description                string                    `json:"Description"`
 }
 
 func (s *Server) DefaultPlaylistSelected() bool {
@@ -70,7 +71,7 @@ func (s *Server) LoadPlaylist(uuid string, append bool) error {
 	return nil
 }
 
-func (s *Server) createTempPlaylistFile(filename string, entries []state.PlaylistEntry) error {
+func (s *Server) createTempPlaylistFile(filename string, entries []playlists.PlaylistEntry) error {
 	fileData := []byte{}
 	for _, entry := range entries {
 		fileData = append(fileData, []byte(fmt.Sprintln(entry.Path))...)
@@ -80,11 +81,11 @@ func (s *Server) createTempPlaylistFile(filename string, entries []state.Playlis
 }
 
 func (s *Server) createDefaultPlaylist() (string, error) {
-	defaultPlaylistCfg := state.PlaylistConfig{
+	defaultPlaylistCfg := playlists.PlaylistConfig{
 		Name: defaultPlaylistName,
 	}
 
-	return s.playlists.AddPlaylist(state.NewPlaylist(defaultPlaylistCfg))
+	return s.playlists.AddPlaylist(playlists.NewPlaylist(defaultPlaylistCfg))
 }
 
 func (s *Server) hasPlaylistFilePrefix(path string) bool {
@@ -105,7 +106,7 @@ func (s *Server) handlePlaylistFile(path string) (string, error) {
 		return "", err
 	}
 
-	playlistCfg := state.PlaylistConfig{
+	playlistCfg := playlists.PlaylistConfig{
 		CurrentEntryIdx:            playlistFile.CurrentEntryIdx,
 		Description:                playlistFile.Description,
 		DirectoryContentsAsEntries: playlistFile.DirectoryContentsAsEntries,
@@ -114,7 +115,7 @@ func (s *Server) handlePlaylistFile(path string) (string, error) {
 		Path:                       path,
 	}
 
-	uuid, err := s.playlists.AddPlaylist(state.NewPlaylist(playlistCfg))
+	uuid, err := s.playlists.AddPlaylist(playlists.NewPlaylist(playlistCfg))
 	if err == nil {
 		s.outLog.Printf("added playlist '%s' at path '%s'", playlistFile.Name, path)
 	}
@@ -142,12 +143,12 @@ func (s *Server) readPlaylistFile(path string) (PlaylistFile, error) {
 	return Playlist, nil
 }
 
-func (s *Server) handlePlaylistRelatedPlaybackChanges(change state.PlaybackChange) {
-	if change.Variant != state.PlaylistUnloadChange && change.Variant != state.PlaylistCurrentIdxChange {
+func (s *Server) handlePlaylistRelatedPlaybackChanges(change playback.PlaybackChange) {
+	if change.Variant != playback.PlaylistUnloadChange && change.Variant != playback.PlaylistCurrentIdxChange {
 		return
 	}
 
-	if change.Variant == state.PlaylistCurrentIdxChange {
+	if change.Variant == playback.PlaylistCurrentIdxChange {
 		uuid := s.playback.PlaylistUUID()
 		if uuid == s.defaultPlaylistUUID {
 			return
@@ -157,7 +158,7 @@ func (s *Server) handlePlaylistRelatedPlaybackChanges(change state.PlaybackChang
 		if err != nil {
 			s.errLog.Println(err)
 		}
-	} else if change.Variant == state.PlaylistUnloadChange {
+	} else if change.Variant == playback.PlaylistUnloadChange {
 		uuid, ok := change.Value.(string)
 		if !ok || uuid == s.defaultPlaylistUUID {
 			return

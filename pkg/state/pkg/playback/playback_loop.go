@@ -1,4 +1,4 @@
-package state
+package playback
 
 import "encoding/json"
 

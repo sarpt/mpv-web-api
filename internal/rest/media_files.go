@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/sarpt/mpv-web-api/pkg/state"
+	"github.com/sarpt/mpv-web-api/pkg/state/pkg/media_files"
 )
 
 type getMediaFilesRespone struct {
-	MediaFiles map[string]state.MediaFile `json:"mediaFiles"`
+	MediaFiles map[string]media_files.MediaFile `json:"mediaFiles"`
 }
 
 func (s *Server) getMediaFilesHandler(res http.ResponseWriter, req *http.Request) {

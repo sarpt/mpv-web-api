@@ -6,7 +6,7 @@ import (
 	"strconv"
 
 	"github.com/sarpt/mpv-web-api/pkg/mpv"
-	"github.com/sarpt/mpv-web-api/pkg/state"
+	"github.com/sarpt/mpv-web-api/pkg/state/pkg/playlists"
 )
 
 var (
@@ -77,9 +77,9 @@ func (s *Server) handlePlaylistProperty(res mpv.ObservePropertyResponse) error {
 		return ErrResponseDataNotExpectedFormatNode
 	}
 
-	entries := []state.PlaylistEntry{}
+	entries := []playlists.PlaylistEntry{}
 	for _, playlistItem := range playlistItems {
-		entries = append(entries, state.PlaylistEntry{
+		entries = append(entries, playlists.PlaylistEntry{
 			Path: playlistItem.Filename,
 		})
 	}

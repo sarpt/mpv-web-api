@@ -8,7 +8,9 @@ import (
 	"strings"
 
 	"github.com/sarpt/mpv-web-api/pkg/probe"
-	"github.com/sarpt/mpv-web-api/pkg/state"
+	"github.com/sarpt/mpv-web-api/pkg/state/pkg/directories"
+	"github.com/sarpt/mpv-web-api/pkg/state/pkg/media_files"
+	"github.com/sarpt/mpv-web-api/pkg/state/pkg/playlists"
 )
 
 // readDirectory tries to read and probe directory,
@@ -22,7 +24,7 @@ func (s *Server) readDirectory(path string) error {
 
 	s.outLog.Printf("reading directory %s\n", path)
 	var playlistUUIDs []string
-	var playlistEntries []state.PlaylistEntry
+	var playlistEntries []playlists.PlaylistEntry
 	for _, entry := range dirEntries {
 		if entry.IsDir() {
 			continue
@@ -46,10 +48,10 @@ func (s *Server) readDirectory(path string) error {
 			continue
 		}
 
-		mediaFile := state.MapProbeResultToMediaFile(result)
+		mediaFile := media_files.MapProbeResultToMediaFile(result)
 		s.mediaFiles.Add(mediaFile)
 
-		entry := state.PlaylistEntry{
+		entry := playlists.PlaylistEntry{
 			Path: mediaFile.Path(),
 		}
 		playlistEntries = append(playlistEntries, entry)
@@ -79,9 +81,9 @@ func (s *Server) readDirectory(path string) error {
 // TODO2: at the moment no error is being returned from the directories adding,
 // however some information about unsuccessful attempts should be returned
 // in addition to just printing it in server (for example for REST responses).
-func (s *Server) AddRootDirectories(rootDirectories []state.Directory) {
+func (s *Server) AddRootDirectories(rootDirectories []directories.Directory) {
 	for _, rootDir := range rootDirectories {
-		rootPath := state.EnsureDirectoryPath(rootDir.Path)
+		rootPath := directories.EnsureDirectoryPath(rootDir.Path)
 
 		walkErr := filepath.WalkDir(rootPath, func(path string, dirEntry fs.DirEntry, err error) error {
 			if err != nil {
@@ -98,7 +100,7 @@ func (s *Server) AddRootDirectories(rootDirectories []state.Directory) {
 				return fs.SkipDir
 			}
 
-			subDir := state.Directory{
+			subDir := directories.Directory{
 				Path:      path,
 				Recursive: rootDir.Recursive,
 				Watched:   rootDir.Watched,
@@ -119,7 +121,7 @@ func (s *Server) AddRootDirectories(rootDirectories []state.Directory) {
 	}
 }
 
-func (s *Server) AddDirectory(dir state.Directory) error {
+func (s *Server) AddDirectory(dir directories.Directory) error {
 	prevDir, err := s.directories.ByPath(dir.Path)
 	if err == nil && prevDir.Watched {
 		err := s.fsWatcher.Remove(prevDir.Path)
@@ -145,15 +147,15 @@ func (s *Server) AddDirectory(dir state.Directory) error {
 	return nil
 }
 
-func (s *Server) TakeDirectory(path string) (state.Directory, error) {
+func (s *Server) TakeDirectory(path string) (directories.Directory, error) {
 	dir, err := s.directories.ByPath(path)
 	if err != nil {
-		return state.Directory{}, fmt.Errorf("could not remove directory '%s' - directory was not added", path)
+		return directories.Directory{}, fmt.Errorf("could not remove directory '%s' - directory was not added", path)
 	}
 
 	if dir.Watched {
 		if err := s.fsWatcher.Remove(dir.Path); err != nil {
-			return state.Directory{}, fmt.Errorf("could not stop watching fs changes for a directory '%s': %s", path, err)
+			return directories.Directory{}, fmt.Errorf("could not stop watching fs changes for a directory '%s': %s", path, err)
 		}
 	}
 

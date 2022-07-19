@@ -1,10 +1,12 @@
-package state
+package media_files
 
 import (
 	"encoding/json"
 	"errors"
 	"strings"
 	"sync"
+
+	"github.com/sarpt/mpv-web-api/pkg/state/internal/common"
 )
 
 var (
@@ -41,14 +43,14 @@ type MediaFilesChangeVariant string
 // MediaFiles is an aggregate state of the media files being served by the server instance.
 // Any modification done on the state should be done by exposed methods which should guarantee goroutine access safety.
 type MediaFiles struct {
-	broadcaster *ChangesBroadcaster
+	broadcaster *common.ChangesBroadcaster
 	items       map[string]MediaFile
 	lock        *sync.RWMutex
 }
 
 // NewMediaFiles counstructs MediaFiles state.
 func NewMediaFiles() *MediaFiles {
-	broadcaster := NewChangesBroadcaster()
+	broadcaster := common.NewChangesBroadcaster()
 	broadcaster.Broadcast()
 
 	return &MediaFiles{
@@ -75,10 +77,10 @@ func (m *MediaFiles) Add(mediaFile MediaFile) {
 	addedMediaFiles := map[string]MediaFile{
 		path: mediaFile,
 	}
-	m.broadcaster.changes <- MediaFilesChange{
+	m.broadcaster.Send(MediaFilesChange{
 		Variant: AddedMediaFilesChange,
 		Items:   addedMediaFiles,
-	}
+	})
 }
 
 // All returns a copy of all MediaFiles being served by the instance of the server.
@@ -152,7 +154,7 @@ func (p *MediaFiles) Subscribe(sub MediaFilesSubscriber, onError func(err error)
 	p.broadcaster.Subscribe(func(change interface{}) {
 		mediaFilesChange, ok := change.(MediaFilesChange)
 		if !ok {
-			onError(errIncorrectChangesType)
+			onError(common.ErrIncorrectChangesType)
 
 			return
 		}
@@ -174,12 +176,12 @@ func (m *MediaFiles) Take(path string) (MediaFile, error) {
 	delete(m.items, path)
 	m.lock.Unlock()
 
-	m.broadcaster.changes <- MediaFilesChange{
+	m.broadcaster.Send(MediaFilesChange{
 		Variant: RemovedMediaFilesChange,
 		Items: map[string]MediaFile{
 			mediaFile.path: mediaFile,
 		},
-	}
+	})
 
 	return mediaFile, nil
 }
@@ -210,7 +212,7 @@ func (m *MediaFiles) TakeMultiple(paths []string) ([]MediaFile, []string) {
 		change.Items[mediaFile.path] = mediaFile
 	}
 
-	m.broadcaster.changes <- change
+	m.broadcaster.Send(change)
 
 	return taken, skipped
 }
