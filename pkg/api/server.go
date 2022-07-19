@@ -34,7 +34,7 @@ type Server struct {
 	directories           *directories.Storage
 	errLog                *log.Logger
 	fsWatcher             *fsnotify.Watcher
-	mediaFiles            *media_files.MediaFiles
+	mediaFiles            *media_files.Storage
 	mpvManager            *mpv.Manager
 	mpvSocketPath         string
 	outLog                *log.Logger
@@ -94,7 +94,7 @@ func NewServer(cfg Config) (*Server, error) {
 		directories:           directories.NewStorage(),
 		errLog:                log.New(cfg.ErrWriter, logPrefix, log.LstdFlags),
 		fsWatcher:             watcher,
-		mediaFiles:            media_files.NewMediaFiles(),
+		mediaFiles:            media_files.NewStorage(),
 		mpvManager:            mpv.NewManager(mpvManagerCfg),
 		mpvSocketPath:         cfg.MpvSocketPath,
 		outLog:                log.New(cfg.OutWriter, logPrefix, log.LstdFlags),
@@ -272,7 +272,7 @@ func (s Server) Directories() *directories.Storage {
 	return s.directories
 }
 
-func (s Server) MediaFiles() *media_files.MediaFiles {
+func (s Server) MediaFiles() *media_files.Storage {
 	return s.mediaFiles
 }
 

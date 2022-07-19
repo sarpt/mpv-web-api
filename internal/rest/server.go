@@ -51,7 +51,7 @@ type Server struct {
 	allowCORS   bool
 	directories *directories.Storage
 	errLog      *log.Logger
-	mediaFiles  *media_files.MediaFiles
+	mediaFiles  *media_files.Storage
 	playback    *playback.Playback
 	playlists   *playlists.Playlists
 	outLog      *log.Logger

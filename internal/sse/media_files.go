@@ -14,7 +14,7 @@ const (
 )
 
 type mediaFilesMapChange struct {
-	MediaFiles map[string]media_files.MediaFile
+	MediaFiles map[string]media_files.Entry
 }
 
 func (mmc mediaFilesMapChange) MarshalJSON() ([]byte, error) {
@@ -22,21 +22,21 @@ func (mmc mediaFilesMapChange) MarshalJSON() ([]byte, error) {
 }
 
 type mediaFilesChannel struct {
-	mediaFiles *media_files.MediaFiles
+	mediaFiles *media_files.Storage
 	lock       *sync.RWMutex
-	observers  map[string]chan media_files.MediaFilesChange
+	observers  map[string]chan media_files.Change
 }
 
-func newMediaFilesChannel(mediaFilesStorage *media_files.MediaFiles) *mediaFilesChannel {
+func newMediaFilesChannel(mediaFilesStorage *media_files.Storage) *mediaFilesChannel {
 	return &mediaFilesChannel{
 		mediaFiles: mediaFilesStorage,
-		observers:  map[string]chan media_files.MediaFilesChange{},
+		observers:  map[string]chan media_files.Change{},
 		lock:       &sync.RWMutex{},
 	}
 }
 
 func (mfc *mediaFilesChannel) AddObserver(address string) {
-	changes := make(chan media_files.MediaFilesChange)
+	changes := make(chan media_files.Change)
 
 	mfc.lock.Lock()
 	defer mfc.lock.Unlock()
@@ -88,11 +88,11 @@ func (mfc *mediaFilesChannel) ServeObserver(address string, res ResponseWriter, 
 	}
 }
 
-func (mfc *mediaFilesChannel) changeHandler(res ResponseWriter, change media_files.MediaFilesChange) error {
+func (mfc *mediaFilesChannel) changeHandler(res ResponseWriter, change media_files.Change) error {
 	return res.SendChange(change, mfc.Variant(), string(change.Variant))
 }
 
-func (mfc *mediaFilesChannel) BroadcastToChannelObservers(change media_files.MediaFilesChange) {
+func (mfc *mediaFilesChannel) BroadcastToChannelObservers(change media_files.Change) {
 	mfc.lock.RLock()
 	defer mfc.lock.RUnlock()
 

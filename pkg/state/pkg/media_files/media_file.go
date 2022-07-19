@@ -6,12 +6,12 @@ import (
 	"github.com/sarpt/mpv-web-api/pkg/probe"
 )
 
-// MediaFile specifies information about a media file that can be played.
+// Entry specifies information about a media file that can be played.
 // TODO: Add id to mediaFile - currently "path" is assumed to be unique,
 // but in case in future mutliple mpv-web-api servers are serving from different
 // machines, the path may not be unique from the api user pov
 // (either randomly generate one or sth else)
-type MediaFile struct {
+type Entry struct {
 	title           string
 	formatName      string
 	formatLongName  string
@@ -23,7 +23,7 @@ type MediaFile struct {
 	videoStreams    []probe.VideoStream
 }
 
-type mediaFileJSON struct {
+type entryJSON struct {
 	Title           string                 `json:"Title"`
 	FormatName      string                 `json:"FormatName"`
 	FormatLongName  string                 `json:"FormatLongName"`
@@ -36,8 +36,8 @@ type mediaFileJSON struct {
 }
 
 // MarshalJSON satisifes json.Marshaller.
-func (m MediaFile) MarshalJSON() ([]byte, error) {
-	mJSON := mediaFileJSON{
+func (m Entry) MarshalJSON() ([]byte, error) {
+	mJSON := entryJSON{
 		Title:           m.title,
 		FormatName:      m.formatName,
 		FormatLongName:  m.formatLongName,
@@ -53,13 +53,13 @@ func (m MediaFile) MarshalJSON() ([]byte, error) {
 }
 
 // Path returns mediaFile path.
-func (m *MediaFile) Path() string {
+func (m *Entry) Path() string {
 	return m.path
 }
 
 // MapProbeResultToMediaFile constructs new MediaFile from results returned by probing for media files.
-func MapProbeResultToMediaFile(result probe.Result) MediaFile {
-	return MediaFile{
+func MapProbeResultToMediaFile(result probe.Result) Entry {
+	return Entry{
 		title:           result.Format.Title,
 		formatName:      result.Format.Name,
 		formatLongName:  result.Format.LongName,
