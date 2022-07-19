@@ -53,7 +53,7 @@ type Server struct {
 	errLog      *log.Logger
 	mediaFiles  *media_files.Storage
 	playback    *playback.Storage
-	playlists   *playlists.Playlists
+	playlists   *playlists.Storage
 	outLog      *log.Logger
 	status      *status.Status
 }

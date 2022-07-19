@@ -10,30 +10,30 @@ import (
 	"github.com/sarpt/mpv-web-api/pkg/state/internal/common"
 )
 
-type PlaylistSubscriber = func(playlist PlaylistsChange)
-type Playlists struct {
+type Subscriber = func(playlist Change)
+type Storage struct {
 	broadcaster *common.ChangesBroadcaster
 	items       map[string]*Playlist
 	lock        *sync.RWMutex
 }
 
-type playlistsJSON struct {
+type storageJSON struct {
 	Items map[string]*Playlist `json:"Items"`
 }
 
 // PlaybackChangeVariant specifies type of change that happened to a playlist.
-type PlaylistsChangeVariant string
+type ChangeVariant string
 
 const (
 	// PlaylistsAdded notifies of a new playlist being served.
-	PlaylistsAdded PlaylistsChangeVariant = "added"
+	PlaylistsAdded ChangeVariant = "added"
 
 	// PlaylistsCurrentEntryIdxChange notifies about change to the most current idx
 	// (not neccessarily currently played by the mpv, but most recent idx in the scope of this playlist).
-	PlaylistsCurrentEntryIdxChange PlaylistsChangeVariant = "currentEntryIdxChange"
+	PlaylistsCurrentEntryIdxChange ChangeVariant = "currentEntryIdxChange"
 
 	// PlaylistsEntriesChange notifies about changes to the entries in a playlist.
-	PlaylistsEntriesChange PlaylistsChangeVariant = "entriesChange"
+	PlaylistsEntriesChange ChangeVariant = "entriesChange"
 )
 
 var (
@@ -41,17 +41,17 @@ var (
 	ErrPlaylistWithUUIDDoesNotExist  = errors.New("playlist with provided uuid does not exist")
 )
 
-// PlaylistsChange is used to inform about changes to the Playback.
-type PlaylistsChange struct {
-	Variant  PlaylistsChangeVariant
+// Change is used to inform about changes to the Playback.
+type Change struct {
+	Variant  ChangeVariant
 	Playlist *Playlist
 }
 
-func NewPlaylists() *Playlists {
+func NewPlaylists() *Storage {
 	broadcaster := common.NewChangesBroadcaster()
 	broadcaster.Broadcast()
 
-	return &Playlists{
+	return &Storage{
 		broadcaster: broadcaster,
 		items:       map[string]*Playlist{},
 		lock:        &sync.RWMutex{},
@@ -59,7 +59,7 @@ func NewPlaylists() *Playlists {
 }
 
 // All returns a copy of all Playlists being served by the instance of the server.
-func (p *Playlists) All() map[string]*Playlist {
+func (p *Storage) All() map[string]*Playlist {
 	allPlaylists := map[string]*Playlist{}
 
 	p.lock.RLock()
@@ -72,7 +72,7 @@ func (p *Playlists) All() map[string]*Playlist {
 	return allPlaylists
 }
 
-func (p *Playlists) ByUUID(uuid string) (*Playlist, error) {
+func (p *Storage) ByUUID(uuid string) (*Playlist, error) {
 	p.lock.RLock()
 	defer p.lock.RUnlock()
 
@@ -85,18 +85,18 @@ func (p *Playlists) ByUUID(uuid string) (*Playlist, error) {
 }
 
 // MarshalJSON satisifes json.Marshaller.
-func (p *Playlists) MarshalJSON() ([]byte, error) {
+func (p *Storage) MarshalJSON() ([]byte, error) {
 	p.lock.RLock()
 	defer p.lock.RUnlock()
 
-	pJSON := playlistsJSON{
+	pJSON := storageJSON{
 		Items: p.items,
 	}
 	return json.Marshal(pJSON)
 }
 
 // SetPlaylistCurrentEntryIdx sets currently played entry Idx for a playlist with provided UUID.
-func (p *Playlists) SetPlaylistCurrentEntryIdx(uuid string, idx int) error {
+func (p *Storage) SetPlaylistCurrentEntryIdx(uuid string, idx int) error {
 	playlist, err := p.ByUUID(uuid)
 	if err != nil {
 		return err
@@ -104,7 +104,7 @@ func (p *Playlists) SetPlaylistCurrentEntryIdx(uuid string, idx int) error {
 
 	playlist.setCurrentEntryIdx(idx)
 
-	p.broadcaster.Send(PlaylistsChange{
+	p.broadcaster.Send(Change{
 		Variant:  PlaylistsCurrentEntryIdxChange,
 		Playlist: playlist,
 	})
@@ -112,7 +112,7 @@ func (p *Playlists) SetPlaylistCurrentEntryIdx(uuid string, idx int) error {
 }
 
 // SetPlaylistEntries sets items of the playlist with uuid.
-func (p *Playlists) SetPlaylistEntries(uuid string, entries []PlaylistEntry) error {
+func (p *Storage) SetPlaylistEntries(uuid string, entries []Entry) error {
 	playlist, err := p.ByUUID(uuid)
 	if err != nil {
 		return err
@@ -120,16 +120,16 @@ func (p *Playlists) SetPlaylistEntries(uuid string, entries []PlaylistEntry) err
 
 	playlist.setEntries(entries)
 
-	p.broadcaster.Send(PlaylistsChange{
+	p.broadcaster.Send(Change{
 		Variant:  PlaylistsEntriesChange,
 		Playlist: playlist,
 	})
 	return nil
 }
 
-func (p *Playlists) Subscribe(sub PlaylistSubscriber, onError func(err error)) {
+func (p *Storage) Subscribe(sub Subscriber, onError func(err error)) {
 	p.broadcaster.Subscribe(func(change interface{}) {
-		playlistChange, ok := change.(PlaylistsChange)
+		playlistChange, ok := change.(Change)
 		if !ok {
 			onError(common.ErrIncorrectChangesType)
 
@@ -144,7 +144,7 @@ func (p *Playlists) Subscribe(sub PlaylistSubscriber, onError func(err error)) {
 // Returns UUID of new playlist.
 // Note: AddPlaylist is responsible for creating an UUID since users of the
 // functions should not be trusted that playlist has a valid, if any, UUID.
-func (p *Playlists) AddPlaylist(playlist *Playlist) (string, error) {
+func (p *Storage) AddPlaylist(playlist *Playlist) (string, error) {
 	playlist.uuid = uuid.NewString()
 
 	if _, ok := p.items[playlist.uuid]; ok {
@@ -155,7 +155,7 @@ func (p *Playlists) AddPlaylist(playlist *Playlist) (string, error) {
 	p.items[playlist.uuid] = playlist
 	p.lock.Unlock()
 
-	p.broadcaster.Send(PlaylistsChange{
+	p.broadcaster.Send(Change{
 		Variant:  PlaylistsAdded,
 		Playlist: playlist,
 	})

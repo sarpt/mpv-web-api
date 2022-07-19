@@ -9,10 +9,10 @@ import (
 
 // Playlist holds state about currently playing playlist.
 type Playlist struct {
-	currentEntryIdx            int
+	entryIdx                   int
 	description                string
 	directoryContentsAsEntries bool
-	entries                    []PlaylistEntry
+	entries                    []Entry
 	name                       string
 	lock                       *sync.RWMutex
 	path                       string
@@ -20,28 +20,28 @@ type Playlist struct {
 }
 
 type playlistJSON struct {
-	CurrentEntryIdx            int             `json:"CurrentEntryIdx"`
-	Description                string          `json:"Description"`
-	DirectoryContentsAsEntries bool            `json:"DirectoryContentsAsEntries"`
-	Entries                    []PlaylistEntry `json:"Entries"`
-	Name                       string          `json:"Name"`
-	Path                       string          `json:"Path"`
-	UUID                       string          `json:"UUID"`
+	CurrentEntryIdx            int     `json:"CurrentEntryIdx"`
+	Description                string  `json:"Description"`
+	DirectoryContentsAsEntries bool    `json:"DirectoryContentsAsEntries"`
+	Entries                    []Entry `json:"Entries"`
+	Name                       string  `json:"Name"`
+	Path                       string  `json:"Path"`
+	UUID                       string  `json:"UUID"`
 }
 
-type PlaylistConfig struct {
+type Config struct {
 	CurrentEntryIdx            int
 	Description                string
 	DirectoryContentsAsEntries bool
-	Entries                    []PlaylistEntry
+	Entries                    []Entry
 	Name                       string
 	Path                       string
 }
 
 // NewPlaylist constructs Playlist state.
-func NewPlaylist(cfg PlaylistConfig) *Playlist {
+func NewPlaylist(cfg Config) *Playlist {
 	return &Playlist{
-		currentEntryIdx:            cfg.CurrentEntryIdx,
+		entryIdx:                   cfg.CurrentEntryIdx,
 		description:                cfg.Description,
 		directoryContentsAsEntries: cfg.DirectoryContentsAsEntries,
 		entries:                    cfg.Entries,
@@ -53,8 +53,8 @@ func NewPlaylist(cfg PlaylistConfig) *Playlist {
 }
 
 // All returns a copy of all PlaylistEntries being served by the instance of the server.
-func (p *Playlist) All() []PlaylistEntry {
-	entries := []PlaylistEntry{}
+func (p *Playlist) All() []Entry {
+	entries := []Entry{}
 
 	p.lock.RLock()
 	defer p.lock.RUnlock()
@@ -70,12 +70,12 @@ func (p *Playlist) CurrentEntryIdx() int {
 	p.lock.RLock()
 	defer p.lock.RUnlock()
 
-	return p.currentEntryIdx
+	return p.entryIdx
 }
 
 // EntriesDiffer checks whether provided entries match entries stored in playlist.
 // Currently only paths are taken into account.
-func (p *Playlist) EntriesDiffer(entries []PlaylistEntry) bool {
+func (p *Playlist) EntriesDiffer(entries []Entry) bool {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -131,10 +131,10 @@ func (p *Playlist) setCurrentEntryIdx(idx int) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
-	p.currentEntryIdx = idx
+	p.entryIdx = idx
 }
 
-func (p *Playlist) setEntries(entries []PlaylistEntry) {
+func (p *Playlist) setEntries(entries []Entry) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 

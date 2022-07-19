@@ -1,6 +1,6 @@
 package playlists
 
-type PlaylistEntry struct {
+type Entry struct {
 	Path              string  `json:"Path"`
 	PlaybackTimestamp float64 `json:"PlaybackTimestamp"`
 	AudioID           string  `json:"AudioId"`
