@@ -13,6 +13,7 @@ import (
 	"github.com/fsnotify/fsnotify"
 	"github.com/sarpt/mpv-web-api/pkg/mpv"
 	"github.com/sarpt/mpv-web-api/pkg/state"
+	"github.com/sarpt/mpv-web-api/pkg/state/pkg/directories"
 )
 
 const (
@@ -37,8 +38,23 @@ type Server struct {
 	pluginServers         map[string]PluginServer
 }
 
+type PluginApi interface {
+	AddRootDirectories(directories []directories.Entry)
+	TakeDirectory(path string) (directories.Entry, error)
+	LoadPlaylist(uuid string, append bool) error
+	LoadFile(filePath string, append bool) error
+	ChangeFullscreen(fullscreen bool) error
+	ChangeAudio(audioId string) error
+	ChangeChapter(idx int64) error
+	ChangeSubtitle(subtitleId string) error
+	LoopFile(looped bool) error
+	ChangePause(paused bool) error
+	PlaylistPlayIndex(idx int) error
+	StopPlayback() error
+}
+
 type PluginServer interface {
-	Init(apiServ *Server) error // TODO: Init should take interface that exposes only what's necessary instead of a whole Server class
+	Init(apiServ PluginApi) error
 	Handler() http.Handler
 	PathBase() string
 	Name() string
