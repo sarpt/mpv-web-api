@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sarpt/mpv-web-api/pkg/state/internal/common"
+	"github.com/sarpt/mpv-web-api/pkg/state/pkg/sse"
 )
 
 type Subscriber = func(playlist Change)
@@ -21,19 +22,16 @@ type storageJSON struct {
 	Items map[string]*Playlist `json:"Items"`
 }
 
-// PlaybackChangeVariant specifies type of change that happened to a playlist.
-type ChangeVariant string
-
 const (
 	// PlaylistsAdded notifies of a new playlist being served.
-	PlaylistsAdded ChangeVariant = "added"
+	PlaylistsAdded sse.ChangeVariant = "added"
 
 	// PlaylistsCurrentEntryIdxChange notifies about change to the most current idx
 	// (not neccessarily currently played by the mpv, but most recent idx in the scope of this playlist).
-	PlaylistsCurrentEntryIdxChange ChangeVariant = "currentEntryIdxChange"
+	PlaylistsCurrentEntryIdxChange sse.ChangeVariant = "currentEntryIdxChange"
 
 	// PlaylistsEntriesChange notifies about changes to the entries in a playlist.
-	PlaylistsEntriesChange ChangeVariant = "entriesChange"
+	PlaylistsEntriesChange sse.ChangeVariant = "entriesChange"
 )
 
 var (
@@ -43,8 +41,17 @@ var (
 
 // Change is used to inform about changes to the Playback.
 type Change struct {
-	Variant  ChangeVariant
-	Playlist *Playlist
+	ChangeVariant sse.ChangeVariant
+	Playlist      *Playlist
+}
+
+// MarshalJSON returns change items in JSON format. Satisfies json.Marshaller.
+func (s Change) MarshalJSON() ([]byte, error) {
+	return json.Marshal(s.Playlist)
+}
+
+func (s Change) Variant() sse.ChangeVariant {
+	return s.ChangeVariant
 }
 
 func NewStorage() *Storage {
@@ -105,8 +112,8 @@ func (p *Storage) SetPlaylistCurrentEntryIdx(uuid string, idx int) error {
 	playlist.setCurrentEntryIdx(idx)
 
 	p.broadcaster.Send(Change{
-		Variant:  PlaylistsCurrentEntryIdxChange,
-		Playlist: playlist,
+		ChangeVariant: PlaylistsCurrentEntryIdxChange,
+		Playlist:      playlist,
 	})
 	return nil
 }
@@ -121,8 +128,8 @@ func (p *Storage) SetPlaylistEntries(uuid string, entries []Entry) error {
 	playlist.setEntries(entries)
 
 	p.broadcaster.Send(Change{
-		Variant:  PlaylistsEntriesChange,
-		Playlist: playlist,
+		ChangeVariant: PlaylistsEntriesChange,
+		Playlist:      playlist,
 	})
 	return nil
 }
@@ -156,8 +163,8 @@ func (p *Storage) AddPlaylist(playlist *Playlist) (string, error) {
 	p.lock.Unlock()
 
 	p.broadcaster.Send(Change{
-		Variant:  PlaylistsAdded,
-		Playlist: playlist,
+		ChangeVariant: PlaylistsAdded,
+		Playlist:      playlist,
 	})
 
 	return playlist.uuid, nil

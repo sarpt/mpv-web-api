@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/sarpt/mpv-web-api/pkg/state/internal/common"
+	"github.com/sarpt/mpv-web-api/pkg/state/pkg/sse"
 )
 
 var (
@@ -16,20 +17,20 @@ var (
 
 const (
 	// AddedDirectoriesChange notifies about addition of mediaFiles to the list of mediaFiles handled by the application.
-	AddedDirectoriesChange ChangeVariant = "added"
+	AddedDirectoriesChange sse.ChangeVariant = "added"
 
 	// UpdatedDirectoriesChange notifies about updates to the list of mediaFiles.
-	UpdatedDirectoriesChange ChangeVariant = "updated"
+	UpdatedDirectoriesChange sse.ChangeVariant = "updated"
 
 	// RemovedDirectoriesChange notifies about removal of mediaFiles from the list.
-	RemovedDirectoriesChange ChangeVariant = "removed"
+	RemovedDirectoriesChange sse.ChangeVariant = "removed"
 )
 
 type Subscriber = func(change Change)
 
 // Change holds information about changes to the collection of directories being handled.
 type Change struct {
-	variant ChangeVariant
+	variant sse.ChangeVariant
 	items   map[string]Entry
 }
 
@@ -38,8 +39,9 @@ func (d Change) MarshalJSON() ([]byte, error) {
 	return json.Marshal(d.items)
 }
 
-// ChangeVariant specifies what type of change to directories collection belong to in a DirectoriesChange type.
-type ChangeVariant string
+func (d Change) Variant() sse.ChangeVariant {
+	return d.variant
+}
 
 type Storage struct {
 	broadcaster *common.ChangesBroadcaster

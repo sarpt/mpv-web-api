@@ -2,8 +2,6 @@ package sse
 
 import (
 	"encoding/json"
-	"errors"
-	"sync"
 
 	"github.com/sarpt/mpv-web-api/pkg/state/pkg/directories"
 	state_sse "github.com/sarpt/mpv-web-api/pkg/state/pkg/sse"
@@ -22,85 +20,19 @@ func (dmc directoriesMapChange) MarshalJSON() ([]byte, error) {
 }
 
 type directoriesChannel struct {
-	directories *directories.Storage
-	lock        *sync.RWMutex
-	observers   map[string]chan directories.Change
+	StateChannel[*directories.Storage, directories.Change]
 }
 
 func newDirectoriesChannel(directoriesStorage *directories.Storage) *directoriesChannel {
 	return &directoriesChannel{
-		directories: directoriesStorage,
-		observers:   map[string]chan directories.Change{},
-		lock:        &sync.RWMutex{},
+		NewStateChannel[*directories.Storage, directories.Change](directoriesStorage, directoriesSSEChannelVariant),
 	}
-}
-
-func (dc *directoriesChannel) AddObserver(address string) {
-	changes := make(chan directories.Change)
-
-	dc.lock.Lock()
-	defer dc.lock.Unlock()
-
-	dc.observers[address] = changes
-}
-
-func (dc *directoriesChannel) RemoveObserver(address string) {
-	dc.lock.Lock()
-	defer dc.lock.Unlock()
-
-	changes, ok := dc.observers[address]
-	if !ok {
-		return
-	}
-
-	close(changes)
-	delete(dc.observers, address)
 }
 
 func (dc *directoriesChannel) Replay(res ResponseWriter) error {
-	return res.SendChange(directoriesMapChange{Directories: dc.directories.All()}, dc.Variant(), string(directories.AddedDirectoriesChange))
-}
-
-func (dc *directoriesChannel) ServeObserver(address string, res ResponseWriter, done chan<- bool, errs chan<- error) {
-	defer close(done)
-	defer close(errs)
-
-	changes, ok := dc.observers[address]
-	if !ok {
-		errs <- errors.New("no observer found for provided address")
-		done <- true
-
-		return
-	}
-
-	for {
-		change, more := <-changes
-		if !more {
-			done <- true
-
-			return
-		}
-
-		err := dc.changeHandler(res, change)
-		if err != nil {
-			errs <- err
-		}
-	}
+	return res.SendChange(directoriesMapChange{Directories: dc.state.All()}, dc.Variant(), string(directories.AddedDirectoriesChange))
 }
 
 func (dc *directoriesChannel) changeHandler(res ResponseWriter, change directories.Change) error {
 	return res.SendChange(change, dc.Variant(), string(directories.AddedDirectoriesChange))
-}
-
-func (dc *directoriesChannel) BroadcastToChannelObservers(change directories.Change) {
-	dc.lock.RLock()
-	defer dc.lock.RUnlock()
-
-	for _, observer := range dc.observers {
-		observer <- change
-	}
-}
-
-func (dc directoriesChannel) Variant() state_sse.ChannelVariant {
-	return directoriesSSEChannelVariant
 }

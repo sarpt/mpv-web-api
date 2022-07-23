@@ -144,11 +144,11 @@ func (s *Server) readPlaylistFile(path string) (PlaylistFile, error) {
 }
 
 func (s *Server) handlePlaylistRelatedPlaybackChanges(change playback.Change) {
-	if change.Variant != playback.PlaylistUnloadChange && change.Variant != playback.PlaylistCurrentIdxChange {
+	if change.ChangeVariant != playback.PlaylistUnloadChange && change.ChangeVariant != playback.PlaylistCurrentIdxChange {
 		return
 	}
 
-	if change.Variant == playback.PlaylistCurrentIdxChange {
+	if change.ChangeVariant == playback.PlaylistCurrentIdxChange {
 		uuid := s.statesRepository.Playback().PlaylistUUID()
 		if uuid == s.defaultPlaylistUUID {
 			return
@@ -158,7 +158,7 @@ func (s *Server) handlePlaylistRelatedPlaybackChanges(change playback.Change) {
 		if err != nil {
 			s.errLog.Println(err)
 		}
-	} else if change.Variant == playback.PlaylistUnloadChange {
+	} else if change.ChangeVariant == playback.PlaylistUnloadChange {
 		uuid, ok := change.Value.(string)
 		if !ok || uuid == s.defaultPlaylistUUID {
 			return
