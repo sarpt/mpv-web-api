@@ -41,8 +41,6 @@ type Callbacks struct {
 // Server is responsible for creating REST handlers, argument parsing and validation.
 // TODO: In the future, REST package might fullfill a function of a wrapper for OpenAPI generated code
 // (if that ever will be implemented, not sure if it's not an overkill atm).
-// TODO#2: As in SSE case, the pointers to the state should be replaced with a more separated approach
-// - rest package should not have unlimited access to the whole state.
 type Server struct {
 	Callbacks
 	allowCORS        bool
@@ -61,7 +59,7 @@ func NewServer(cfg Config) *Server {
 	}
 }
 
-func (s *Server) Init(apiServer *api.Server) error {
+func (s *Server) Init(apiServer api.PluginApi) error {
 	s.addDirectoriesCb = apiServer.AddRootDirectories
 	s.removeDirectoriesCb = apiServer.TakeDirectory
 	s.loadPlaylistCb = apiServer.LoadPlaylist
