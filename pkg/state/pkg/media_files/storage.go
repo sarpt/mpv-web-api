@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/sarpt/mpv-web-api/pkg/state/internal/common"
+	"github.com/sarpt/mpv-web-api/pkg/state/pkg/sse"
 )
 
 var (
@@ -15,21 +16,21 @@ var (
 
 const (
 	// AddedMediaFilesChange notifies about addition of mediaFiles to the list of mediaFiles handled by the application.
-	AddedMediaFilesChange ChangeVariant = "added"
+	AddedMediaFilesChange sse.ChangeVariant = "added"
 
 	// UpdatedMediaFilesChange notifies about updates to the list of mediaFiles.
-	UpdatedMediaFilesChange ChangeVariant = "updated"
+	UpdatedMediaFilesChange sse.ChangeVariant = "updated"
 
 	// RemovedMediaFilesChange notifies about removal of mediaFiles from the list.
-	RemovedMediaFilesChange ChangeVariant = "removed"
+	RemovedMediaFilesChange sse.ChangeVariant = "removed"
 )
 
 type Subscriber = func(change Change)
 
 // Change holds information about changes to the list of mediaFiles being served.
 type Change struct {
-	Variant ChangeVariant
-	Items   map[string]Entry
+	ChangeVariant sse.ChangeVariant
+	Items         map[string]Entry
 }
 
 // MarshalJSON returns change items in JSON format. Satisfies json.Marshaller.
@@ -37,8 +38,9 @@ func (mc Change) MarshalJSON() ([]byte, error) {
 	return json.Marshal(mc.Items)
 }
 
-// ChangeVariant specifies what type of change to mediaFiles list items belong to in a MediaFilesChange type.
-type ChangeVariant string
+func (mc Change) Variant() sse.ChangeVariant {
+	return mc.ChangeVariant
+}
 
 // Storage is an aggregate state of the media files being served by the server instance.
 // Any modification done on the state should be done by exposed methods which should guarantee goroutine access safety.
@@ -78,8 +80,8 @@ func (m *Storage) Add(mediaFile Entry) {
 		path: mediaFile,
 	}
 	m.broadcaster.Send(Change{
-		Variant: AddedMediaFilesChange,
-		Items:   addedMediaFiles,
+		ChangeVariant: AddedMediaFilesChange,
+		Items:         addedMediaFiles,
 	})
 }
 
@@ -177,7 +179,7 @@ func (m *Storage) Take(path string) (Entry, error) {
 	m.lock.Unlock()
 
 	m.broadcaster.Send(Change{
-		Variant: RemovedMediaFilesChange,
+		ChangeVariant: RemovedMediaFilesChange,
 		Items: map[string]Entry{
 			mediaFile.path: mediaFile,
 		},
@@ -194,8 +196,8 @@ func (m *Storage) TakeMultiple(paths []string) ([]Entry, []string) {
 	var taken []Entry
 
 	change := Change{
-		Variant: RemovedMediaFilesChange,
-		Items:   map[string]Entry{},
+		ChangeVariant: RemovedMediaFilesChange,
+		Items:         map[string]Entry{},
 	}
 
 	for _, path := range paths {

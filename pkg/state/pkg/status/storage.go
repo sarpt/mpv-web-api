@@ -10,18 +10,15 @@ import (
 
 type Subscriber = func(change Change)
 
-// ChangeVariant specifies what type of change to server status occurs.
-type ChangeVariant string
-
 const (
 	// ClientObserverAdded notifies about addition of new client observer.
-	ClientObserverAdded ChangeVariant = "client-observer-added"
+	ClientObserverAdded sse.ChangeVariant = "client-observer-added"
 
 	// ClientObserverRemoved notifies about removal of connected client observer.
-	ClientObserverRemoved ChangeVariant = "client-observer-removed"
+	ClientObserverRemoved sse.ChangeVariant = "client-observer-removed"
 
 	// MPVProcessChanged notifies about change of mpv process (due to restart, forced close, etc.).
-	MPVProcessChanged ChangeVariant = "mpv-process-changed"
+	MPVProcessChanged sse.ChangeVariant = "mpv-process-changed"
 )
 
 // storageJSON is a status information in JSON form.
@@ -31,7 +28,16 @@ type storageJSON struct {
 
 // Change holds information about changes to the server misc status.
 type Change struct {
-	Variant ChangeVariant
+	ChangeVariant sse.ChangeVariant
+}
+
+// MarshalJSON returns change items in JSON format. Satisfies json.Marshaller.
+func (d Change) MarshalJSON() ([]byte, error) {
+	return []byte{}, nil
+}
+
+func (d Change) Variant() sse.ChangeVariant {
+	return d.ChangeVariant
 }
 
 // Storage holds information about server misc status.
@@ -76,7 +82,7 @@ func (s *Storage) AddObservingAddress(remoteAddr string, observerVariant sse.Cha
 	s.lock.Unlock()
 
 	s.broadcaster.Send(Change{
-		Variant: ClientObserverAdded,
+		ChangeVariant: ClientObserverAdded,
 	})
 }
 
@@ -119,7 +125,7 @@ func (s *Storage) RemoveObservingAddress(remoteAddr string, observerVariant sse.
 	s.lock.Unlock()
 
 	s.broadcaster.Send(Change{
-		Variant: ClientObserverRemoved,
+		ChangeVariant: ClientObserverRemoved,
 	})
 }
 

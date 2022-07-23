@@ -5,56 +5,63 @@ import (
 
 	"github.com/sarpt/mpv-web-api/pkg/state/internal/common"
 	"github.com/sarpt/mpv-web-api/pkg/state/pkg/media_files"
+	"github.com/sarpt/mpv-web-api/pkg/state/pkg/sse"
 )
 
 type Subscriber = func(change Change)
 
-// ChangeVariant specifies type of change that happened to playback.
-type ChangeVariant string
-
 const (
 	// FullscreenChange notifies about fullscreen state change.
-	FullscreenChange ChangeVariant = "fullscreenChange"
+	FullscreenChange sse.ChangeVariant = "fullscreenChange"
 
 	// LoopFileChange notifies about change to the looping of current file.
-	LoopFileChange ChangeVariant = "loopFileChange"
+	LoopFileChange sse.ChangeVariant = "loopFileChange"
 
 	// PauseChange notifies about change to the playback pause state.
-	PauseChange ChangeVariant = "pauseChange"
+	PauseChange sse.ChangeVariant = "pauseChange"
 
 	// AudioIDChange notifies about change of currently played audio.
-	AudioIDChange ChangeVariant = "audioIdChange"
+	AudioIDChange sse.ChangeVariant = "audioIdChange"
 
 	// PlaybackStoppedChange notifies about playbck being stopped completely.
-	PlaybackStoppedChange ChangeVariant = "playbackStoppedChange"
+	PlaybackStoppedChange sse.ChangeVariant = "playbackStoppedChange"
 
 	// SubtitleIDChange notifies about change of currently shown subtitles.
-	SubtitleIDChange ChangeVariant = "subtitleIdChange"
+	SubtitleIDChange sse.ChangeVariant = "subtitleIdChange"
 
 	// CurrentChapterIdxChange notifies about change of currently played chapter.
-	CurrentChapterIdxChange ChangeVariant = "currentChapterIndexChange"
+	CurrentChapterIdxChange sse.ChangeVariant = "currentChapterIndexChange"
 
 	// MediaFileChange notifies about change of currently played mediaFile.
-	MediaFileChange ChangeVariant = "mediaFileChange"
+	MediaFileChange sse.ChangeVariant = "mediaFileChange"
 
 	// PlaybackTimeChange notifies about current timestamp change.
-	PlaybackTimeChange ChangeVariant = "playbackTimeChange"
+	PlaybackTimeChange sse.ChangeVariant = "playbackTimeChange"
 
 	// PlaylistSelectionChange notifies about change of currently played playlist.
-	PlaylistSelectionChange ChangeVariant = "playlistSelectionChange"
+	PlaylistSelectionChange sse.ChangeVariant = "playlistSelectionChange"
 
 	// PlaylistUnloadChange notifies about unload of playlist.
-	PlaylistUnloadChange ChangeVariant = "playlistUnloadChange"
+	PlaylistUnloadChange sse.ChangeVariant = "playlistUnloadChange"
 
 	// PlaylistCurrentIdxChange notifies about change of currently played entry in a selected playlist.
-	PlaylistCurrentIdxChange ChangeVariant = "playlistCurrentIdxChange"
+	PlaylistCurrentIdxChange sse.ChangeVariant = "playlistCurrentIdxChange"
 )
 
 // Change is used to inform about changes to the Playback.
 // TODO: implement playback change to carry information on the change (using either interfaces or generics in go2).
 type Change struct {
-	Variant ChangeVariant
-	Value   interface{}
+	ChangeVariant sse.ChangeVariant
+	Value         interface{}
+}
+
+// MarshalJSON returns change items in JSON format. Satisfies json.Marshaller.
+func (d Change) MarshalJSON() ([]byte, error) {
+	return json.Marshal(d.Value)
+}
+
+func (d Change) Variant() sse.ChangeVariant {
+	return d.ChangeVariant
 }
 
 // Storage contains information about currently played media file.
@@ -138,7 +145,7 @@ func (p *Storage) PlaylistSelected() bool {
 func (p *Storage) SetAudioID(aid string) {
 	p.selectedAudioID = aid
 	p.broadcaster.Send(Change{
-		Variant: AudioIDChange,
+		ChangeVariant: AudioIDChange,
 	})
 }
 
@@ -146,7 +153,7 @@ func (p *Storage) SetAudioID(aid string) {
 func (p *Storage) SetCurrentChapter(idx int64) {
 	p.currentChapterIdx = idx
 	p.broadcaster.Send(Change{
-		Variant: CurrentChapterIdxChange,
+		ChangeVariant: CurrentChapterIdxChange,
 	})
 }
 
@@ -154,7 +161,7 @@ func (p *Storage) SetCurrentChapter(idx int64) {
 func (p *Storage) SetFullscreen(enabled bool) {
 	p.fullscreen = enabled
 	p.broadcaster.Send(Change{
-		Variant: FullscreenChange,
+		ChangeVariant: FullscreenChange,
 	})
 }
 
@@ -166,7 +173,7 @@ func (p *Storage) SetLoopFile(enabled bool) {
 		p.loop.variant = offLoop
 	}
 	p.broadcaster.Send(Change{
-		Variant: LoopFileChange,
+		ChangeVariant: LoopFileChange,
 	})
 }
 
@@ -175,7 +182,7 @@ func (p *Storage) SetMediaFile(mediaFile media_files.Entry) {
 	p.mediaFilePath = mediaFile.Path()
 	p.Stopped = false
 	p.broadcaster.Send(Change{
-		Variant: MediaFileChange,
+		ChangeVariant: MediaFileChange,
 	})
 }
 
@@ -183,21 +190,21 @@ func (p *Storage) SetMediaFile(mediaFile media_files.Entry) {
 func (p *Storage) SetPause(paused bool) {
 	p.paused = paused
 	p.broadcaster.Send(Change{
-		Variant: PauseChange,
+		ChangeVariant: PauseChange,
 	})
 }
 
 // SelectPlaylist sets currently played uuid of a playlist.
 func (p *Storage) SelectPlaylist(uuid string) {
 	p.broadcaster.Send(Change{
-		Variant: PlaylistUnloadChange,
-		Value:   p.playlistUUID,
+		ChangeVariant: PlaylistUnloadChange,
+		Value:         p.playlistUUID,
 	})
 
 	p.playlistUUID = uuid
 
 	p.broadcaster.Send(Change{
-		Variant: PlaylistSelectionChange,
+		ChangeVariant: PlaylistSelectionChange,
 	})
 }
 
@@ -206,7 +213,7 @@ func (p *Storage) SelectPlaylistCurrentIdx(idx int) {
 	p.playlistCurrentIdx = idx
 
 	p.broadcaster.Send(Change{
-		Variant: PlaylistCurrentIdxChange,
+		ChangeVariant: PlaylistCurrentIdxChange,
 	})
 }
 
@@ -214,7 +221,7 @@ func (p *Storage) SelectPlaylistCurrentIdx(idx int) {
 func (p *Storage) SetPlaybackTime(time float64) {
 	p.currentTime = time
 	p.broadcaster.Send(Change{
-		Variant: PlaybackTimeChange,
+		ChangeVariant: PlaybackTimeChange,
 	})
 }
 
@@ -222,7 +229,7 @@ func (p *Storage) SetPlaybackTime(time float64) {
 func (p *Storage) SetSubtitleID(sid string) {
 	p.selectedSubtitleID = sid
 	p.broadcaster.Send(Change{
-		Variant: SubtitleIDChange,
+		ChangeVariant: SubtitleIDChange,
 	})
 }
 
@@ -241,7 +248,7 @@ func (p *Storage) Stop() {
 	p.playlistUUID = playlistUUID
 
 	p.broadcaster.Send(Change{
-		Variant: PlaybackStoppedChange,
+		ChangeVariant: PlaybackStoppedChange,
 	})
 
 	p.Stopped = true
