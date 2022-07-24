@@ -12,20 +12,25 @@ const (
 	statusReplay state_sse.ChangeVariant = "replay"
 )
 
-type statusChannel struct {
-	StateChannel[*status.Storage, status.Change]
+type statusChangesBroadcaster struct {
+	status *status.Storage
+	ChangesBroadcaster[status.Change]
 }
 
-func newStatusChannel(statusStorage *status.Storage) *statusChannel {
-	return &statusChannel{
-		NewStateChannel[*status.Storage, status.Change](statusStorage, statusSSEChannelVariant),
+func (sc *statusChangesBroadcaster) Replay(res ResponseWriter) error {
+	return res.SendChange(sc.status, statusSSEChannelVariant, string(statusReplay))
+}
+
+func (sc *statusChangesBroadcaster) ChangeHandler(res ResponseWriter, change status.Change) error {
+	return res.SendChange(sc.status, statusSSEChannelVariant, string(change.ChangeVariant))
+}
+
+func NewStatusChannel(storage *status.Storage) *StateChannel[status.Change] {
+	return &StateChannel[status.Change]{
+		&statusChangesBroadcaster{
+			storage,
+			NewChangesBroadcaster[status.Change](),
+		},
+		statusSSEChannelVariant,
 	}
-}
-
-func (sc *statusChannel) Replay(res ResponseWriter) error {
-	return res.SendChange(sc.state, sc.Variant(), string(statusReplay))
-}
-
-func (sc *statusChannel) changeHandler(res ResponseWriter, change status.Change) error {
-	return res.SendChange(sc.state, sc.Variant(), string(change.ChangeVariant))
 }
