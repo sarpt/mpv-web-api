@@ -88,23 +88,23 @@ func (s *Server) Shutdown() {
 
 // subscribeToStateChanges starts listening on state changes channels for further distribution to its observers.
 func (s *Server) subscribeToStateChanges() {
-	directoriesChannel := newDirectoriesChannel(s.statesRepository.Directories())
+	directoriesChannel := NewDirectoriesChannel(s.statesRepository.Directories())
 	s.channels[directoriesSSEChannelVariant] = directoriesChannel
 	s.statesRepository.Directories().Subscribe(directoriesChannel.BroadcastToChannelObservers, func(err error) {})
 
-	playbackChannel := newPlaybackChannel(s.statesRepository.Playback())
+	playbackChannel := NewPlaybackChannel(s.statesRepository.Playback())
 	s.channels[playbackSSEChannelVariant] = playbackChannel
 	s.statesRepository.Playback().Subscribe(playbackChannel.BroadcastToChannelObservers, func(err error) {})
 
-	playlistsChannel := newPlaylistsChannel(s.statesRepository.Playback(), s.statesRepository.Playlists())
+	playlistsChannel := NewPlaylistsChannel(s.statesRepository.Playback(), s.statesRepository.Playlists())
 	s.channels[playlistsSSEChannelVariant] = playlistsChannel
 	s.statesRepository.Playlists().Subscribe(playlistsChannel.BroadcastToChannelObservers, func(err error) {})
 
-	mediaFilesChannel := newMediaFilesChannel(s.statesRepository.MediaFiles())
+	mediaFilesChannel := NewMediaFilesChannel(s.statesRepository.MediaFiles())
 	s.channels[mediaFilesSSEChannelVariant] = mediaFilesChannel
 	s.statesRepository.MediaFiles().Subscribe(mediaFilesChannel.BroadcastToChannelObservers, func(err error) {})
 
-	statusChannel := newStatusChannel(s.statesRepository.Status())
+	statusChannel := NewStatusChannel(s.statesRepository.Status())
 	s.channels[statusSSEChannelVariant] = statusChannel
 	s.statesRepository.Status().Subscribe(statusChannel.BroadcastToChannelObservers, func(err error) {})
 }

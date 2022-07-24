@@ -12,26 +12,31 @@ const (
 	playlistsReplay state_sse.ChangeVariant = "replay"
 )
 
-type playlistsChannel struct {
-	playback *playback.Storage
-	StateChannel[*playlists.Storage, playlists.Change]
+type playlistsChangesBroadcaster struct {
+	playback  *playback.Storage
+	playlists *playlists.Storage
+	ChangesBroadcaster[playlists.Change]
 }
 
-func newPlaylistsChannel(playbackStorage *playback.Storage, playlistsStorage *playlists.Storage) *playlistsChannel {
-	return &playlistsChannel{
-		playbackStorage,
-		NewStateChannel[*playlists.Storage, playlists.Change](playlistsStorage, playlistsSSEChannelVariant),
-	}
+func (pc *playlistsChangesBroadcaster) Replay(res ResponseWriter) error {
+	return res.SendChange(pc.playlists, playlistsSSEChannelVariant, string(playlistsReplay))
 }
 
-func (pc *playlistsChannel) Replay(res ResponseWriter) error {
-	return res.SendChange(pc.state, pc.Variant(), string(playlistsReplay))
-}
-
-func (pc *playlistsChannel) changeHandler(res ResponseWriter, change playlists.Change) error {
+func (pc *playlistsChangesBroadcaster) ChangeHandler(res ResponseWriter, change playlists.Change) error {
 	if pc.playback.Stopped { // TODO: the changes are shot by state.Playback even after the mediaFilePath is cleared, as such it may be wasteful to push further changes through SSE. to think of a way to reduce number of those blank data calls after closing stopping playback
-		return res.SendEmptyChange(pc.Variant(), string(change.ChangeVariant))
+		return res.SendEmptyChange(playlistsSSEChannelVariant, string(change.ChangeVariant))
 	}
 
-	return res.SendChange(change.Playlist, pc.Variant(), string(change.ChangeVariant))
+	return res.SendChange(change.Playlist, playlistsSSEChannelVariant, string(change.ChangeVariant))
+}
+
+func NewPlaylistsChannel(playbackStorage *playback.Storage, playlistsStorage *playlists.Storage) *StateChannel[playlists.Change] {
+	return &StateChannel[playlists.Change]{
+		&playlistsChangesBroadcaster{
+			playbackStorage,
+			playlistsStorage,
+			NewChangesBroadcaster[playlists.Change](),
+		},
+		playlistsSSEChannelVariant,
+	}
 }
