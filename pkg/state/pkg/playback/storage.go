@@ -5,7 +5,6 @@ import (
 
 	"github.com/sarpt/mpv-web-api/internal/common"
 	"github.com/sarpt/mpv-web-api/pkg/state/pkg/media_files"
-	"github.com/sarpt/mpv-web-api/pkg/state/pkg/sse"
 )
 
 type SubscriberCB = func(change Change)
@@ -20,46 +19,46 @@ func (s *storageChangeSubscriber) Receive(change Change) {
 
 const (
 	// FullscreenChange notifies about fullscreen state change.
-	FullscreenChange sse.ChangeVariant = "fullscreenChange"
+	FullscreenChange common.ChangeVariant = "fullscreenChange"
 
 	// LoopFileChange notifies about change to the looping of current file.
-	LoopFileChange sse.ChangeVariant = "loopFileChange"
+	LoopFileChange common.ChangeVariant = "loopFileChange"
 
 	// PauseChange notifies about change to the playback pause state.
-	PauseChange sse.ChangeVariant = "pauseChange"
+	PauseChange common.ChangeVariant = "pauseChange"
 
 	// AudioIDChange notifies about change of currently played audio.
-	AudioIDChange sse.ChangeVariant = "audioIdChange"
+	AudioIDChange common.ChangeVariant = "audioIdChange"
 
 	// PlaybackStoppedChange notifies about playbck being stopped completely.
-	PlaybackStoppedChange sse.ChangeVariant = "playbackStoppedChange"
+	PlaybackStoppedChange common.ChangeVariant = "playbackStoppedChange"
 
 	// SubtitleIDChange notifies about change of currently shown subtitles.
-	SubtitleIDChange sse.ChangeVariant = "subtitleIdChange"
+	SubtitleIDChange common.ChangeVariant = "subtitleIdChange"
 
 	// CurrentChapterIdxChange notifies about change of currently played chapter.
-	CurrentChapterIdxChange sse.ChangeVariant = "currentChapterIndexChange"
+	CurrentChapterIdxChange common.ChangeVariant = "currentChapterIndexChange"
 
 	// MediaFileChange notifies about change of currently played mediaFile.
-	MediaFileChange sse.ChangeVariant = "mediaFileChange"
+	MediaFileChange common.ChangeVariant = "mediaFileChange"
 
 	// PlaybackTimeChange notifies about current timestamp change.
-	PlaybackTimeChange sse.ChangeVariant = "playbackTimeChange"
+	PlaybackTimeChange common.ChangeVariant = "playbackTimeChange"
 
 	// PlaylistSelectionChange notifies about change of currently played playlist.
-	PlaylistSelectionChange sse.ChangeVariant = "playlistSelectionChange"
+	PlaylistSelectionChange common.ChangeVariant = "playlistSelectionChange"
 
 	// PlaylistUnloadChange notifies about unload of playlist.
-	PlaylistUnloadChange sse.ChangeVariant = "playlistUnloadChange"
+	PlaylistUnloadChange common.ChangeVariant = "playlistUnloadChange"
 
 	// PlaylistCurrentIdxChange notifies about change of currently played entry in a selected playlist.
-	PlaylistCurrentIdxChange sse.ChangeVariant = "playlistCurrentIdxChange"
+	PlaylistCurrentIdxChange common.ChangeVariant = "playlistCurrentIdxChange"
 )
 
 // Change is used to inform about changes to the Playback.
 // TODO: implement playback change to carry information on the change (using either interfaces or generics in go2).
 type Change struct {
-	ChangeVariant sse.ChangeVariant
+	ChangeVariant common.ChangeVariant
 	Value         interface{}
 }
 
@@ -68,7 +67,7 @@ func (d Change) MarshalJSON() ([]byte, error) {
 	return json.Marshal(d.Value)
 }
 
-func (d Change) Variant() sse.ChangeVariant {
+func (d Change) Variant() common.ChangeVariant {
 	return d.ChangeVariant
 }
 

@@ -1,6 +1,7 @@
 package sse
 
 import (
+	"github.com/sarpt/mpv-web-api/internal/common"
 	"github.com/sarpt/mpv-web-api/pkg/state/pkg/playback"
 	"github.com/sarpt/mpv-web-api/pkg/state/pkg/playlists"
 	state_sse "github.com/sarpt/mpv-web-api/pkg/state/pkg/sse"
@@ -9,7 +10,7 @@ import (
 const (
 	playlistsSSEChannelVariant state_sse.ChannelVariant = "playlists"
 
-	playlistsReplay state_sse.ChangeVariant = "replay"
+	playlistsReplay common.ChangeVariant = "replay"
 )
 
 type playlistsChangesBroadcaster struct {

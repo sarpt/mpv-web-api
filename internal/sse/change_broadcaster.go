@@ -3,11 +3,11 @@ package sse
 import (
 	"sync"
 
-	"github.com/sarpt/mpv-web-api/pkg/state/pkg/sse"
+	"github.com/sarpt/mpv-web-api/internal/common"
 )
 
 type Change interface {
-	Variant() sse.ChangeVariant
+	Variant() common.ChangeVariant
 	MarshalJSON() ([]byte, error)
 }
 
