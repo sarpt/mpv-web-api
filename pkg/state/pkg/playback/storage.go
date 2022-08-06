@@ -3,12 +3,20 @@ package playback
 import (
 	"encoding/json"
 
-	"github.com/sarpt/mpv-web-api/pkg/state/internal/common"
+	"github.com/sarpt/mpv-web-api/internal/common"
 	"github.com/sarpt/mpv-web-api/pkg/state/pkg/media_files"
 	"github.com/sarpt/mpv-web-api/pkg/state/pkg/sse"
 )
 
-type Subscriber = func(change Change)
+type SubscriberCB = func(change Change)
+
+type storageChangeSubscriber struct {
+	cb SubscriberCB
+}
+
+func (s *storageChangeSubscriber) Receive(change Change) {
+	s.cb(change)
+}
 
 const (
 	// FullscreenChange notifies about fullscreen state change.
@@ -68,7 +76,7 @@ func (d Change) Variant() sse.ChangeVariant {
 type Storage struct {
 	currentTime        float64
 	currentChapterIdx  int64
-	broadcaster        *common.ChangesBroadcaster
+	broadcaster        *common.ChangesBroadcaster[Change]
 	fullscreen         bool
 	loop               Loop
 	mediaFilePath      string
@@ -95,7 +103,7 @@ type storageJSON struct {
 
 // NewStorage constructs Playback state.
 func NewStorage() *Storage {
-	broadcaster := common.NewChangesBroadcaster()
+	broadcaster := common.NewChangesBroadcaster[Change]()
 	broadcaster.Broadcast()
 
 	return &Storage{
@@ -254,15 +262,9 @@ func (p *Storage) Stop() {
 	p.Stopped = true
 }
 
-func (p *Storage) Subscribe(sub Subscriber, onError func(err error)) {
-	p.broadcaster.Subscribe(func(change interface{}) {
-		playbackChange, ok := change.(Change)
-		if !ok {
-			onError(common.ErrIncorrectChangesType)
-
-			return
-		}
-
-		sub(playbackChange)
-	})
+func (p *Storage) Subscribe(cb SubscriberCB, onError func(err error)) {
+	subscriber := storageChangeSubscriber{
+		cb,
+	}
+	p.broadcaster.Subscribe(&subscriber)
 }

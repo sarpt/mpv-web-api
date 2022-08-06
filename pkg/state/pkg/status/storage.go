@@ -4,11 +4,19 @@ import (
 	"encoding/json"
 	"sync"
 
-	"github.com/sarpt/mpv-web-api/pkg/state/internal/common"
+	"github.com/sarpt/mpv-web-api/internal/common"
 	"github.com/sarpt/mpv-web-api/pkg/state/pkg/sse"
 )
 
-type Subscriber = func(change Change)
+type SubscriberCB = func(change Change)
+
+type statusChangeSubscriber struct {
+	cb SubscriberCB
+}
+
+func (s *statusChangeSubscriber) Receive(change Change) {
+	s.cb(change)
+}
 
 const (
 	// ClientObserverAdded notifies about addition of new client observer.
@@ -42,14 +50,14 @@ func (d Change) Variant() sse.ChangeVariant {
 
 // Storage holds information about server misc status.
 type Storage struct {
-	broadcaster        *common.ChangesBroadcaster
+	broadcaster        *common.ChangesBroadcaster[Change]
 	observingAddresses map[string][]sse.ChannelVariant
 	lock               *sync.RWMutex
 }
 
 // NewStorage constructs Status state.
 func NewStorage() *Storage {
-	broadcaster := common.NewChangesBroadcaster()
+	broadcaster := common.NewChangesBroadcaster[Change]()
 	broadcaster.Broadcast()
 
 	return &Storage{
@@ -129,15 +137,9 @@ func (s *Storage) RemoveObservingAddress(remoteAddr string, observerVariant sse.
 	})
 }
 
-func (p *Storage) Subscribe(sub Subscriber, onError func(err error)) {
-	p.broadcaster.Subscribe(func(change interface{}) {
-		statusChange, ok := change.(Change)
-		if !ok {
-			onError(common.ErrIncorrectChangesType)
-
-			return
-		}
-
-		sub(statusChange)
-	})
+func (p *Storage) Subscribe(cb SubscriberCB, onError func(err error)) {
+	subscriber := statusChangeSubscriber{
+		cb,
+	}
+	p.broadcaster.Subscribe(&subscriber)
 }
