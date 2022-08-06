@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/sarpt/mpv-web-api/pkg/state/internal/common"
+	"github.com/sarpt/mpv-web-api/internal/common"
 	"github.com/sarpt/mpv-web-api/pkg/state/pkg/sse"
 )
 
@@ -25,7 +25,15 @@ const (
 	RemovedMediaFilesChange sse.ChangeVariant = "removed"
 )
 
-type Subscriber = func(change Change)
+type SubscriberCB = func(change Change)
+
+type mediaFilesChangeSubscriber struct {
+	cb SubscriberCB
+}
+
+func (s *mediaFilesChangeSubscriber) Receive(change Change) {
+	s.cb(change)
+}
 
 // Change holds information about changes to the list of mediaFiles being served.
 type Change struct {
@@ -45,14 +53,14 @@ func (mc Change) Variant() sse.ChangeVariant {
 // Storage is an aggregate state of the media files being served by the server instance.
 // Any modification done on the state should be done by exposed methods which should guarantee goroutine access safety.
 type Storage struct {
-	broadcaster *common.ChangesBroadcaster
+	broadcaster *common.ChangesBroadcaster[Change]
 	items       map[string]Entry
 	lock        *sync.RWMutex
 }
 
 // NewStorage counstructs MediaFiles state.
 func NewStorage() *Storage {
-	broadcaster := common.NewChangesBroadcaster()
+	broadcaster := common.NewChangesBroadcaster[Change]()
 	broadcaster.Broadcast()
 
 	return &Storage{
@@ -152,17 +160,12 @@ func (m *Storage) PathsUnderParent(parentPath string) []string {
 	return paths
 }
 
-func (p *Storage) Subscribe(sub Subscriber, onError func(err error)) {
-	p.broadcaster.Subscribe(func(change interface{}) {
-		mediaFilesChange, ok := change.(Change)
-		if !ok {
-			onError(common.ErrIncorrectChangesType)
+func (p *Storage) Subscribe(cb SubscriberCB, onError func(err error)) {
+	subscriber := mediaFilesChangeSubscriber{
+		cb,
+	}
 
-			return
-		}
-
-		sub(mediaFilesChange)
-	})
+	p.broadcaster.Subscribe(&subscriber)
 }
 
 // Take removes MediaFile by a provided path from the state,

@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/sarpt/mpv-web-api/pkg/state/internal/common"
+	"github.com/sarpt/mpv-web-api/internal/common"
 	"github.com/sarpt/mpv-web-api/pkg/state/pkg/sse"
 )
 
@@ -26,7 +26,15 @@ const (
 	RemovedDirectoriesChange sse.ChangeVariant = "removed"
 )
 
-type Subscriber = func(change Change)
+type SubscriberCB = func(change Change)
+
+type directoriesChangeSubscriber struct {
+	cb SubscriberCB
+}
+
+func (s *directoriesChangeSubscriber) Receive(change Change) {
+	s.cb(change)
+}
 
 // Change holds information about changes to the collection of directories being handled.
 type Change struct {
@@ -44,14 +52,14 @@ func (d Change) Variant() sse.ChangeVariant {
 }
 
 type Storage struct {
-	broadcaster *common.ChangesBroadcaster
+	broadcaster *common.ChangesBroadcaster[Change]
 	items       map[string]Entry
 	lock        *sync.RWMutex
 }
 
 // NewStorage counstructs Directories state.
 func NewStorage() *Storage {
-	broadcaster := common.NewChangesBroadcaster()
+	broadcaster := common.NewChangesBroadcaster[Change]()
 	broadcaster.Broadcast()
 
 	return &Storage{
@@ -132,17 +140,12 @@ func (d *Storage) ParentByPath(path string) (Entry, error) {
 	return dir, nil
 }
 
-func (p *Storage) Subscribe(sub Subscriber, onError func(err error)) {
-	p.broadcaster.Subscribe(func(change interface{}) {
-		directoriesChange, ok := change.(Change)
-		if !ok {
-			onError(common.ErrIncorrectChangesType)
+func (p *Storage) Subscribe(cb SubscriberCB, onError func(err error)) {
+	subscriber := directoriesChangeSubscriber{
+		cb,
+	}
 
-			return
-		}
-
-		sub(directoriesChange)
-	})
+	p.broadcaster.Subscribe(&subscriber)
 }
 
 // Take removes directory by a provided path from the state,

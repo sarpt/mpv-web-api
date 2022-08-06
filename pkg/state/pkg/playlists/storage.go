@@ -7,13 +7,22 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
-	"github.com/sarpt/mpv-web-api/pkg/state/internal/common"
+	"github.com/sarpt/mpv-web-api/internal/common"
 	"github.com/sarpt/mpv-web-api/pkg/state/pkg/sse"
 )
 
-type Subscriber = func(playlist Change)
+type SubscriberCB = func(change Change)
+
+type playlistChangeSubscriber struct {
+	cb SubscriberCB
+}
+
+func (s *playlistChangeSubscriber) Receive(change Change) {
+	s.cb(change)
+}
+
 type Storage struct {
-	broadcaster *common.ChangesBroadcaster
+	broadcaster *common.ChangesBroadcaster[Change]
 	items       map[string]*Playlist
 	lock        *sync.RWMutex
 }
@@ -55,7 +64,7 @@ func (s Change) Variant() sse.ChangeVariant {
 }
 
 func NewStorage() *Storage {
-	broadcaster := common.NewChangesBroadcaster()
+	broadcaster := common.NewChangesBroadcaster[Change]()
 	broadcaster.Broadcast()
 
 	return &Storage{
@@ -134,17 +143,12 @@ func (p *Storage) SetPlaylistEntries(uuid string, entries []Entry) error {
 	return nil
 }
 
-func (p *Storage) Subscribe(sub Subscriber, onError func(err error)) {
-	p.broadcaster.Subscribe(func(change interface{}) {
-		playlistChange, ok := change.(Change)
-		if !ok {
-			onError(common.ErrIncorrectChangesType)
+func (p *Storage) Subscribe(cb SubscriberCB, onError func(err error)) {
+	subscriber := playlistChangeSubscriber{
+		cb,
+	}
 
-			return
-		}
-
-		sub(playlistChange)
-	})
+	p.broadcaster.Subscribe(&subscriber)
 }
 
 // AddPlaylist sets items of the playlist with uuid.
