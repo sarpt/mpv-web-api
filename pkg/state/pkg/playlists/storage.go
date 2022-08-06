@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sarpt/mpv-web-api/internal/common"
-	"github.com/sarpt/mpv-web-api/pkg/state/pkg/sse"
 )
 
 type SubscriberCB = func(change Change)
@@ -33,14 +32,14 @@ type storageJSON struct {
 
 const (
 	// PlaylistsAdded notifies of a new playlist being served.
-	PlaylistsAdded sse.ChangeVariant = "added"
+	PlaylistsAdded common.ChangeVariant = "added"
 
 	// PlaylistsCurrentEntryIdxChange notifies about change to the most current idx
 	// (not neccessarily currently played by the mpv, but most recent idx in the scope of this playlist).
-	PlaylistsCurrentEntryIdxChange sse.ChangeVariant = "currentEntryIdxChange"
+	PlaylistsCurrentEntryIdxChange common.ChangeVariant = "currentEntryIdxChange"
 
 	// PlaylistsEntriesChange notifies about changes to the entries in a playlist.
-	PlaylistsEntriesChange sse.ChangeVariant = "entriesChange"
+	PlaylistsEntriesChange common.ChangeVariant = "entriesChange"
 )
 
 var (
@@ -50,7 +49,7 @@ var (
 
 // Change is used to inform about changes to the Playback.
 type Change struct {
-	ChangeVariant sse.ChangeVariant
+	ChangeVariant common.ChangeVariant
 	Playlist      *Playlist
 }
 
@@ -59,7 +58,7 @@ func (s Change) MarshalJSON() ([]byte, error) {
 	return json.Marshal(s.Playlist)
 }
 
-func (s Change) Variant() sse.ChangeVariant {
+func (s Change) Variant() common.ChangeVariant {
 	return s.ChangeVariant
 }
 

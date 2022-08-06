@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	"github.com/sarpt/mpv-web-api/internal/common"
-	"github.com/sarpt/mpv-web-api/pkg/state/pkg/sse"
 )
 
 var (
@@ -16,13 +15,13 @@ var (
 
 const (
 	// AddedMediaFilesChange notifies about addition of mediaFiles to the list of mediaFiles handled by the application.
-	AddedMediaFilesChange sse.ChangeVariant = "added"
+	AddedMediaFilesChange common.ChangeVariant = "added"
 
 	// UpdatedMediaFilesChange notifies about updates to the list of mediaFiles.
-	UpdatedMediaFilesChange sse.ChangeVariant = "updated"
+	UpdatedMediaFilesChange common.ChangeVariant = "updated"
 
 	// RemovedMediaFilesChange notifies about removal of mediaFiles from the list.
-	RemovedMediaFilesChange sse.ChangeVariant = "removed"
+	RemovedMediaFilesChange common.ChangeVariant = "removed"
 )
 
 type SubscriberCB = func(change Change)
@@ -37,7 +36,7 @@ func (s *mediaFilesChangeSubscriber) Receive(change Change) {
 
 // Change holds information about changes to the list of mediaFiles being served.
 type Change struct {
-	ChangeVariant sse.ChangeVariant
+	ChangeVariant common.ChangeVariant
 	Items         map[string]Entry
 }
 
@@ -46,7 +45,7 @@ func (mc Change) MarshalJSON() ([]byte, error) {
 	return json.Marshal(mc.Items)
 }
 
-func (mc Change) Variant() sse.ChangeVariant {
+func (mc Change) Variant() common.ChangeVariant {
 	return mc.ChangeVariant
 }
 

@@ -1,6 +1,7 @@
 package sse
 
 import (
+	"github.com/sarpt/mpv-web-api/internal/common"
 	state_sse "github.com/sarpt/mpv-web-api/pkg/state/pkg/sse"
 	"github.com/sarpt/mpv-web-api/pkg/state/pkg/status"
 )
@@ -9,7 +10,7 @@ const (
 	statusSSEChannelVariant state_sse.ChannelVariant = "status"
 
 	// statusReplay notifies about replay of status state.
-	statusReplay state_sse.ChangeVariant = "replay"
+	statusReplay common.ChangeVariant = "replay"
 )
 
 type statusChangesBroadcaster struct {

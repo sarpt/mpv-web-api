@@ -20,13 +20,13 @@ func (s *statusChangeSubscriber) Receive(change Change) {
 
 const (
 	// ClientObserverAdded notifies about addition of new client observer.
-	ClientObserverAdded sse.ChangeVariant = "client-observer-added"
+	ClientObserverAdded common.ChangeVariant = "client-observer-added"
 
 	// ClientObserverRemoved notifies about removal of connected client observer.
-	ClientObserverRemoved sse.ChangeVariant = "client-observer-removed"
+	ClientObserverRemoved common.ChangeVariant = "client-observer-removed"
 
 	// MPVProcessChanged notifies about change of mpv process (due to restart, forced close, etc.).
-	MPVProcessChanged sse.ChangeVariant = "mpv-process-changed"
+	MPVProcessChanged common.ChangeVariant = "mpv-process-changed"
 )
 
 // storageJSON is a status information in JSON form.
@@ -36,7 +36,7 @@ type storageJSON struct {
 
 // Change holds information about changes to the server misc status.
 type Change struct {
-	ChangeVariant sse.ChangeVariant
+	ChangeVariant common.ChangeVariant
 }
 
 // MarshalJSON returns change items in JSON format. Satisfies json.Marshaller.
@@ -44,7 +44,7 @@ func (d Change) MarshalJSON() ([]byte, error) {
 	return []byte{}, nil
 }
 
-func (d Change) Variant() sse.ChangeVariant {
+func (d Change) Variant() common.ChangeVariant {
 	return d.ChangeVariant
 }
 

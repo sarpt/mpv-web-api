@@ -2,12 +2,12 @@ package common
 
 import (
 	"sync"
-
-	"github.com/sarpt/mpv-web-api/pkg/state/pkg/sse"
 )
 
+type ChangeVariant string
+
 type Change interface {
-	Variant() sse.ChangeVariant
+	Variant() ChangeVariant
 }
 
 // type ChangesSubscriber = func(change interface{})
