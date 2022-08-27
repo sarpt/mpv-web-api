@@ -161,6 +161,7 @@ func (p *Storage) SetCurrentChapter(idx int64) {
 	p.currentChapterIdx = idx
 	p.broadcaster.Send(Change{
 		ChangeVariant: CurrentChapterIdxChange,
+		Value:         p.currentChapterIdx,
 	})
 }
 
