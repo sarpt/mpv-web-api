@@ -31,7 +31,6 @@ type Server struct {
 	errLog                *log.Logger
 	fsWatcher             *fsnotify.Watcher
 	mpvManager            *mpv.Manager
-	mpvSocketPath         string
 	outLog                *log.Logger
 	statesRepository      state.Repository
 	playlistFilesPrefixes []string
@@ -103,7 +102,6 @@ func NewServer(cfg Config) (*Server, error) {
 		errLog:                log.New(cfg.ErrWriter, logPrefix, log.LstdFlags),
 		fsWatcher:             watcher,
 		mpvManager:            mpv.NewManager(mpvManagerCfg),
-		mpvSocketPath:         cfg.MpvSocketPath,
 		outLog:                log.New(cfg.OutWriter, logPrefix, log.LstdFlags),
 		statesRepository:      cfg.StatesRepository,
 		playlistFilesPrefixes: cfg.PlaylistFilesPrefixes,
