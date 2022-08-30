@@ -8,6 +8,12 @@ func (s *Server) ChangeChapter(idx int64) error {
 	return s.mpvManager.ChangeChapter(idx)
 }
 
+func (s *Server) ChangeChaptersOrder(chapters []int64) error {
+	playbackTrigger := newChaptersManagerPlaybackTrigger(chapters)
+	s.addPlaybackTrigger(s.statesRepository.Playback().MediaFilePath(), playbackTrigger)
+	return nil
+}
+
 func (s *Server) ChangeFullscreen(fullscreen bool) error {
 	return s.mpvManager.ChangeFullscreen(fullscreen)
 }

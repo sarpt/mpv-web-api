@@ -4,15 +4,16 @@ import (
 	"github.com/sarpt/mpv-web-api/pkg/state/pkg/playback"
 )
 
-type playbackTriggerCondition = func(change playback.Change) bool
-type playbackTriggerHandler = func(api PluginApi)
-
 type playbackTrigger interface {
 	handler(change playback.Change, api PluginApi)
 }
 
-func (s *Server) addPlaybackTrigger(mediaFile string, trigger playbackTrigger) {
+func (s *Server) addPlaybackTrigger(mediaFilePath string, trigger playbackTrigger) {
 	s.statesRepository.Playback().Subscribe(func(change playback.Change) {
+		if s.statesRepository.Playback().MediaFilePath() != mediaFilePath {
+			return
+		}
+
 		trigger.handler(change, s)
 	}, func(err error) {})
 }
@@ -22,7 +23,7 @@ type chaptersManagerPlaybackTrigger struct {
 	currentChapterIdx int
 }
 
-func newSkipChapterPlaybackTrigger(chaptersOrder []int64) *chaptersManagerPlaybackTrigger {
+func newChaptersManagerPlaybackTrigger(chaptersOrder []int64) *chaptersManagerPlaybackTrigger {
 	return &chaptersManagerPlaybackTrigger{
 		chaptersOrder: chaptersOrder,
 	}
