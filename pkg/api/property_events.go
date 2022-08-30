@@ -125,12 +125,17 @@ func (s *Server) handleSubtitleIDChangeEvent(res mpv.ObservePropertyResponse) er
 }
 
 func (s *Server) handleChapterChangeEvent(res mpv.ObservePropertyResponse) error {
-	chapterIdx, ok := res.Data.(int64)
+	resData, ok := res.Data.(string)
 	if !ok {
+		return ErrResponseDataNotString
+	}
+
+	chapter, err := strconv.ParseInt(resData, 10, 64)
+	if err != nil {
 		return ErrResponseDataNotInt
 	}
 
-	s.statesRepository.Playback().SetCurrentChapter(chapterIdx)
+	s.statesRepository.Playback().SetCurrentChapter(chapter)
 	return nil
 }
 
