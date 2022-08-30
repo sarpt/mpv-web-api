@@ -1,5 +1,7 @@
 package api
 
+import "fmt"
+
 func (s *Server) ChangeAudio(audioId string) error {
 	return s.mpvManager.ChangeAudio(audioId)
 }
@@ -9,7 +11,11 @@ func (s *Server) ChangeChapter(idx int64) error {
 }
 
 func (s *Server) ChangeChaptersOrder(chapters []int64) error {
-	playbackTrigger := newChaptersManagerPlaybackTrigger(chapters)
+	playbackTrigger, err := newChaptersManagerPlaybackTrigger(chapters)
+	if err != nil {
+		return fmt.Errorf("could not change chapters order: %s", err)
+	}
+
 	s.addPlaybackTrigger(s.statesRepository.Playback().MediaFilePath(), playbackTrigger)
 	return nil
 }
