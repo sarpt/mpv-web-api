@@ -10,10 +10,15 @@ func (s *Server) ChangeChapter(idx int64) error {
 	return s.mpvManager.ChangeChapter(idx)
 }
 
-func (s *Server) ChangeChaptersOrder(chapters []int64) error {
+func (s *Server) ChangeChaptersOrder(chapters []int64, force bool) error {
 	playbackTrigger, err := newChaptersManagerPlaybackTrigger(chapters)
 	if err != nil {
 		return fmt.Errorf("could not change chapters order: %s", err)
+	}
+
+	if force {
+		chapter := chapters[0]
+		s.mpvManager.ChangeChapter(chapter)
 	}
 
 	s.addPlaybackTrigger(s.statesRepository.Playback().MediaFilePath(), playbackTrigger)

@@ -39,7 +39,7 @@ type Server struct {
 
 type PluginApi interface {
 	AddRootDirectories(directories []directories.Entry)
-	ChangeChaptersOrder(chapters []int64) error
+	ChangeChaptersOrder(chapters []int64, force bool) error
 	TakeDirectory(path string) (directories.Entry, error)
 	LoadPlaylist(uuid string, append bool) error
 	LoadFile(filePath string, append bool) error
