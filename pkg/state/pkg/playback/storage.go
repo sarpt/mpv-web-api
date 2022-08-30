@@ -148,6 +148,10 @@ func (p *Storage) PlaylistSelected() bool {
 	return p.PlaylistUUID() != ""
 }
 
+func (p *Storage) MediaFilePath() string {
+	return p.mediaFilePath
+}
+
 // SetAudioID changes played audio id.
 func (p *Storage) SetAudioID(aid string) {
 	p.selectedAudioID = aid

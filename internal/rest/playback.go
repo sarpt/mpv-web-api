@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/sarpt/mpv-web-api/internal/common"
 )
@@ -13,6 +14,7 @@ const (
 	appendArg       = "append"
 	audioIDArg      = "audioID"
 	chapterArg      = "chapter"
+	chaptersArgs    = "chapters"
 	fullscreenArg   = "fullscreen"
 	loopFileArg     = "loopFile"
 	pauseArg        = "pause"
@@ -23,15 +25,16 @@ const (
 )
 
 type (
-	loadFileCb          func(string, bool) error
-	changeFullscreenCb  func(bool) error
-	changeAudioCb       func(string) error
-	changeChapterCb     func(int64) error
-	changeSubtitleCb    func(string) error
-	loopFileCb          func(bool) error
-	changePauseCb       func(bool) error
-	playlistPlayIndexCb func(int) error
-	stopPlaybackCb      func() error
+	loadFileCb            func(string, bool) error
+	changeFullscreenCb    func(bool) error
+	changeAudioCb         func(string) error
+	changeChapterCb       func(int64) error
+	changeSubtitleCb      func(string) error
+	loopFileCb            func(bool) error
+	changePauseCb         func(bool) error
+	changeChaptersOrderCb func([]int64) error
+	playlistPlayIndexCb   func(int) error
+	stopPlaybackCb        func() error
 )
 
 func (s *Server) getPlaybackHandler(res http.ResponseWriter, req *http.Request) {
@@ -85,6 +88,23 @@ func (s *Server) chapterHandler(res http.ResponseWriter, req *http.Request) erro
 
 	s.outLog.Printf("changing chapter id to %d due to request from %s\n", chapterIdx, req.RemoteAddr)
 	return s.changeChapterCb(chapterIdx)
+}
+
+func (s *Server) chaptersHandler(res http.ResponseWriter, req *http.Request) error {
+	providedChaptersArg := req.PostFormValue(chaptersArgs)
+	chapters := strings.Split(providedChaptersArg, ",")
+	chapterIds := []int64{}
+	for _, chapter := range chapters {
+		chapterId, err := strconv.Atoi(chapter)
+		if err != nil {
+			return err
+		}
+
+		chapterIds = append(chapterIds, int64(chapterId))
+	}
+
+	s.outLog.Printf("changing chapters order to %s due to request from %s\n", providedChaptersArg, req.RemoteAddr)
+	return s.changeChaptersOrderCb(chapterIds)
 }
 
 func (s *Server) subtitleIDHandler(res http.ResponseWriter, req *http.Request) error {
@@ -173,6 +193,22 @@ func (s *Server) postPlaybackFormArgumentsHandlers() map[string]common.FormArgum
 		},
 		chapterArg: {
 			Handle: s.chapterHandler,
+		},
+		chaptersArgs: {
+			Handle: s.chaptersHandler,
+			Validate: func(req *http.Request) error {
+				chapters := strings.Split(req.PostFormValue(chaptersArgs), ",")
+				for _, chapter := range chapters {
+					_, err := strconv.Atoi(chapter)
+					if err == nil {
+						continue
+					}
+
+					return err
+				}
+
+				return nil
+			},
 		},
 		fullscreenArg: {
 			Handle: s.fullscreenHandler,

@@ -25,6 +25,7 @@ type Config struct {
 
 type Callbacks struct {
 	addDirectoriesCb
+	changeChaptersOrderCb
 	removeDirectoriesCb
 	loadPlaylistCb
 	loadFileCb
@@ -73,6 +74,7 @@ func (s *Server) Init(apiServer api.PluginApi) error {
 	s.changePauseCb = apiServer.ChangePause
 	s.playlistPlayIndexCb = apiServer.PlaylistPlayIndex
 	s.stopPlaybackCb = apiServer.StopPlayback
+	s.changeChaptersOrderCb = apiServer.ChangeChaptersOrder
 
 	return nil
 }
