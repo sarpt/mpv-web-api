@@ -7,7 +7,8 @@ import (
 )
 
 var (
-	errChapterNotNumber = errors.New("chapter in change is not a number")
+	errChapterNotNumber          = errors.New("chapter in change is not a number")
+	errChaptersListIncorrectSize = errors.New("chapters list should not be less than 1 element")
 )
 
 type playbackTrigger interface {
@@ -32,18 +33,18 @@ type chaptersManagerPlaybackTrigger struct {
 	currentChapterIdx int
 }
 
-func newChaptersManagerPlaybackTrigger(chaptersOrder []int64) *chaptersManagerPlaybackTrigger {
+func newChaptersManagerPlaybackTrigger(chaptersOrder []int64) (*chaptersManagerPlaybackTrigger, error) {
+	if len(chaptersOrder) < 1 {
+		return nil, errChaptersListIncorrectSize
+	}
+
 	return &chaptersManagerPlaybackTrigger{
 		chaptersOrder: chaptersOrder,
-	}
+	}, nil
 }
 
 func (t *chaptersManagerPlaybackTrigger) handler(change playback.Change, api PluginApi) error {
 	if change.Variant() != playback.CurrentChapterIdxChange {
-		return nil
-	}
-
-	if len(t.chaptersOrder) < 1 {
 		return nil
 	}
 
@@ -52,13 +53,13 @@ func (t *chaptersManagerPlaybackTrigger) handler(change playback.Change, api Plu
 		return nil
 	}
 
-	t.currentChapterIdx += 1
-	nextChapter := t.chaptersOrder[t.currentChapterIdx]
-
 	newChapter, ok := change.Value.(int64)
 	if !ok {
 		return errChapterNotNumber
 	}
+
+	t.currentChapterIdx += 1
+	nextChapter := t.chaptersOrder[t.currentChapterIdx]
 
 	if newChapter == nextChapter {
 		return nil
