@@ -16,6 +16,7 @@ const (
 	chapterArg      = "chapter"
 	chaptersArgs    = "chapters"
 	fullscreenArg   = "fullscreen"
+	forceArg        = "force"
 	loopFileArg     = "loopFile"
 	pauseArg        = "pause"
 	playlistIdxArg  = "playlistIdx"
@@ -32,7 +33,7 @@ type (
 	changeSubtitleCb      func(string) error
 	loopFileCb            func(bool) error
 	changePauseCb         func(bool) error
-	changeChaptersOrderCb func([]int64) error
+	changeChaptersOrderCb func([]int64, bool) error
 	playlistPlayIndexCb   func(int) error
 	stopPlaybackCb        func() error
 )
@@ -103,8 +104,13 @@ func (s *Server) chaptersHandler(res http.ResponseWriter, req *http.Request) err
 		chapterIds = append(chapterIds, int64(chapterId))
 	}
 
-	s.outLog.Printf("changing chapters order to %s due to request from %s\n", providedChaptersArg, req.RemoteAddr)
-	return s.changeChaptersOrderCb(chapterIds)
+	force, err := getForceArgument(req)
+	if err != nil {
+		return err
+	}
+
+	s.outLog.Printf("changing chapters order to %s (forced: %t) due to request from %s\n", providedChaptersArg, force, req.RemoteAddr)
+	return s.changeChaptersOrderCb(chapterIds, force)
 }
 
 func (s *Server) subtitleIDHandler(res http.ResponseWriter, req *http.Request) error {
@@ -180,6 +186,16 @@ func getAppendArgument(req *http.Request) (bool, error) {
 	return append, err
 }
 
+func getForceArgument(req *http.Request) (bool, error) {
+	appendArgInForm := req.PostFormValue(forceArg)
+	if appendArgInForm == "" {
+		return false, nil
+	}
+
+	append, err := strconv.ParseBool(appendArgInForm)
+	return append, err
+}
+
 func (s *Server) postPlaybackFormArgumentsHandlers() map[string]common.FormArgument {
 	return map[string]common.FormArgument{
 		appendArg: {
@@ -208,6 +224,12 @@ func (s *Server) postPlaybackFormArgumentsHandlers() map[string]common.FormArgum
 				}
 
 				return nil
+			},
+		},
+		forceArg: {
+			Validate: func(req *http.Request) error {
+				_, err := strconv.ParseBool(req.PostFormValue(forceArg))
+				return err
 			},
 		},
 		fullscreenArg: {
