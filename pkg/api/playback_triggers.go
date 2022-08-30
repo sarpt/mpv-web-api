@@ -1,11 +1,17 @@
 package api
 
 import (
+	"errors"
+
 	"github.com/sarpt/mpv-web-api/pkg/state/pkg/playback"
 )
 
+var (
+	errChapterNotNumber = errors.New("chapter in change is not a number")
+)
+
 type playbackTrigger interface {
-	handler(change playback.Change, api PluginApi)
+	handler(change playback.Change, api PluginApi) error
 }
 
 func (s *Server) addPlaybackTrigger(mediaFilePath string, trigger playbackTrigger) {
@@ -14,7 +20,10 @@ func (s *Server) addPlaybackTrigger(mediaFilePath string, trigger playbackTrigge
 			return
 		}
 
-		trigger.handler(change, s)
+		err := trigger.handler(change, s)
+		if err != nil {
+			s.errLog.Printf("playback trigger for media file \"%s\" returned error: %s", mediaFilePath, err)
+		}
 	}, func(err error) {})
 }
 
@@ -29,18 +38,18 @@ func newChaptersManagerPlaybackTrigger(chaptersOrder []int64) *chaptersManagerPl
 	}
 }
 
-func (t *chaptersManagerPlaybackTrigger) handler(change playback.Change, api PluginApi) {
+func (t *chaptersManagerPlaybackTrigger) handler(change playback.Change, api PluginApi) error {
 	if change.Variant() != playback.CurrentChapterIdxChange {
-		return
+		return nil
 	}
 
 	if len(t.chaptersOrder) < 1 {
-		return
+		return nil
 	}
 
 	if t.currentChapterIdx+1 >= len(t.chaptersOrder) {
 		t.currentChapterIdx = 0
-		return
+		return nil
 	}
 
 	t.currentChapterIdx += 1
@@ -48,12 +57,12 @@ func (t *chaptersManagerPlaybackTrigger) handler(change playback.Change, api Plu
 
 	newChapter, ok := change.Value.(int64)
 	if !ok {
-		return // TODO: add cast error handling instead silently ignoring it
+		return errChapterNotNumber
 	}
 
 	if newChapter == nextChapter {
-		return
+		return nil
 	}
 
-	api.ChangeChapter(nextChapter)
+	return api.ChangeChapter(nextChapter)
 }
