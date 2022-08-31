@@ -51,6 +51,7 @@ type PluginApi interface {
 	ChangePause(paused bool) error
 	PlaylistPlayIndex(idx int) error
 	StopPlayback() error
+	WaitUntilMediaFile(mediaFilePath string) error
 }
 
 type PluginServer interface {

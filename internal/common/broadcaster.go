@@ -2,50 +2,64 @@ package common
 
 import (
 	"sync"
+
+	"github.com/google/uuid"
 )
 
-type Subscriber[CT any] interface {
-	Receive(change CT)
+type Subscriber[T any] interface {
+	Receive(payload T, unsub func())
 }
 
-type Broadcaster[CT any] struct {
-	changes     chan CT
+type Broadcaster[T any] struct {
+	payloads    chan T
 	lock        *sync.RWMutex
-	subscribers []Subscriber[CT]
+	subscribers map[string]Subscriber[T]
 }
 
-func NewBroadcaster[CT any]() *Broadcaster[CT] {
-	return &Broadcaster[CT]{
-		changes:     make(chan CT),
+func NewBroadcaster[T any]() *Broadcaster[T] {
+	return &Broadcaster[T]{
+		payloads:    make(chan T),
 		lock:        &sync.RWMutex{},
-		subscribers: []Subscriber[CT]{},
+		subscribers: map[string]Subscriber[T]{},
 	}
 }
 
-func (cb *Broadcaster[CT]) Subscribe(sub Subscriber[CT]) {
-	cb.lock.Lock()
-	defer cb.lock.Unlock()
+// Subscribe adds subscriber to the broadcast listeneres pool.
+// Returns unsubscriber function.
+func (b *Broadcaster[T]) Subscribe(sub Subscriber[T]) func() {
+	b.lock.Lock()
+	defer b.lock.Unlock()
 
-	cb.subscribers = append(cb.subscribers, sub)
+	subUuid := uuid.NewString()
+	b.subscribers[subUuid] = sub
+
+	return func() { b.unsubscribe(subUuid) }
 }
 
-func (cb *Broadcaster[CT]) Send(payload CT) {
-	cb.changes <- payload
+func (b *Broadcaster[T]) unsubscribe(subUuid string) {
+	b.lock.Lock()
+	defer b.lock.Unlock()
+
+	delete(b.subscribers, subUuid)
 }
 
-func (cb *Broadcaster[CT]) Broadcast() {
+func (b *Broadcaster[T]) Send(payload T) {
+	b.payloads <- payload
+}
+
+func (b *Broadcaster[T]) Broadcast() {
 	go func() {
 		for {
-			change, more := <-cb.changes
+			payload, more := <-b.payloads
 			if !more {
 				return
 			}
 
-			cb.lock.RLock()
-			for _, subscriber := range cb.subscribers {
-				subscriber.Receive(change)
+			b.lock.RLock()
+			for subUuid, subscriber := range b.subscribers {
+				go subscriber.Receive(payload, func() { b.unsubscribe(subUuid) })
 			}
-			cb.lock.RUnlock()
+			b.lock.RUnlock()
 		}
 	}()
 }

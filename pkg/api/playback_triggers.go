@@ -7,49 +7,81 @@ import (
 )
 
 var (
+	errMediaFileNotString        = errors.New("media file path in change is not a string")
 	errChapterNotNumber          = errors.New("chapter in change is not a number")
 	errChaptersListIncorrectSize = errors.New("chapters list should not be less than 1 element")
 )
 
 type playbackTrigger interface {
-	handler(change playback.Change, api PluginApi) error
+	handler(change playback.Change, cancel func()) error
 }
 
-func (s *Server) addPlaybackTrigger(mediaFilePath string, trigger playbackTrigger) {
-	s.statesRepository.Playback().Subscribe(func(change playback.Change) {
-		if s.statesRepository.Playback().MediaFilePath() != mediaFilePath {
-			return
-		}
-
-		err := trigger.handler(change, s)
+func (s *Server) addPlaybackTrigger(trigger playbackTrigger) {
+	s.statesRepository.Playback().Subscribe(func(change playback.Change, unsub func()) {
+		err := trigger.handler(change, unsub)
 		if err != nil {
-			s.errLog.Printf("playback trigger for media file \"%s\" returned error: %s", mediaFilePath, err)
+			s.errLog.Printf("playback trigger for media file returned error: %s", err)
 		}
 	}, func(err error) {})
 }
 
+type mediaFileChangeTrigger struct {
+	targetMediaFilePath string
+	done                chan<- bool
+}
+
+func newMediaFileChangeTrigger(targetMediaFilePath string, done chan<- bool) (*mediaFileChangeTrigger, error) {
+	return &mediaFileChangeTrigger{
+		targetMediaFilePath: targetMediaFilePath,
+		done:                done,
+	}, nil
+}
+
+func (t *mediaFileChangeTrigger) handler(change playback.Change, cancel func()) error {
+	if change.Variant() != playback.MediaFileChange {
+		return nil
+	}
+
+	newMediaFilePath, ok := change.Value.(string)
+	if !ok {
+		return errMediaFileNotString
+	}
+
+	if newMediaFilePath != t.targetMediaFilePath {
+		return nil
+	}
+
+	cancel()
+	t.done <- true
+
+	return nil
+}
+
 type chaptersManagerPlaybackTrigger struct {
+	api               PluginApi
 	chaptersOrder     []int64
 	currentChapterIdx int
 }
 
-func newChaptersManagerPlaybackTrigger(chaptersOrder []int64) (*chaptersManagerPlaybackTrigger, error) {
+func newChaptersManagerPlaybackTrigger(chaptersOrder []int64, api PluginApi) (*chaptersManagerPlaybackTrigger, error) {
 	if len(chaptersOrder) < 1 {
 		return nil, errChaptersListIncorrectSize
 	}
 
 	return &chaptersManagerPlaybackTrigger{
-		chaptersOrder: chaptersOrder,
+		api:               api,
+		chaptersOrder:     chaptersOrder,
+		currentChapterIdx: -1,
 	}, nil
 }
 
-func (t *chaptersManagerPlaybackTrigger) handler(change playback.Change, api PluginApi) error {
+func (t *chaptersManagerPlaybackTrigger) handler(change playback.Change, cancel func()) error {
 	if change.Variant() != playback.CurrentChapterIdxChange {
 		return nil
 	}
 
 	if t.currentChapterIdx+1 >= len(t.chaptersOrder) {
-		t.currentChapterIdx = 0
+		t.currentChapterIdx = -1
 		return nil
 	}
 
@@ -58,12 +90,16 @@ func (t *chaptersManagerPlaybackTrigger) handler(change playback.Change, api Plu
 		return errChapterNotNumber
 	}
 
-	t.currentChapterIdx += 1
-	nextChapter := t.chaptersOrder[t.currentChapterIdx]
+	var currentChapter int64 = -1
+	if t.currentChapterIdx >= 0 {
+		currentChapter = t.chaptersOrder[t.currentChapterIdx]
+	}
 
-	if newChapter == nextChapter {
+	nextChapter := t.chaptersOrder[t.currentChapterIdx+1]
+	if currentChapter == newChapter || nextChapter == newChapter {
 		return nil
 	}
 
-	return api.ChangeChapter(nextChapter)
+	t.currentChapterIdx += 1
+	return t.api.ChangeChapter(nextChapter)
 }

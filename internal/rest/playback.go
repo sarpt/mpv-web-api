@@ -36,6 +36,7 @@ type (
 	changeChaptersOrderCb func([]int64, bool) error
 	playlistPlayIndexCb   func(int) error
 	stopPlaybackCb        func() error
+	waitUntilMediaFileCb  func(string) error
 )
 
 func (s *Server) getPlaybackHandler(res http.ResponseWriter, req *http.Request) {
@@ -94,6 +95,7 @@ func (s *Server) chapterHandler(res http.ResponseWriter, req *http.Request) erro
 func (s *Server) chaptersHandler(res http.ResponseWriter, req *http.Request) error {
 	providedChaptersArg := req.PostFormValue(chaptersArgs)
 	chapters := strings.Split(providedChaptersArg, ",")
+
 	chapterIds := []int64{}
 	for _, chapter := range chapters {
 		chapterId, err := strconv.Atoi(chapter)
@@ -107,6 +109,11 @@ func (s *Server) chaptersHandler(res http.ResponseWriter, req *http.Request) err
 	force, err := getForceArgument(req)
 	if err != nil {
 		return err
+	}
+
+	filePath := req.PostFormValue(pathArg)
+	if filePath != "" {
+		s.waitUntilMediaFileCb(filePath)
 	}
 
 	s.outLog.Printf("changing chapters order to %s (forced: %t) due to request from %s\n", providedChaptersArg, force, req.RemoteAddr)

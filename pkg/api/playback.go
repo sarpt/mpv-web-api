@@ -11,7 +11,7 @@ func (s *Server) ChangeChapter(idx int64) error {
 }
 
 func (s *Server) ChangeChaptersOrder(chapters []int64, force bool) error {
-	playbackTrigger, err := newChaptersManagerPlaybackTrigger(chapters)
+	playbackTrigger, err := newChaptersManagerPlaybackTrigger(chapters, s)
 	if err != nil {
 		return fmt.Errorf("could not change chapters order: %s", err)
 	}
@@ -21,7 +21,24 @@ func (s *Server) ChangeChaptersOrder(chapters []int64, force bool) error {
 		s.mpvManager.ChangeChapter(chapter)
 	}
 
-	s.addPlaybackTrigger(s.statesRepository.Playback().MediaFilePath(), playbackTrigger)
+	s.addPlaybackTrigger(playbackTrigger)
+	return nil
+}
+
+func (s *Server) WaitUntilMediaFile(mediaFilePath string) error {
+	if s.statesRepository.Playback().MediaFilePath() == mediaFilePath {
+		return nil
+	}
+
+	done := make(chan bool)
+	mediaFiletrigger, err := newMediaFileChangeTrigger(mediaFilePath, done)
+	if err != nil {
+		return fmt.Errorf("could not change chapters order: %s", err)
+	}
+
+	s.addPlaybackTrigger(mediaFiletrigger)
+	<-done
+
 	return nil
 }
 

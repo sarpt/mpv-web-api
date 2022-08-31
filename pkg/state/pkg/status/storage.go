@@ -8,14 +8,14 @@ import (
 	"github.com/sarpt/mpv-web-api/pkg/state/pkg/sse"
 )
 
-type SubscriberCB = func(change Change)
+type SubscriberCB = func(change Change, unsub func())
 
 type statusChangeSubscriber struct {
 	cb SubscriberCB
 }
 
-func (s *statusChangeSubscriber) Receive(change Change) {
-	s.cb(change)
+func (s *statusChangeSubscriber) Receive(change Change, unsub func()) {
+	s.cb(change, unsub)
 }
 
 const (
