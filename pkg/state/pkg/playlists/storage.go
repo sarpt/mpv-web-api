@@ -10,14 +10,14 @@ import (
 	"github.com/sarpt/mpv-web-api/internal/common"
 )
 
-type SubscriberCB = func(change Change)
+type SubscriberCB = func(change Change, unsub func())
 
 type playlistChangeSubscriber struct {
 	cb SubscriberCB
 }
 
-func (s *playlistChangeSubscriber) Receive(change Change) {
-	s.cb(change)
+func (s *playlistChangeSubscriber) Receive(change Change, unsub func()) {
+	s.cb(change, unsub)
 }
 
 type Storage struct {

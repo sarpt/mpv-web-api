@@ -25,14 +25,14 @@ const (
 	RemovedDirectoriesChange common.ChangeVariant = "removed"
 )
 
-type SubscriberCB = func(change Change)
+type SubscriberCB = func(change Change, unsub func())
 
 type directoriesChangeSubscriber struct {
 	cb SubscriberCB
 }
 
-func (s *directoriesChangeSubscriber) Receive(change Change) {
-	s.cb(change)
+func (s *directoriesChangeSubscriber) Receive(change Change, unsub func()) {
+	s.cb(change, unsub)
 }
 
 // Change holds information about changes to the collection of directories being handled.

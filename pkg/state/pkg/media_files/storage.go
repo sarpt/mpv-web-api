@@ -24,14 +24,14 @@ const (
 	RemovedMediaFilesChange common.ChangeVariant = "removed"
 )
 
-type SubscriberCB = func(change Change)
+type SubscriberCB = func(change Change, unsub func())
 
 type mediaFilesChangeSubscriber struct {
 	cb SubscriberCB
 }
 
-func (s *mediaFilesChangeSubscriber) Receive(change Change) {
-	s.cb(change)
+func (s *mediaFilesChangeSubscriber) Receive(change Change, unsub func()) {
+	s.cb(change, unsub)
 }
 
 // Change holds information about changes to the list of mediaFiles being served.
