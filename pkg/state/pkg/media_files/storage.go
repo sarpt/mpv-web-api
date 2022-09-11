@@ -24,14 +24,14 @@ const (
 	RemovedMediaFilesChange common.ChangeVariant = "removed"
 )
 
-type SubscriberCB = func(change Change, unsub func())
+type SubscriberCB = func(change Change)
 
 type mediaFilesChangeSubscriber struct {
 	cb SubscriberCB
 }
 
-func (s *mediaFilesChangeSubscriber) Receive(change Change, unsub func()) {
-	s.cb(change, unsub)
+func (s *mediaFilesChangeSubscriber) Receive(change Change) {
+	s.cb(change)
 }
 
 // Change holds information about changes to the list of mediaFiles being served.
@@ -159,12 +159,12 @@ func (m *Storage) PathsUnderParent(parentPath string) []string {
 	return paths
 }
 
-func (p *Storage) Subscribe(cb SubscriberCB, onError func(err error)) {
+func (p *Storage) Subscribe(cb SubscriberCB, onError func(err error)) func() {
 	subscriber := mediaFilesChangeSubscriber{
 		cb,
 	}
 
-	p.broadcaster.Subscribe(&subscriber)
+	return p.broadcaster.Subscribe(&subscriber)
 }
 
 // Take removes MediaFile by a provided path from the state,

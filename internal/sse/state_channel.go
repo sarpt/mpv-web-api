@@ -12,7 +12,7 @@ type stateChangeBroadcaster[CT Change] interface {
 	Replay(res ResponseWriter) error
 	ChangeHandler(res ResponseWriter, change CT) error
 	Observer(address string) (chan CT, bool)
-	BroadcastToChannelObservers(change CT, unsub func())
+	BroadcastToChannelObservers(change CT)
 }
 
 type StateChannel[CT Change] struct {

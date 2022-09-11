@@ -8,14 +8,14 @@ import (
 	"github.com/sarpt/mpv-web-api/pkg/state/pkg/sse"
 )
 
-type SubscriberCB = func(change Change, unsub func())
+type SubscriberCB = func(change Change)
 
 type statusChangeSubscriber struct {
 	cb SubscriberCB
 }
 
-func (s *statusChangeSubscriber) Receive(change Change, unsub func()) {
-	s.cb(change, unsub)
+func (s *statusChangeSubscriber) Receive(change Change) {
+	s.cb(change)
 }
 
 const (
@@ -137,9 +137,9 @@ func (s *Storage) RemoveObservingAddress(remoteAddr string, observerVariant sse.
 	})
 }
 
-func (p *Storage) Subscribe(cb SubscriberCB, onError func(err error)) {
+func (p *Storage) Subscribe(cb SubscriberCB, onError func(err error)) func() {
 	subscriber := statusChangeSubscriber{
 		cb,
 	}
-	p.broadcaster.Subscribe(&subscriber)
+	return p.broadcaster.Subscribe(&subscriber)
 }

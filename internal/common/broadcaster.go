@@ -7,7 +7,7 @@ import (
 )
 
 type Subscriber[T any] interface {
-	Receive(payload T, unsub func())
+	Receive(payload T)
 }
 
 type Broadcaster[T any] struct {
@@ -56,8 +56,8 @@ func (b *Broadcaster[T]) Broadcast() {
 			}
 
 			b.lock.RLock()
-			for subUuid, subscriber := range b.subscribers {
-				go subscriber.Receive(payload, func() { b.unsubscribe(subUuid) })
+			for _, subscriber := range b.subscribers {
+				go subscriber.Receive(payload)
 			}
 			b.lock.RUnlock()
 		}

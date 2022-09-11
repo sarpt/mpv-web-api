@@ -143,7 +143,7 @@ func (s *Server) readPlaylistFile(path string) (PlaylistFile, error) {
 	return Playlist, nil
 }
 
-func (s *Server) handlePlaylistRelatedPlaybackChanges(change playback.Change, unsub func()) {
+func (s *Server) handlePlaylistRelatedPlaybackChanges(change playback.Change) {
 	if change.ChangeVariant != playback.PlaylistUnloadChange && change.ChangeVariant != playback.PlaylistCurrentIdxChange {
 		return
 	}

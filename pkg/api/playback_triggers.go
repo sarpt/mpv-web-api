@@ -13,12 +13,12 @@ var (
 )
 
 type playbackTrigger interface {
-	handler(change playback.Change, cancel func()) error
+	handler(change playback.Change) error
 }
 
-func (s *Server) addPlaybackTrigger(trigger playbackTrigger) {
-	s.statesRepository.Playback().Subscribe(func(change playback.Change, unsub func()) {
-		err := trigger.handler(change, unsub)
+func (s *Server) addPlaybackTrigger(trigger playbackTrigger) func() {
+	return s.statesRepository.Playback().Subscribe(func(change playback.Change) {
+		err := trigger.handler(change)
 		if err != nil {
 			s.errLog.Printf("playback trigger for media file returned error: %s", err)
 		}
@@ -37,7 +37,7 @@ func newMediaFileChangeTrigger(targetMediaFilePath string, done chan<- bool) (*m
 	}, nil
 }
 
-func (t *mediaFileChangeTrigger) handler(change playback.Change, cancel func()) error {
+func (t *mediaFileChangeTrigger) handler(change playback.Change) error {
 	if change.Variant() != playback.MediaFileChange {
 		return nil
 	}
@@ -51,7 +51,6 @@ func (t *mediaFileChangeTrigger) handler(change playback.Change, cancel func()) 
 		return nil
 	}
 
-	cancel()
 	t.done <- true
 
 	return nil
@@ -75,13 +74,12 @@ func newChaptersManagerPlaybackTrigger(chaptersOrder []int64, api PluginApi) (*c
 	}, nil
 }
 
-func (t *chaptersManagerPlaybackTrigger) handler(change playback.Change, cancel func()) error {
+func (t *chaptersManagerPlaybackTrigger) handler(change playback.Change) error {
 	if change.Variant() != playback.CurrentChapterIdxChange {
 		return nil
 	}
 
 	if t.currentChapterIdx+1 >= len(t.chaptersOrder) {
-		t.currentChapterIdx = -1
 		return nil
 	}
 

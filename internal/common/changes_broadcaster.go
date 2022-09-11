@@ -7,7 +7,7 @@ type Change interface {
 }
 
 type ChangesSubscriber[CT Change] interface {
-	Receive(change CT, unsub func())
+	Receive(change CT)
 }
 
 type ChangesBroadcaster[CT Change] struct {
