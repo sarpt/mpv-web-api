@@ -10,14 +10,14 @@ import (
 	"github.com/sarpt/mpv-web-api/internal/common"
 )
 
-type SubscriberCB = func(change Change, unsub func())
+type SubscriberCB = func(change Change)
 
 type playlistChangeSubscriber struct {
 	cb SubscriberCB
 }
 
-func (s *playlistChangeSubscriber) Receive(change Change, unsub func()) {
-	s.cb(change, unsub)
+func (s *playlistChangeSubscriber) Receive(change Change) {
+	s.cb(change)
 }
 
 type Storage struct {
@@ -142,12 +142,12 @@ func (p *Storage) SetPlaylistEntries(uuid string, entries []Entry) error {
 	return nil
 }
 
-func (p *Storage) Subscribe(cb SubscriberCB, onError func(err error)) {
+func (p *Storage) Subscribe(cb SubscriberCB, onError func(err error)) func() {
 	subscriber := playlistChangeSubscriber{
 		cb,
 	}
 
-	p.broadcaster.Subscribe(&subscriber)
+	return p.broadcaster.Subscribe(&subscriber)
 }
 
 // AddPlaylist sets items of the playlist with uuid.

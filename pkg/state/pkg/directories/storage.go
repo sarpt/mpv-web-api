@@ -25,14 +25,14 @@ const (
 	RemovedDirectoriesChange common.ChangeVariant = "removed"
 )
 
-type SubscriberCB = func(change Change, unsub func())
+type SubscriberCB = func(change Change)
 
 type directoriesChangeSubscriber struct {
 	cb SubscriberCB
 }
 
-func (s *directoriesChangeSubscriber) Receive(change Change, unsub func()) {
-	s.cb(change, unsub)
+func (s *directoriesChangeSubscriber) Receive(change Change) {
+	s.cb(change)
 }
 
 // Change holds information about changes to the collection of directories being handled.
@@ -139,12 +139,12 @@ func (d *Storage) ParentByPath(path string) (Entry, error) {
 	return dir, nil
 }
 
-func (p *Storage) Subscribe(cb SubscriberCB, onError func(err error)) {
+func (p *Storage) Subscribe(cb SubscriberCB, onError func(err error)) func() {
 	subscriber := directoriesChangeSubscriber{
 		cb,
 	}
 
-	p.broadcaster.Subscribe(&subscriber)
+	return p.broadcaster.Subscribe(&subscriber)
 }
 
 // Take removes directory by a provided path from the state,

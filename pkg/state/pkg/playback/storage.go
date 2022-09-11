@@ -7,14 +7,14 @@ import (
 	"github.com/sarpt/mpv-web-api/pkg/state/pkg/media_files"
 )
 
-type SubscriberCB = func(change Change, unsub func())
+type SubscriberCB = func(change Change)
 
 type storageChangeSubscriber struct {
 	cb SubscriberCB
 }
 
-func (s *storageChangeSubscriber) Receive(change Change, unsub func()) {
-	s.cb(change, unsub)
+func (s *storageChangeSubscriber) Receive(change Change) {
+	s.cb(change)
 }
 
 const (
@@ -267,9 +267,9 @@ func (p *Storage) Stop() {
 	p.Stopped = true
 }
 
-func (p *Storage) Subscribe(cb SubscriberCB, onError func(err error)) {
+func (p *Storage) Subscribe(cb SubscriberCB, onError func(err error)) func() {
 	subscriber := storageChangeSubscriber{
 		cb,
 	}
-	p.broadcaster.Subscribe(&subscriber)
+	return p.broadcaster.Subscribe(&subscriber)
 }

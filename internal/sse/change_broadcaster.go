@@ -45,7 +45,7 @@ func (st *ChangesBroadcaster[CT]) RemoveObserver(address string) {
 	delete(st.observers, address)
 }
 
-func (st *ChangesBroadcaster[CT]) BroadcastToChannelObservers(change CT, unsub func()) {
+func (st *ChangesBroadcaster[CT]) BroadcastToChannelObservers(change CT) {
 	st.lock.RLock()
 	defer st.lock.RUnlock()
 

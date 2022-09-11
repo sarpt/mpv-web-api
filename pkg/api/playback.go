@@ -36,8 +36,9 @@ func (s *Server) WaitUntilMediaFile(mediaFilePath string) error {
 		return fmt.Errorf("could not change chapters order: %s", err)
 	}
 
-	s.addPlaybackTrigger(mediaFiletrigger)
+	unsub := s.addPlaybackTrigger(mediaFiletrigger)
 	<-done
+	unsub()
 
 	return nil
 }
