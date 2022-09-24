@@ -11,7 +11,8 @@ func (s *Server) ChangeChapter(idx int64) error {
 }
 
 func (s *Server) ChangeChaptersOrder(chapters []int64, force bool) error {
-	playbackTrigger, err := newChaptersManagerPlaybackTrigger(chapters, s)
+	notifications := make(chan ChapterManagerTriggerNotification)
+	playbackTrigger, err := newChaptersManagerTrigger(chapters, s, notifications)
 	if err != nil {
 		return fmt.Errorf("could not change chapters order: %s", err)
 	}
@@ -21,7 +22,17 @@ func (s *Server) ChangeChaptersOrder(chapters []int64, force bool) error {
 		s.mpvManager.ChangeChapter(chapter)
 	}
 
-	s.addPlaybackTrigger(playbackTrigger)
+	unsub := s.addPlaybackTrigger(playbackTrigger)
+	go func() {
+		for {
+			notif, more := <-notifications
+			if notif == ChaptersIterationDone || !more {
+				unsub()
+				return
+			}
+		}
+	}()
+
 	return nil
 }
 
@@ -30,15 +41,22 @@ func (s *Server) WaitUntilMediaFile(mediaFilePath string) error {
 		return nil
 	}
 
-	done := make(chan bool)
-	mediaFiletrigger, err := newMediaFileChangeTrigger(mediaFilePath, done)
+	notifications := make(chan MediaFileChangeTriggerNotification)
+	mediaFiletrigger, err := newMediaFileChangeTrigger(mediaFilePath, notifications)
 	if err != nil {
 		return fmt.Errorf("could not change chapters order: %s", err)
 	}
 
 	unsub := s.addPlaybackTrigger(mediaFiletrigger)
-	<-done
-	unsub()
+	go func() {
+		for {
+			notif, more := <-notifications
+			if notif == ChangedMediaFileMatches || !more {
+				unsub()
+				return
+			}
+		}
+	}()
 
 	return nil
 }

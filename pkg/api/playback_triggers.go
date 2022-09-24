@@ -6,10 +6,20 @@ import (
 	"github.com/sarpt/mpv-web-api/pkg/state/pkg/playback"
 )
 
+type MediaFileChangeTriggerNotification string
+type ChapterManagerTriggerNotification string
+
 var (
 	errMediaFileNotString        = errors.New("media file path in change is not a string")
 	errChapterNotNumber          = errors.New("chapter in change is not a number")
 	errChaptersListIncorrectSize = errors.New("chapters list should not be less than 1 element")
+
+	ChangedMediaFileDoesNotMatch MediaFileChangeTriggerNotification = "Changed media file does not match provided target"
+	ChangedMediaFileMatches      MediaFileChangeTriggerNotification = "Changed media file matches provided target"
+
+	ChaptersIterationDone     ChapterManagerTriggerNotification = "All provided chapters iterated"
+	NextChapterAlreadyPlaying ChapterManagerTriggerNotification = "Next chapter in iteration order is already playing"
+	TriggeringChapterChange   ChapterManagerTriggerNotification = "Triggering next chapter change"
 )
 
 type playbackTrigger interface {
@@ -27,13 +37,13 @@ func (s *Server) addPlaybackTrigger(trigger playbackTrigger) func() {
 
 type mediaFileChangeTrigger struct {
 	targetMediaFilePath string
-	done                chan<- bool
+	notifications       chan<- MediaFileChangeTriggerNotification
 }
 
-func newMediaFileChangeTrigger(targetMediaFilePath string, done chan<- bool) (*mediaFileChangeTrigger, error) {
+func newMediaFileChangeTrigger(targetMediaFilePath string, notifications chan<- MediaFileChangeTriggerNotification) (*mediaFileChangeTrigger, error) {
 	return &mediaFileChangeTrigger{
 		targetMediaFilePath: targetMediaFilePath,
-		done:                done,
+		notifications:       notifications,
 	}, nil
 }
 
@@ -48,38 +58,42 @@ func (t *mediaFileChangeTrigger) handler(change playback.Change) error {
 	}
 
 	if newMediaFilePath != t.targetMediaFilePath {
+		t.notifications <- ChangedMediaFileDoesNotMatch
 		return nil
 	}
 
-	t.done <- true
+	t.notifications <- ChangedMediaFileMatches
 
 	return nil
 }
 
-type chaptersManagerPlaybackTrigger struct {
+type chaptersManagerTrigger struct {
 	api               PluginApi
 	chaptersOrder     []int64
 	currentChapterIdx int
+	notifications     chan<- ChapterManagerTriggerNotification
 }
 
-func newChaptersManagerPlaybackTrigger(chaptersOrder []int64, api PluginApi) (*chaptersManagerPlaybackTrigger, error) {
+func newChaptersManagerTrigger(chaptersOrder []int64, api PluginApi, notifications chan<- ChapterManagerTriggerNotification) (*chaptersManagerTrigger, error) {
 	if len(chaptersOrder) < 1 {
 		return nil, errChaptersListIncorrectSize
 	}
 
-	return &chaptersManagerPlaybackTrigger{
+	return &chaptersManagerTrigger{
 		api:               api,
 		chaptersOrder:     chaptersOrder,
 		currentChapterIdx: -1,
+		notifications:     notifications,
 	}, nil
 }
 
-func (t *chaptersManagerPlaybackTrigger) handler(change playback.Change) error {
+func (t *chaptersManagerTrigger) handler(change playback.Change) error {
 	if change.Variant() != playback.CurrentChapterIdxChange {
 		return nil
 	}
 
 	if t.currentChapterIdx+1 >= len(t.chaptersOrder) {
+		t.notifications <- ChaptersIterationDone
 		return nil
 	}
 
@@ -95,9 +109,11 @@ func (t *chaptersManagerPlaybackTrigger) handler(change playback.Change) error {
 
 	nextChapter := t.chaptersOrder[t.currentChapterIdx+1]
 	if currentChapter == newChapter || nextChapter == newChapter {
+		t.notifications <- NextChapterAlreadyPlaying
 		return nil
 	}
 
 	t.currentChapterIdx += 1
+	t.notifications <- TriggeringChapterChange
 	return t.api.ChangeChapter(nextChapter)
 }
