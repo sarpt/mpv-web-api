@@ -3,35 +3,34 @@ package media_files
 import (
 	"encoding/json"
 
+	"github.com/google/uuid"
 	"github.com/sarpt/mpv-web-api/pkg/probe"
 )
 
 // Entry specifies information about a media file that can be played.
-// TODO: Add id to mediaFile - currently "path" is assumed to be unique,
-// but in case in future mutliple mpv-web-api servers are serving from different
-// machines, the path may not be unique from the api user pov
-// (either randomly generate one or sth else)
 type Entry struct {
-	title           string
+	audioStreams    []probe.AudioStream
+	chapters        []probe.Chapter
+	duration        float64
 	formatName      string
 	formatLongName  string
-	chapters        []probe.Chapter
-	audioStreams    []probe.AudioStream
-	duration        float64
 	path            string
 	subtitleStreams []probe.SubtitleStream
+	title           string
+	uuid            string
 	videoStreams    []probe.VideoStream
 }
 
 type entryJSON struct {
-	Title           string                 `json:"Title"`
+	AudioStreams    []probe.AudioStream    `json:"AudioStreams"`
+	Chapters        []probe.Chapter        `json:"Chapters"`
+	Duration        float64                `json:"Duration"`
 	FormatName      string                 `json:"FormatName"`
 	FormatLongName  string                 `json:"FormatLongName"`
-	Chapters        []probe.Chapter        `json:"Chapters"`
-	AudioStreams    []probe.AudioStream    `json:"AudioStreams"`
-	Duration        float64                `json:"Duration"`
 	Path            string                 `json:"Path"`
 	SubtitleStreams []probe.SubtitleStream `json:"SubtitleStreams"`
+	Title           string                 `json:"Title"`
+	UUID            string                 `json:"UUID"`
 	VideoStreams    []probe.VideoStream    `json:"VideoStreams"`
 }
 
@@ -46,6 +45,7 @@ func (m Entry) MarshalJSON() ([]byte, error) {
 		Duration:        m.duration,
 		Path:            m.path,
 		SubtitleStreams: m.subtitleStreams,
+		UUID:            m.uuid,
 		VideoStreams:    m.videoStreams,
 	}
 
@@ -59,15 +59,18 @@ func (m *Entry) Path() string {
 
 // MapProbeResultToMediaFile constructs new MediaFile from results returned by probing for media files.
 func MapProbeResultToMediaFile(result probe.Result) Entry {
+	uuid := uuid.NewString()
+
 	return Entry{
 		title:           result.Format.Title,
 		formatName:      result.Format.Name,
 		formatLongName:  result.Format.LongName,
 		chapters:        result.Chapters,
 		path:            result.Path,
-		videoStreams:    result.VideoStreams,
 		audioStreams:    result.AudioStreams,
 		subtitleStreams: result.SubtitleStreams,
 		duration:        result.Format.Duration,
+		uuid:            uuid,
+		videoStreams:    result.VideoStreams,
 	}
 }

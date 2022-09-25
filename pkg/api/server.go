@@ -43,6 +43,7 @@ type PluginApi interface {
 	TakeDirectory(path string) (directories.Entry, error)
 	LoadPlaylist(uuid string, append bool) error
 	LoadFile(filePath string, append bool) error
+	LoadFileByUuid(uuid string, append bool) error
 	ChangeFullscreen(fullscreen bool) error
 	ChangeAudio(audioId string) error
 	ChangeChapter(idx int64) error

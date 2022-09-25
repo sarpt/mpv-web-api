@@ -2,6 +2,7 @@ package rest
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -25,8 +26,13 @@ const (
 	subtitleIDArg   = "subtitleID"
 )
 
+var (
+	ErrPathAndUuidProvidedTogether = errors.New("path and uuid arguments should not be provided together in the same request")
+)
+
 type (
 	loadFileCb            func(string, bool) error
+	loadFileByUuidCb      func(string, bool) error
 	changeFullscreenCb    func(bool) error
 	changeAudioCb         func(string) error
 	changeChapterCb       func(int64) error
@@ -63,6 +69,19 @@ func (s *Server) pathHandler(res http.ResponseWriter, req *http.Request) error {
 	s.outLog.Printf("loading file '%s' with '%t' argument due to request from %s\n", filePath, append, req.RemoteAddr)
 
 	return s.loadFileCb(filePath, append)
+}
+
+func (s *Server) uuidHandler(res http.ResponseWriter, req *http.Request) error {
+	uuid := req.PostFormValue(uuidArg)
+
+	append, err := getAppendArgument(req)
+	if err != nil {
+		return err
+	}
+
+	s.outLog.Printf("loading file by UUID '%s' with '%t' argument due to request from %s\n", uuid, append, req.RemoteAddr)
+
+	return s.loadFileByUuidCb(uuid, append)
 }
 
 func (s *Server) fullscreenHandler(res http.ResponseWriter, req *http.Request) error {
@@ -256,6 +275,26 @@ func (s *Server) postPlaybackFormArgumentsHandlers() map[string]common.FormArgum
 		pathArg: {
 			Handle:   s.pathHandler,
 			Priority: 1,
+			Validate: func(req *http.Request) error {
+				uuid := req.PostFormValue(uuidArg)
+				if uuid != "" {
+					return ErrPathAndUuidProvidedTogether
+				}
+
+				return nil
+			},
+		},
+		uuidArg: {
+			Handle:   s.uuidHandler,
+			Priority: 1,
+			Validate: func(req *http.Request) error {
+				path := req.PostFormValue(pathArg)
+				if path != "" {
+					return ErrPathAndUuidProvidedTogether
+				}
+
+				return nil
+			},
 		},
 		pauseArg: {
 			Handle: s.pauseHandler,
