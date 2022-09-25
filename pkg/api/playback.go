@@ -1,6 +1,10 @@
 package api
 
-import "fmt"
+import (
+	"fmt"
+
+	playbackTriggers "github.com/sarpt/mpv-web-api/pkg/api/internal/playback_triggers"
+)
 
 func (s *Server) ChangeAudio(audioId string) error {
 	return s.mpvManager.ChangeAudio(audioId)
@@ -11,8 +15,8 @@ func (s *Server) ChangeChapter(idx int64) error {
 }
 
 func (s *Server) ChangeChaptersOrder(chapters []int64, force bool) error {
-	notifications := make(chan ChapterManagerTriggerNotification)
-	playbackTrigger, err := newChaptersManagerTrigger(chapters, s, notifications)
+	notifications := make(chan playbackTriggers.ChapterManagerNotification)
+	playbackTrigger, err := playbackTriggers.NewChaptersManager(chapters, s, notifications)
 	if err != nil {
 		return fmt.Errorf("could not change chapters order: %s", err)
 	}
@@ -26,7 +30,7 @@ func (s *Server) ChangeChaptersOrder(chapters []int64, force bool) error {
 	go func() {
 		for {
 			notif, more := <-notifications
-			if notif == ChaptersIterationDone || !more {
+			if notif == playbackTriggers.ChaptersIterationDone || !more {
 				unsub()
 				return
 			}
@@ -41,8 +45,8 @@ func (s *Server) WaitUntilMediaFile(mediaFilePath string) error {
 		return nil
 	}
 
-	notifications := make(chan MediaFileChangeTriggerNotification)
-	mediaFiletrigger, err := newMediaFileChangeTrigger(mediaFilePath, notifications)
+	notifications := make(chan playbackTriggers.MediaFileChangeNotification)
+	mediaFiletrigger, err := playbackTriggers.NewMediaFileChange(mediaFilePath, notifications)
 	if err != nil {
 		return fmt.Errorf("could not change chapters order: %s", err)
 	}
@@ -51,7 +55,7 @@ func (s *Server) WaitUntilMediaFile(mediaFilePath string) error {
 	go func() {
 		for {
 			notif, more := <-notifications
-			if notif == ChangedMediaFileMatches || !more {
+			if notif == playbackTriggers.ChangedMediaFileMatches || !more {
 				unsub()
 				return
 			}
