@@ -119,6 +119,10 @@ func (p *Storage) Clear() {
 	}
 }
 
+func (p *Storage) LoopFile() bool {
+	return p.loop.variant == offLoop
+}
+
 // MarshalJSON satisifes json.Marshaller.
 func (p *Storage) MarshalJSON() ([]byte, error) {
 	pJSON := storageJSON{
