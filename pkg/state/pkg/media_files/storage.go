@@ -136,6 +136,27 @@ func (m *Storage) ByParent(parentPath string) []Entry {
 	return mediaFiles
 }
 
+// ByUuid returns a MediaFile by a provided uuid.
+// When media file cannot be found, the error is being reported.
+func (m *Storage) ByUuid(uuid string) (Entry, error) {
+	m.lock.RLock()
+	defer m.lock.RUnlock()
+
+	var foundMediaFile *Entry
+	for _, mediaFile := range m.items {
+		if mediaFile.uuid == uuid {
+			foundMediaFile = &mediaFile
+			break
+		}
+	}
+
+	if foundMediaFile == nil {
+		return Entry{}, errNoMediaFileAvailable
+	}
+
+	return *foundMediaFile, nil
+}
+
 // Exists checks whether media file with provided path exists.
 func (m *Storage) Exists(path string) bool {
 	_, err := m.ByPath(path)

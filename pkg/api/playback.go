@@ -95,6 +95,17 @@ func (s *Server) LoadFile(filePath string, append bool) error {
 	return s.mpvManager.LoadFile(filePath, append)
 }
 
+func (s *Server) LoadFileByUuid(uuid string, append bool) error {
+	mediaFile, err := s.statesRepository.MediaFiles().ByUuid(uuid)
+	if err != nil {
+		return err
+	}
+
+	filePath := mediaFile.Path()
+
+	return s.mpvManager.LoadFile(filePath, append)
+}
+
 func (s *Server) LoopFile(looped bool) error {
 	return s.mpvManager.LoopFile(looped)
 }

@@ -29,6 +29,7 @@ type Callbacks struct {
 	removeDirectoriesCb
 	loadPlaylistCb
 	loadFileCb
+	loadFileByUuidCb
 	changeFullscreenCb
 	changeAudioCb
 	changeChapterCb
@@ -67,6 +68,7 @@ func (s *Server) Init(apiServer api.PluginApi) error {
 	s.loadPlaylistCb = apiServer.LoadPlaylist
 
 	s.loadFileCb = apiServer.LoadFile
+	s.loadFileByUuidCb = apiServer.LoadFileByUuid
 	s.changeFullscreenCb = apiServer.ChangeFullscreen
 	s.changeAudioCb = apiServer.ChangeAudio
 	s.changeChapterCb = apiServer.ChangeChapter
