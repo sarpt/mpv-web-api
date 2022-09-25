@@ -15,8 +15,9 @@ func (s *Server) ChangeChapter(idx int64) error {
 }
 
 func (s *Server) ChangeChaptersOrder(chapters []int64, force bool) error {
+	mediaFilePath := s.statesRepository.Playback().MediaFilePath()
 	notifications := make(chan playbackTriggers.ChapterManagerNotification)
-	playbackTrigger, err := playbackTriggers.NewChaptersManager(chapters, s, notifications)
+	playbackTrigger, err := playbackTriggers.NewChaptersManager(mediaFilePath, chapters, s, notifications)
 	if err != nil {
 		return fmt.Errorf("could not change chapters order: %s", err)
 	}
@@ -30,10 +31,23 @@ func (s *Server) ChangeChaptersOrder(chapters []int64, force bool) error {
 	go func() {
 		for {
 			notif, more := <-notifications
-			if notif == playbackTriggers.ChaptersIterationDone || !more {
+			if notif == playbackTriggers.MediaFileChangedDuringIteration || !more {
 				unsub()
 				return
 			}
+
+			if notif != playbackTriggers.ChaptersIterationDone {
+				continue
+			}
+
+			unsub()
+
+			fileLoops := s.statesRepository.Playback().LoopFile()
+			if fileLoops {
+				s.ChangeChaptersOrder(chapters, true)
+			}
+
+			return
 		}
 	}()
 

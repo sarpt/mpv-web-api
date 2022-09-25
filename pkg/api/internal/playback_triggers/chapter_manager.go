@@ -12,9 +12,10 @@ var (
 	errChapterNotNumber          = errors.New("chapter in change is not a number")
 	errChaptersListIncorrectSize = errors.New("chapters list should not be less than 1 element")
 
-	ChaptersIterationDone     ChapterManagerNotification = "All provided chapters iterated"
-	NextChapterAlreadyPlaying ChapterManagerNotification = "Next chapter in iteration order is already playing"
-	TriggeringChapterChange   ChapterManagerNotification = "Triggering next chapter change"
+	ChaptersIterationDone           ChapterManagerNotification = "All provided chapters iterated"
+	NextChapterAlreadyPlaying       ChapterManagerNotification = "Next chapter in iteration order is already playing"
+	TriggeringChapterChange         ChapterManagerNotification = "Triggering next chapter change"
+	MediaFileChangedDuringIteration ChapterManagerNotification = "Media file changed during chapters iteration"
 )
 
 type Api interface {
@@ -25,10 +26,11 @@ type ChaptersManager struct {
 	api               Api
 	chaptersOrder     []int64
 	currentChapterIdx int
+	mediaFilePath     string
 	notifications     chan<- ChapterManagerNotification
 }
 
-func NewChaptersManager(chaptersOrder []int64, api Api, notifications chan<- ChapterManagerNotification) (*ChaptersManager, error) {
+func NewChaptersManager(mediaFilePath string, chaptersOrder []int64, api Api, notifications chan<- ChapterManagerNotification) (*ChaptersManager, error) {
 	if len(chaptersOrder) < 1 {
 		return nil, errChaptersListIncorrectSize
 	}
@@ -37,12 +39,28 @@ func NewChaptersManager(chaptersOrder []int64, api Api, notifications chan<- Cha
 		api:               api,
 		chaptersOrder:     chaptersOrder,
 		currentChapterIdx: -1,
+		mediaFilePath:     mediaFilePath,
 		notifications:     notifications,
 	}, nil
 }
 
 func (t *ChaptersManager) Handler(change playback.Change) error {
-	if change.Variant() != playback.CurrentChapterIdxChange {
+	handleChange := change.Variant() == playback.CurrentChapterIdxChange || change.Variant() == playback.MediaFileChange
+	if !handleChange {
+		return nil
+	}
+
+	if change.Variant() == playback.MediaFileChange {
+		newMediaFilePath, ok := change.Value.(string)
+		if !ok {
+			return errMediaFileNotString
+		}
+
+		if newMediaFilePath != t.mediaFilePath {
+			t.notifications <- MediaFileChangedDuringIteration
+			return nil
+		}
+
 		return nil
 	}
 
