@@ -57,6 +57,11 @@ func (m *Entry) Path() string {
 	return m.path
 }
 
+// Uuid returns mediaFile UUID.
+func (m *Entry) Uuid() string {
+	return m.uuid
+}
+
 // MapProbeResultToMediaFile constructs new MediaFile from results returned by probing for media files.
 func MapProbeResultToMediaFile(result probe.Result) Entry {
 	uuid := uuid.NewString()

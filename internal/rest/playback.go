@@ -31,18 +31,19 @@ var (
 )
 
 type (
-	loadFileCb            func(string, bool) error
-	loadFileByUuidCb      func(string, bool) error
-	changeFullscreenCb    func(bool) error
-	changeAudioCb         func(string) error
-	changeChapterCb       func(int64) error
-	changeSubtitleCb      func(string) error
-	loopFileCb            func(bool) error
-	changePauseCb         func(bool) error
-	changeChaptersOrderCb func([]int64, bool) error
-	playlistPlayIndexCb   func(int) error
-	stopPlaybackCb        func() error
-	waitUntilMediaFileCb  func(string) error
+	loadFileCb                 func(string, bool) error
+	loadFileByUuidCb           func(string, bool) error
+	changeFullscreenCb         func(bool) error
+	changeAudioCb              func(string) error
+	changeChapterCb            func(int64) error
+	changeSubtitleCb           func(string) error
+	loopFileCb                 func(bool) error
+	changePauseCb              func(bool) error
+	changeChaptersOrderCb      func([]int64, bool) error
+	playlistPlayIndexCb        func(int) error
+	stopPlaybackCb             func() error
+	waitUntilMediaFileByPathCb func(string) error
+	waitUntilMediaFileByUuidCb func(string) error
 )
 
 func (s *Server) getPlaybackHandler(res http.ResponseWriter, req *http.Request) {
@@ -131,8 +132,11 @@ func (s *Server) chaptersHandler(res http.ResponseWriter, req *http.Request) err
 	}
 
 	filePath := req.PostFormValue(pathArg)
-	if filePath != "" {
-		s.waitUntilMediaFileCb(filePath)
+	uuid := req.PostFormValue(uuidArg)
+	if uuid != "" {
+		s.waitUntilMediaFileByUuidCb(filePath)
+	} else if filePath != "" {
+		s.waitUntilMediaFileByPathCb(filePath)
 	}
 
 	s.outLog.Printf("changing chapters order to %s (forced: %t) due to request from %s\n", providedChaptersArg, force, req.RemoteAddr)

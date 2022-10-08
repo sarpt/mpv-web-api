@@ -54,7 +54,26 @@ func (s *Server) ChangeChaptersOrder(chapters []int64, force bool) error {
 	return nil
 }
 
-func (s *Server) WaitUntilMediaFile(mediaFilePath string) error {
+func (s *Server) WaitUntilMediaFileByUuid(uuid string) error {
+	currentMediaFilePath := s.statesRepository.Playback().MediaFilePath()
+	currentMediaFile, err := s.statesRepository.MediaFiles().ByPath(currentMediaFilePath)
+	if err != nil {
+		return fmt.Errorf("could not determine currently playing file: %s", err)
+	}
+
+	if currentMediaFile.Uuid() == uuid {
+		return nil
+	}
+
+	targetMediaFile, err := s.statesRepository.MediaFiles().ByUuid(uuid)
+	if err != nil {
+		return fmt.Errorf("provided uuid does not match known media file: %s", err)
+	}
+
+	return s.WaitUntilMediaFileByPath(targetMediaFile.Path())
+}
+
+func (s *Server) WaitUntilMediaFileByPath(mediaFilePath string) error {
 	if s.statesRepository.Playback().MediaFilePath() == mediaFilePath {
 		return nil
 	}

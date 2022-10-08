@@ -38,7 +38,8 @@ type Callbacks struct {
 	changePauseCb
 	playlistPlayIndexCb
 	stopPlaybackCb
-	waitUntilMediaFileCb
+	waitUntilMediaFileByPathCb
+	waitUntilMediaFileByUuidCb
 }
 
 // Server is responsible for creating REST handlers, argument parsing and validation.
@@ -78,7 +79,8 @@ func (s *Server) Init(apiServer api.PluginApi) error {
 	s.playlistPlayIndexCb = apiServer.PlaylistPlayIndex
 	s.stopPlaybackCb = apiServer.StopPlayback
 	s.changeChaptersOrderCb = apiServer.ChangeChaptersOrder
-	s.waitUntilMediaFileCb = apiServer.WaitUntilMediaFile
+	s.waitUntilMediaFileByPathCb = apiServer.WaitUntilMediaFileByPath
+	s.waitUntilMediaFileByUuidCb = apiServer.WaitUntilMediaFileByUuid
 
 	return nil
 }

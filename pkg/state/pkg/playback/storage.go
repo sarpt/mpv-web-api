@@ -120,7 +120,7 @@ func (p *Storage) Clear() {
 }
 
 func (p *Storage) LoopFile() bool {
-	return p.loop.variant == offLoop
+	return p.loop.variant != offLoop
 }
 
 // MarshalJSON satisifes json.Marshaller.
