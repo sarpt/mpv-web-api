@@ -84,7 +84,7 @@ type commandDispatcher struct {
 	propertyObserversLock      *sync.RWMutex
 	propertySubscriptionID     int
 	propertySubscriptionIDLock *sync.Mutex
-	requests                   map[int]chan ResponsePayload
+	requests                   requests
 	requestID                  int
 	requestIDLock              *sync.Mutex
 	responses                  *responsesIterator
@@ -108,6 +108,30 @@ type commandDispatcherConfig struct {
 	outWriter         io.Writer
 }
 
+type requests struct {
+	results map[int]chan ResponsePayload
+	lock    *sync.RWMutex
+}
+
+func (r *requests) add(id int, result chan ResponsePayload) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+	r.results[id] = result
+}
+
+func (r *requests) delete(id int) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+	delete(r.results, id)
+}
+
+func (r *requests) get(id int) (chan ResponsePayload, bool) {
+	r.lock.RLock()
+	defer r.lock.RUnlock()
+	result, ok := r.results[id]
+	return result, ok
+}
+
 // newCommandDispatcher returns dispatcher connected to the socket.
 func newCommandDispatcher(cfg commandDispatcherConfig) *commandDispatcher {
 	return &commandDispatcher{
@@ -120,10 +144,13 @@ func newCommandDispatcher(cfg commandDispatcherConfig) *commandDispatcher {
 		propertyObserversLock:      &sync.RWMutex{},
 		propertySubscriptionID:     1,
 		propertySubscriptionIDLock: &sync.Mutex{},
-		requests:                   make(map[int]chan ResponsePayload),
-		requestID:                  1,
-		requestIDLock:              &sync.Mutex{},
-		socketPath:                 cfg.socketPath,
+		requests: requests{
+			results: map[int]chan ResponsePayload{},
+			lock:    &sync.RWMutex{},
+		},
+		requestID:     1,
+		requestIDLock: &sync.Mutex{},
+		socketPath:    cfg.socketPath,
 	}
 }
 
@@ -205,8 +232,8 @@ func (cd *commandDispatcher) Request(cmd command) (Response, error) {
 	requestResult := make(chan ResponsePayload)
 
 	requestID := cd.reserveRequestID()
-	cd.requests[requestID] = requestResult
-	defer delete(cd.requests, requestID)
+	cd.requests.add(requestID, requestResult)
+	defer cd.requests.delete(requestID)
 
 	err := cd.Dispatch(cmd, requestID)
 	if err != nil {
@@ -355,7 +382,7 @@ func (cd *commandDispatcher) distributeResponse(response ResponsePayload) error 
 			return fmt.Errorf("response '%s' provided without RequestID", response.Event)
 		}
 
-		request, ok := cd.requests[response.RequestID]
+		request, ok := cd.requests.get(response.RequestID)
 		if !ok {
 			return fmt.Errorf("result '%d' provided to not dispatched request", response.RequestID)
 		}
