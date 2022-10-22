@@ -56,13 +56,15 @@ func (s *Server) ChangeChaptersOrder(chapters []int64, force bool) error {
 
 func (s *Server) WaitUntilMediaFileByUuid(uuid string) error {
 	currentMediaFilePath := s.statesRepository.Playback().MediaFilePath()
-	currentMediaFile, err := s.statesRepository.MediaFiles().ByPath(currentMediaFilePath)
-	if err != nil {
-		return fmt.Errorf("could not determine currently playing file: %s", err)
-	}
+	if currentMediaFilePath != "" {
+		currentMediaFile, err := s.statesRepository.MediaFiles().ByPath(currentMediaFilePath)
+		if err != nil {
+			return fmt.Errorf("could not determine currently playing file: %s", err)
+		}
 
-	if currentMediaFile.Uuid() == uuid {
-		return nil
+		if currentMediaFile.Uuid() == uuid {
+			return nil
+		}
 	}
 
 	targetMediaFile, err := s.statesRepository.MediaFiles().ByUuid(uuid)
@@ -74,7 +76,8 @@ func (s *Server) WaitUntilMediaFileByUuid(uuid string) error {
 }
 
 func (s *Server) WaitUntilMediaFileByPath(mediaFilePath string) error {
-	if s.statesRepository.Playback().MediaFilePath() == mediaFilePath {
+	currentMediaFilePath := s.statesRepository.Playback().MediaFilePath()
+	if currentMediaFilePath == mediaFilePath {
 		return nil
 	}
 
@@ -85,17 +88,13 @@ func (s *Server) WaitUntilMediaFileByPath(mediaFilePath string) error {
 	}
 
 	unsub := s.addPlaybackTrigger(mediaFiletrigger)
-	go func() {
-		for {
-			notif, more := <-notifications
-			if notif == playbackTriggers.ChangedMediaFileMatches || !more {
-				unsub()
-				return
-			}
+	for {
+		notif, more := <-notifications
+		if notif == playbackTriggers.ChangedMediaFileMatches || !more {
+			unsub()
+			return nil
 		}
-	}()
-
-	return nil
+	}
 }
 
 func (s *Server) ChangeFullscreen(fullscreen bool) error {

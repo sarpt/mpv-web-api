@@ -134,7 +134,7 @@ func (s *Server) chaptersHandler(res http.ResponseWriter, req *http.Request) err
 	filePath := req.PostFormValue(pathArg)
 	uuid := req.PostFormValue(uuidArg)
 	if uuid != "" {
-		s.waitUntilMediaFileByUuidCb(filePath)
+		s.waitUntilMediaFileByUuidCb(uuid)
 	} else if filePath != "" {
 		s.waitUntilMediaFileByPathCb(filePath)
 	}
