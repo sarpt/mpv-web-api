@@ -64,11 +64,6 @@ func (t *ChaptersManager) Handler(change playback.Change) error {
 		return nil
 	}
 
-	if t.currentChapterIdx+1 >= len(t.chaptersOrder) {
-		t.notifications <- ChaptersIterationDone
-		return nil
-	}
-
 	newChapter, ok := change.Value.(int64)
 	if !ok {
 		return errChapterNotNumber
@@ -79,13 +74,23 @@ func (t *ChaptersManager) Handler(change playback.Change) error {
 		currentChapter = t.chaptersOrder[t.currentChapterIdx]
 	}
 
-	nextChapter := t.chaptersOrder[t.currentChapterIdx+1]
-	if currentChapter == newChapter || nextChapter == newChapter {
+	if currentChapter == newChapter {
 		t.notifications <- NextChapterAlreadyPlaying
 		return nil
 	}
 
+	if t.currentChapterIdx+1 >= len(t.chaptersOrder) {
+		t.notifications <- ChaptersIterationDone
+		return nil
+	}
+
 	t.currentChapterIdx += 1
+	nextChapter := t.chaptersOrder[t.currentChapterIdx]
+	if nextChapter == newChapter {
+		t.notifications <- NextChapterAlreadyPlaying
+		return nil
+	}
+
 	t.notifications <- TriggeringChapterChange
 	return t.api.ChangeChapter(nextChapter)
 }
