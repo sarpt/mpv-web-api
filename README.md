@@ -19,14 +19,13 @@ It's main use is to be a backend for [mpv-web-front](https://github.com/sarpt/mp
 
 - `allow-cors` - bool - (default: `false`) whether Cross Origin Requests should be allowed
 - `addr` - string - (default: `localhost:3001`) address used to host the server
-- `dir` - []string - directories that should be scanned for media files only once. To specify more than one directory to be handled, multiple `--dir=<path>` arguments can be specified eg. `--dir=/path1 --dir=/path2`. The server will only handle paths provided by clients that start with one of the paths provided to `dir`.
-- `dir-recursive` - []string - recurisve variant of `dir` argument - all directories from the provider path downards are handled
+- `dir` - []string - (default: current working directory) directories that should be scanned for media files. To specify more than one directory to be handled, multiple `--dir=<path>` arguments can be specified eg. `--dir=/path1 --dir=/path2`. The server will only handle paths provided by clients that start with one of the paths provided to `dir`. When not provided, current working directory for the process will be used to scan for media files. Recursive scan can be enabled with `--dir-recursive`. Watching for the changes to the provided directories can be enabled with `--watch-dir`.
+- `dir-recursive` - bool - directories provided to `--dir` (or working directory when `--dir` is not provided) will checked recursively.
 - `mpv-socket-path` - string - (default: `/tmp/mpvsocket`) path to socket file used by MPV instance
 - `playlist-prefix` - []string - list of prefixes for playlist JSON files located in directories being handled by the server instance. For more informations on playlists please check related section.
 - `socket-timeout` - int - (defualt: `15`) maximum allowed time in seconds for retrying connection to MPV socket
-- `start-mpv-instance` - bool - (default: `true`) when set to true, `mpv-web-api` will create it's own MPV process. When set to false, `mpv-web-api` will only try to connect to MPV using file at `mpv-socket-path`. Particularly useful when trying to run `mpv-web-api` in docker and connecting to local MPV instance
-- `watch-dir` - []string - directories that should be scanned for media files AND being watched for future changes to the underlying files. The argument works in the same way as a read-only variant `--dir`. If no paths are provided with neither `--dir` nor `--watch-dir`, a current working directory is watched by default.
-- `wathc-dir-recursive` - []string - recurisve variant of `watch-dir` argument - all directories from the provider path downards are handled
+- `start-mpv-instance` - bool - (default: `true`) when set to true, `mpv-web-api` will create it's own MPV process. When set to false, `mpv-web-api` will only try to connect to MPV using file at `mpv-socket-path`. Particularly useful when trying to run `mpv-web-api` in docker and connecting to a local MPV instance
+- `watch-dir` - bool - (default: `false`) directories provided to `--dir` (or working directory when `--dir` is not provided) will be watched for future changes to the underlying files (addition, deletion).
 
 ### Building & Execution
 
@@ -53,6 +52,8 @@ Many REST endpoints are not implemented yet, since `mpv-web-front` mostly uses S
   - `append` - bool (default: `false`) - when set to `true` with `path`, it append path as a next entry in currently played playlist (whether named/saved or not). When set to `false`, file under `path` will be played immediately, basically creating a new unnamed/empty playlist with only one item in it.
   - `audioID` - string - selects audio stream with the provided id. Although a string, mpv indexes its audio streams, so it will have numerical form.
   - `chapter` - int - selects chapter.
+  - `chapters` - int[] - controls order of chapters playback. The argument takes form of a chapter indexes list (0-based) separated by `,` eg. `2,3,5`. When file is being looped, the chapters order will be enforced through every loop of the file, until next media file starts. The list accepts repetitions (eg. `2,2,4,5,5`). At the moment list enforces sorting of the indexes (eg. `1,4,5` is correct but `5,4,1` is not), but a target functionality of this features plans for sorting to be irrelevant. By default, the argument is not applied immediately, as such it will be enabled with the first chapter change in the file, so the current chapter can be finished without initial jump, but compound argument `force` can be used to force chapters order restrictions immediately (currently played chapter will be changed if neccessary).
+  - `force` - bool (default: `false`) - forces changes for applicable arguments: `chapters`
   - `fullscreen` - bool (default: `false`) - selects fullscreen state to enabled/disabled.
   - `loopFile` - bool (default: `false`) - selects looping of currently played file to enabled/disabled.
   - `path` - string - path of the currently played media. The `mpv-web-api` has to have access to this directory and the directory needs to be probed for media files.
@@ -133,7 +134,7 @@ Example:
 	"MpvWebApiPlaylist": true,
 	"Entries": [],
 	"Name": "Example playlist",
-	"Description": "Som description"
+	"Description": "Some description"
 }
 ```
 

@@ -27,50 +27,44 @@ const (
 	defaultSocketTimeoutSec  = 15
 	defaultMpvSocketFilename = "mpvsocket"
 
-	addressFlag           = "addr"
-	allowCorsFlag         = "allow-cors"
-	dirFlag               = "dir"
-	dirRecursiveFlag      = "dir-recursive"
-	mpvSocketPathFlag     = "mpv-socket-path"
-	playlistPrefixFlag    = "playlist-prefix"
-	socketTimeoutSecFlag  = "socket-timeout"
-	startMpvInstanceFlag  = "start-mpv-instance"
-	watchDirFlag          = "watch-dir"
-	watchDirRecursiveFlag = "watch-dir-recursive"
+	addressFlag          = "addr"
+	allowCorsFlag        = "allow-cors"
+	dirFlag              = "dir"
+	dirRecursiveFlag     = "dir-recursive"
+	mpvSocketPathFlag    = "mpv-socket-path"
+	playlistPrefixFlag   = "playlist-prefix"
+	socketTimeoutSecFlag = "socket-timeout"
+	startMpvInstanceFlag = "start-mpv-instance"
+	watchDirFlag         = "watch-dir"
 )
 
 var (
 	defaultMpvSocketPath = fmt.Sprintf("%s%c%s", os.TempDir(), os.PathSeparator, defaultMpvSocketFilename)
 
-	address           *string
-	allowCORS         *bool
-	dir               *listflag.StringList
-	dirRecursive      *listflag.StringList
-	mpvSocketPath     *string
-	playlistPrefix    *listflag.StringList
-	socketTimeoutSec  *int64
-	startMpvInstance  *bool
-	watchDir          *listflag.StringList
-	watchDirRecursive *listflag.StringList
+	address          *string
+	allowCORS        *bool
+	dir              *listflag.StringList
+	dirRecursive     *bool
+	mpvSocketPath    *string
+	playlistPrefix   *listflag.StringList
+	socketTimeoutSec *int64
+	startMpvInstance *bool
+	watchDir         *bool
 )
 
 func init() {
 	dir = listflag.NewStringList([]string{})
-	dirRecursive = listflag.NewStringList([]string{})
-	watchDir = listflag.NewStringList([]string{})
-	watchDirRecursive = listflag.NewStringList([]string{})
 	playlistPrefix = listflag.NewStringList([]string{})
 
-	flag.Var(dir, dirFlag, "directory containing media files - the directory is not watched for changes")
-	flag.Var(dirRecursive, dirRecursiveFlag, "recursive variant of --dir flag: handles all directories in the tree from the path downards")
+	flag.Var(dir, dirFlag, "directory containing media files. When not provided current working directory for the process is being used")
+	dirRecursive = flag.Bool(dirRecursiveFlag, true, "when not provided, directories provided to --dir (or working directory when --dir is absent) will only be checked on the first level and any directories within will be ignored")
 	address = flag.String(addressFlag, defaultAddress, "address on which server should listen on")
 	allowCORS = flag.Bool(allowCorsFlag, false, "when not provided, Cross Origin Site Requests will be rejected")
 	mpvSocketPath = flag.String(mpvSocketPathFlag, defaultMpvSocketPath, "path to a socket file used by a MPV instance to listen for commands")
 	flag.Var(playlistPrefix, playlistPrefixFlag, "prefix for JSON files to be treated as playlists. The JSON file itself has to have in the root object property 'MpvWebApiPlaylist' set to true to be treated as a playlist")
 	socketTimeoutSec = flag.Int64(socketTimeoutSecFlag, defaultSocketTimeoutSec, "maximum allowed time in seconds for retrying connection to MPV instance")
 	startMpvInstance = flag.Bool(startMpvInstanceFlag, true, "controls whether the application should create and manage its own MPV instance")
-	flag.Var(watchDir, watchDirFlag, "directory containing media files - the directory will be watched for changes. When left empty and no --dir arguments are specified, current working directory will be used")
-	flag.Var(watchDirRecursive, watchDirRecursiveFlag, "recursive variant of --watch-dir flag: handles all directories in the tree from the path downards")
+	watchDir = flag.Bool(watchDirFlag, false, "when not provided, directories provided to --dir (or working directory when --dir is absent) will only be checked once at a startup and files adding/removal in these directories during runtime will be ignored")
 
 	flag.Parse()
 }
@@ -121,7 +115,7 @@ func main() {
 	}
 
 	var mediaFilesDirectories []directories.Entry
-	watchWorkingDir := len(dir.Values()) == 0 && len(watchDir.Values()) == 0 && len(dirRecursive.Values()) == 0 && len(watchDirRecursive.Values()) == 0
+	watchWorkingDir := len(dir.Values()) == 0
 	if watchWorkingDir {
 		wd, err := os.Getwd()
 		if err != nil {
@@ -130,38 +124,18 @@ func main() {
 			return
 		}
 
-		outLog.Printf("No directories specified for server - watching working directory '%s'\n", wd)
+		outLog.Printf("no directories specified for server - using working directory '%s'\n", wd)
 		mediaFilesDirectories = append(mediaFilesDirectories, directories.Entry{
 			Path:      wd,
-			Recursive: true,
-			Watched:   true,
+			Recursive: *dirRecursive,
+			Watched:   *watchDir,
 		})
 	} else {
-		for _, dir := range watchDir.Values() {
-			mediaFilesDirectories = append(mediaFilesDirectories, directories.Entry{
-				Path:    dir,
-				Watched: true,
-			})
-		}
-
-		for _, dir := range watchDirRecursive.Values() {
-			mediaFilesDirectories = append(mediaFilesDirectories, directories.Entry{
-				Path:      dir,
-				Recursive: true,
-				Watched:   true,
-			})
-		}
-
 		for _, dir := range dir.Values() {
 			mediaFilesDirectories = append(mediaFilesDirectories, directories.Entry{
-				Path: dir,
-			})
-		}
-
-		for _, dir := range dirRecursive.Values() {
-			mediaFilesDirectories = append(mediaFilesDirectories, directories.Entry{
 				Path:      dir,
-				Recursive: true,
+				Recursive: *dirRecursive,
+				Watched:   *watchDir,
 			})
 		}
 	}
@@ -171,11 +145,11 @@ func main() {
 		server.AddRootDirectories(mediaFilesDirectories)
 	}()
 
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 
 	go func() {
-		sig := <-sigs
+		sig := <-signals
 		err := server.StopServing(sig.String())
 		if err != nil {
 			errLog.Printf("stop of API server finished with an error: %s", err)
