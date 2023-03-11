@@ -101,6 +101,7 @@ type storageJSON struct {
 }
 
 // NewStorage constructs Playback state.
+// TODO: broadcaster should be passed as a dependency instead of created by storage
 func NewStorage() *Storage {
 	broadcaster := common.NewChangesBroadcaster[Change]()
 	broadcaster.Broadcast()
@@ -108,19 +109,27 @@ func NewStorage() *Storage {
 	return &Storage{
 		broadcaster:        broadcaster,
 		playlistCurrentIdx: -1,
-		Stopped:            true,
+		loop: Loop{
+			variant: offLoop,
+		},
+		Stopped: true,
 	}
 }
 
 // Clear clears all playback information.
 func (p *Storage) Clear() {
 	*p = Storage{
-		broadcaster: p.broadcaster,
+		broadcaster:        p.broadcaster,
+		playlistCurrentIdx: -1,
+		loop: Loop{
+			variant: offLoop,
+		},
+		Stopped: true,
 	}
 }
 
 func (p *Storage) LoopFile() bool {
-	return p.loop.variant != offLoop
+	return p.loop.variant == fileLoop
 }
 
 // MarshalJSON satisifes json.Marshaller.
