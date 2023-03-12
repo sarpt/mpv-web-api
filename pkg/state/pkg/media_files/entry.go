@@ -7,6 +7,12 @@ import (
 	"github.com/sarpt/mpv-web-api/pkg/probe"
 )
 
+const (
+	turnOffStreamId       string = "no"
+	turnOffStreamTitle    string = "Off"
+	turnOffStreamLanguage string = "NA"
+)
+
 // Entry specifies information about a media file that can be played.
 type Entry struct {
 	audioStreams    []probe.AudioStream
@@ -67,15 +73,29 @@ func MapProbeResultToMediaFile(result probe.Result) Entry {
 	uuid := uuid.NewString()
 
 	return Entry{
-		title:           result.Format.Title,
-		formatName:      result.Format.Name,
-		formatLongName:  result.Format.LongName,
-		chapters:        result.Chapters,
-		path:            result.Path,
-		audioStreams:    result.AudioStreams,
-		subtitleStreams: result.SubtitleStreams,
-		duration:        result.Format.Duration,
-		uuid:            uuid,
-		videoStreams:    result.VideoStreams,
+		title:          result.Format.Title,
+		formatName:     result.Format.Name,
+		formatLongName: result.Format.LongName,
+		chapters:       result.Chapters,
+		path:           result.Path,
+		audioStreams: append(
+			result.AudioStreams,
+			probe.AudioStream{
+				AudioID:  turnOffStreamId,
+				Title:    turnOffStreamTitle,
+				Language: turnOffStreamLanguage,
+			},
+		),
+		subtitleStreams: append(
+			result.SubtitleStreams,
+			probe.SubtitleStream{
+				SubtitleID: turnOffStreamId,
+				Title:      turnOffStreamTitle,
+				Language:   turnOffStreamLanguage,
+			},
+		),
+		duration:     result.Format.Duration,
+		uuid:         uuid,
+		videoStreams: result.VideoStreams,
 	}
 }
