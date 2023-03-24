@@ -1,6 +1,7 @@
 package state
 
 import (
+	"github.com/sarpt/mpv-web-api/internal/common"
 	"github.com/sarpt/mpv-web-api/pkg/state/pkg/directories"
 	"github.com/sarpt/mpv-web-api/pkg/state/pkg/media_files"
 	"github.com/sarpt/mpv-web-api/pkg/state/pkg/playback"
@@ -45,11 +46,24 @@ func (r *inMemoryRepository) Status() *status.Storage {
 }
 
 func NewRepository() Repository {
+	directoriesBroadcaster := createAndInitChangesBroadcaster[directories.Change]()
+	mediaFilesBroadcaster := createAndInitChangesBroadcaster[media_files.Change]()
+	playbackBroadcaster := createAndInitChangesBroadcaster[playback.Change]()
+	playlistsBroadcaster := createAndInitChangesBroadcaster[playlists.Change]()
+	statusBroadcaster := createAndInitChangesBroadcaster[status.Change]()
+
 	return &inMemoryRepository{
-		directories: directories.NewStorage(),
-		mediaFiles:  media_files.NewStorage(),
-		playback:    playback.NewStorage(),
-		playlists:   playlists.NewStorage(),
-		status:      status.NewStorage(),
+		directories: directories.NewStorage(directoriesBroadcaster),
+		mediaFiles:  media_files.NewStorage(mediaFilesBroadcaster),
+		playback:    playback.NewStorage(playbackBroadcaster),
+		playlists:   playlists.NewStorage(playlistsBroadcaster),
+		status:      status.NewStorage(statusBroadcaster),
 	}
+}
+
+func createAndInitChangesBroadcaster[Change common.Change]() *common.ChangesBroadcaster[Change] {
+	broadcaster := common.NewChangesBroadcaster[Change]()
+	broadcaster.Broadcast()
+
+	return broadcaster
 }
