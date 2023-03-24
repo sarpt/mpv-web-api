@@ -56,10 +56,7 @@ type Storage struct {
 }
 
 // NewStorage constructs Status state.
-func NewStorage() *Storage {
-	broadcaster := common.NewChangesBroadcaster[Change]()
-	broadcaster.Broadcast()
-
+func NewStorage(broadcaster *common.ChangesBroadcaster[Change]) *Storage {
 	return &Storage{
 		broadcaster:        broadcaster,
 		observingAddresses: map[string][]sse.ChannelVariant{},

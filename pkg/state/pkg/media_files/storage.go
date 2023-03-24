@@ -58,10 +58,7 @@ type Storage struct {
 }
 
 // NewStorage counstructs MediaFiles state.
-func NewStorage() *Storage {
-	broadcaster := common.NewChangesBroadcaster[Change]()
-	broadcaster.Broadcast()
-
+func NewStorage(broadcaster *common.ChangesBroadcaster[Change]) *Storage {
 	return &Storage{
 		broadcaster: broadcaster,
 		items:       map[string]Entry{},

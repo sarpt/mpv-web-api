@@ -62,10 +62,7 @@ func (s Change) Variant() common.ChangeVariant {
 	return s.ChangeVariant
 }
 
-func NewStorage() *Storage {
-	broadcaster := common.NewChangesBroadcaster[Change]()
-	broadcaster.Broadcast()
-
+func NewStorage(broadcaster *common.ChangesBroadcaster[Change]) *Storage {
 	return &Storage{
 		broadcaster: broadcaster,
 		items:       map[string]*Playlist{},

@@ -102,10 +102,7 @@ type storageJSON struct {
 
 // NewStorage constructs Playback state.
 // TODO: broadcaster should be passed as a dependency instead of created by storage
-func NewStorage() *Storage {
-	broadcaster := common.NewChangesBroadcaster[Change]()
-	broadcaster.Broadcast()
-
+func NewStorage(broadcaster *common.ChangesBroadcaster[Change]) *Storage {
 	return &Storage{
 		broadcaster:        broadcaster,
 		playlistCurrentIdx: -1,
