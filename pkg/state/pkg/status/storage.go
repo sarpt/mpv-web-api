@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/sarpt/mpv-web-api/internal/common"
+	"github.com/sarpt/mpv-web-api/pkg/state/internal/revision"
 	"github.com/sarpt/mpv-web-api/pkg/state/pkg/sse"
 )
 
@@ -51,16 +52,18 @@ func (d Change) Variant() common.ChangeVariant {
 // Storage holds information about server misc status.
 type Storage struct {
 	broadcaster        *common.ChangesBroadcaster[Change]
-	observingAddresses map[string][]sse.ChannelVariant
 	lock               *sync.RWMutex
+	observingAddresses map[string][]sse.ChannelVariant
+	revision           *revision.Storage
 }
 
 // NewStorage constructs Status state.
 func NewStorage(broadcaster *common.ChangesBroadcaster[Change]) *Storage {
 	return &Storage{
 		broadcaster:        broadcaster,
-		observingAddresses: map[string][]sse.ChannelVariant{},
 		lock:               &sync.RWMutex{},
+		observingAddresses: map[string][]sse.ChannelVariant{},
+		revision:           revision.NewStorage(),
 	}
 }
 
@@ -86,6 +89,7 @@ func (s *Storage) AddObservingAddress(remoteAddr string, observerVariant sse.Cha
 	s.observingAddresses[remoteAddr] = append(observers, observerVariant)
 	s.lock.Unlock()
 
+	s.revision.Tick()
 	s.broadcaster.Send(Change{
 		ChangeVariant: ClientObserverAdded,
 	})
@@ -100,6 +104,10 @@ func (s *Storage) MarshalJSON() ([]byte, error) {
 		ObservingAddresses: s.observingAddresses,
 	}
 	return json.Marshal(&sJSON)
+}
+
+func (s *Storage) Revision() revision.Identifier {
+	return s.revision.Revision()
 }
 
 // RemoveObservingAddress removes remote address listening on specific channel variant from the state.
@@ -129,6 +137,7 @@ func (s *Storage) RemoveObservingAddress(remoteAddr string, observerVariant sse.
 
 	s.lock.Unlock()
 
+	s.revision.Tick()
 	s.broadcaster.Send(Change{
 		ChangeVariant: ClientObserverRemoved,
 	})

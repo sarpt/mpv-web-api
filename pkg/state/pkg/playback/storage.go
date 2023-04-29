@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/sarpt/mpv-web-api/internal/common"
+	"github.com/sarpt/mpv-web-api/pkg/state/internal/revision"
 	"github.com/sarpt/mpv-web-api/pkg/state/pkg/media_files"
 )
 
@@ -82,6 +83,7 @@ type Storage struct {
 	paused             bool
 	playlistCurrentIdx int
 	playlistUUID       string
+	revision           *revision.Storage
 	selectedAudioID    string
 	selectedSubtitleID string
 	Stopped            bool
@@ -109,15 +111,20 @@ func NewStorage(broadcaster *common.ChangesBroadcaster[Change]) *Storage {
 		loop: Loop{
 			variant: offLoop,
 		},
-		Stopped: true,
+		Stopped:  true,
+		revision: revision.NewStorage(),
 	}
 }
 
 // Clear clears all playback information.
 func (p *Storage) Clear() {
+	revision := p.revision
+	revision.Tick()
+
 	*p = Storage{
 		broadcaster:        p.broadcaster,
 		playlistCurrentIdx: -1,
+		revision:           revision,
 		loop: Loop{
 			variant: offLoop,
 		},
@@ -162,9 +169,14 @@ func (p *Storage) MediaFilePath() string {
 	return p.mediaFilePath
 }
 
+func (p *Storage) Revision() revision.Identifier {
+	return p.revision.Revision()
+}
+
 // SetAudioID changes played audio id.
 func (p *Storage) SetAudioID(aid string) {
 	p.selectedAudioID = aid
+	p.revision.Tick()
 	p.broadcaster.Send(Change{
 		ChangeVariant: AudioIDChange,
 	})
@@ -173,6 +185,7 @@ func (p *Storage) SetAudioID(aid string) {
 // SetCurrentChapter changes currently played chapter index.
 func (p *Storage) SetCurrentChapter(idx int64) {
 	p.currentChapterIdx = idx
+	p.revision.Tick()
 	p.broadcaster.Send(Change{
 		ChangeVariant: CurrentChapterIdxChange,
 		Value:         p.currentChapterIdx,
@@ -182,6 +195,7 @@ func (p *Storage) SetCurrentChapter(idx int64) {
 // SetFullscreen changes state of the fullscreen in playback.
 func (p *Storage) SetFullscreen(enabled bool) {
 	p.fullscreen = enabled
+	p.revision.Tick()
 	p.broadcaster.Send(Change{
 		ChangeVariant: FullscreenChange,
 	})
@@ -194,6 +208,7 @@ func (p *Storage) SetLoopFile(enabled bool) {
 	} else {
 		p.loop.variant = offLoop
 	}
+	p.revision.Tick()
 	p.broadcaster.Send(Change{
 		ChangeVariant: LoopFileChange,
 	})
@@ -203,6 +218,7 @@ func (p *Storage) SetLoopFile(enabled bool) {
 func (p *Storage) SetMediaFile(mediaFile media_files.Entry) {
 	p.mediaFilePath = mediaFile.Path()
 	p.Stopped = false
+	p.revision.Tick()
 	p.broadcaster.Send(Change{
 		ChangeVariant: MediaFileChange,
 		Value:         p.mediaFilePath,
@@ -212,6 +228,7 @@ func (p *Storage) SetMediaFile(mediaFile media_files.Entry) {
 // SetPause changes whether playback should paused.
 func (p *Storage) SetPause(paused bool) {
 	p.paused = paused
+	p.revision.Tick()
 	p.broadcaster.Send(Change{
 		ChangeVariant: PauseChange,
 	})
@@ -219,6 +236,7 @@ func (p *Storage) SetPause(paused bool) {
 
 // SelectPlaylist sets currently played uuid of a playlist.
 func (p *Storage) SelectPlaylist(uuid string) {
+	p.revision.Tick()
 	p.broadcaster.Send(Change{
 		ChangeVariant: PlaylistUnloadChange,
 		Value:         p.playlistUUID,
@@ -226,6 +244,7 @@ func (p *Storage) SelectPlaylist(uuid string) {
 
 	p.playlistUUID = uuid
 
+	p.revision.Tick()
 	p.broadcaster.Send(Change{
 		ChangeVariant: PlaylistSelectionChange,
 	})
@@ -235,6 +254,7 @@ func (p *Storage) SelectPlaylist(uuid string) {
 func (p *Storage) SelectPlaylistCurrentIdx(idx int) {
 	p.playlistCurrentIdx = idx
 
+	p.revision.Tick()
 	p.broadcaster.Send(Change{
 		ChangeVariant: PlaylistCurrentIdxChange,
 	})
@@ -243,6 +263,7 @@ func (p *Storage) SelectPlaylistCurrentIdx(idx int) {
 // SetPlaybackTime changes current time of a playback.
 func (p *Storage) SetPlaybackTime(time float64) {
 	p.currentTime = time
+	p.revision.Tick()
 	p.broadcaster.Send(Change{
 		ChangeVariant: PlaybackTimeChange,
 	})
@@ -251,6 +272,7 @@ func (p *Storage) SetPlaybackTime(time float64) {
 // SetSubtitleID changes shown subtitles id.
 func (p *Storage) SetSubtitleID(sid string) {
 	p.selectedSubtitleID = sid
+	p.revision.Tick()
 	p.broadcaster.Send(Change{
 		ChangeVariant: SubtitleIDChange,
 	})
@@ -270,6 +292,7 @@ func (p *Storage) Stop() {
 	p.playlistCurrentIdx = -1
 	p.playlistUUID = playlistUUID
 
+	p.revision.Tick()
 	p.broadcaster.Send(Change{
 		ChangeVariant: PlaybackStoppedChange,
 	})

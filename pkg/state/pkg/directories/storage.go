@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/sarpt/mpv-web-api/internal/common"
+	"github.com/sarpt/mpv-web-api/pkg/state/internal/revision"
 )
 
 var (
@@ -54,6 +55,7 @@ type Storage struct {
 	broadcaster *common.ChangesBroadcaster[Change]
 	items       map[string]Entry
 	lock        *sync.RWMutex
+	revision    *revision.Storage
 }
 
 // NewStorage counstructs Directories state.
@@ -62,6 +64,7 @@ func NewStorage(broadcaster *common.ChangesBroadcaster[Change]) *Storage {
 		broadcaster: broadcaster,
 		items:       map[string]Entry{},
 		lock:        &sync.RWMutex{},
+		revision:    revision.NewStorage(),
 	}
 }
 
@@ -80,6 +83,7 @@ func (d *Storage) Add(dir Entry) {
 		d.items[path] = dir
 	}()
 
+	d.revision.Tick()
 	d.broadcaster.Send(Change{
 		variant: AddedDirectoriesChange,
 		items: map[string]Entry{
@@ -136,6 +140,10 @@ func (d *Storage) ParentByPath(path string) (Entry, error) {
 	return dir, nil
 }
 
+func (p *Storage) Revision() revision.Identifier {
+	return p.revision.Revision()
+}
+
 func (p *Storage) Subscribe(cb SubscriberCB, onError func(err error)) func() {
 	subscriber := directoriesChangeSubscriber{
 		cb,
@@ -159,6 +167,7 @@ func (d *Storage) Take(path string) (Entry, error) {
 	delete(d.items, keyPath)
 	d.lock.Unlock()
 
+	d.revision.Tick()
 	d.broadcaster.Send(Change{
 		variant: RemovedDirectoriesChange,
 		items: map[string]Entry{
