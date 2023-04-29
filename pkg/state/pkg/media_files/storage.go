@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/sarpt/mpv-web-api/internal/common"
+	"github.com/sarpt/mpv-web-api/pkg/state/internal/revision"
 )
 
 var (
@@ -55,6 +56,7 @@ type Storage struct {
 	broadcaster *common.ChangesBroadcaster[Change]
 	items       map[string]Entry
 	lock        *sync.RWMutex
+	revision    *revision.Storage
 }
 
 // NewStorage counstructs MediaFiles state.
@@ -63,6 +65,7 @@ func NewStorage(broadcaster *common.ChangesBroadcaster[Change]) *Storage {
 		broadcaster: broadcaster,
 		items:       map[string]Entry{},
 		lock:        &sync.RWMutex{},
+		revision:    revision.NewStorage(),
 	}
 }
 
@@ -80,6 +83,7 @@ func (m *Storage) Add(mediaFile Entry) {
 		m.items[path] = mediaFile
 	}()
 
+	m.revision.Tick()
 	addedMediaFiles := map[string]Entry{
 		path: mediaFile,
 	}
@@ -177,6 +181,10 @@ func (m *Storage) PathsUnderParent(parentPath string) []string {
 	return paths
 }
 
+func (m *Storage) Revision() revision.Identifier {
+	return m.revision.Revision()
+}
+
 func (p *Storage) Subscribe(cb SubscriberCB, onError func(err error)) func() {
 	subscriber := mediaFilesChangeSubscriber{
 		cb,
@@ -198,6 +206,7 @@ func (m *Storage) Take(path string) (Entry, error) {
 	delete(m.items, path)
 	m.lock.Unlock()
 
+	m.revision.Tick()
 	m.broadcaster.Send(Change{
 		ChangeVariant: RemovedMediaFilesChange,
 		Items: map[string]Entry{
@@ -234,6 +243,7 @@ func (m *Storage) TakeMultiple(paths []string) ([]Entry, []string) {
 		change.Items[mediaFile.path] = mediaFile
 	}
 
+	m.revision.Tick()
 	m.broadcaster.Send(change)
 
 	return taken, skipped

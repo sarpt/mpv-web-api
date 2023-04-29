@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/sarpt/mpv-web-api/internal/common"
+	"github.com/sarpt/mpv-web-api/pkg/state/internal/revision"
 )
 
 type SubscriberCB = func(change Change)
@@ -24,6 +25,7 @@ type Storage struct {
 	broadcaster *common.ChangesBroadcaster[Change]
 	items       map[string]*Playlist
 	lock        *sync.RWMutex
+	revision    *revision.Storage
 }
 
 type storageJSON struct {
@@ -67,6 +69,7 @@ func NewStorage(broadcaster *common.ChangesBroadcaster[Change]) *Storage {
 		broadcaster: broadcaster,
 		items:       map[string]*Playlist{},
 		lock:        &sync.RWMutex{},
+		revision:    revision.NewStorage(),
 	}
 }
 
@@ -107,6 +110,10 @@ func (p *Storage) MarshalJSON() ([]byte, error) {
 	return json.Marshal(pJSON)
 }
 
+func (p *Storage) Revision() revision.Identifier {
+	return p.revision.Revision()
+}
+
 // SetPlaylistCurrentEntryIdx sets currently played entry Idx for a playlist with provided UUID.
 func (p *Storage) SetPlaylistCurrentEntryIdx(uuid string, idx int) error {
 	playlist, err := p.ByUUID(uuid)
@@ -116,6 +123,7 @@ func (p *Storage) SetPlaylistCurrentEntryIdx(uuid string, idx int) error {
 
 	playlist.setCurrentEntryIdx(idx)
 
+	p.revision.Tick()
 	p.broadcaster.Send(Change{
 		ChangeVariant: PlaylistsCurrentEntryIdxChange,
 		Playlist:      playlist,
@@ -132,6 +140,7 @@ func (p *Storage) SetPlaylistEntries(uuid string, entries []Entry) error {
 
 	playlist.setEntries(entries)
 
+	p.revision.Tick()
 	p.broadcaster.Send(Change{
 		ChangeVariant: PlaylistsEntriesChange,
 		Playlist:      playlist,
@@ -162,6 +171,7 @@ func (p *Storage) AddPlaylist(playlist *Playlist) (string, error) {
 	p.items[playlist.uuid] = playlist
 	p.lock.Unlock()
 
+	p.revision.Tick()
 	p.broadcaster.Send(Change{
 		ChangeVariant: PlaylistsAdded,
 		Playlist:      playlist,
