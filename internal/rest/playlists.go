@@ -13,6 +13,13 @@ type getPlaylistsRespone struct {
 }
 
 func (s *Server) getPlaylistsHandler(res http.ResponseWriter, req *http.Request) {
+	stateRevision := s.statesRepository.Playlists().Revision()
+	if checkRevisionIsSame(stateRevision, req) {
+		res.WriteHeader(304)
+		res.Write(nil)
+		return
+	}
+
 	playlistsResponse := getPlaylistsRespone{
 		Playlists: s.statesRepository.Playlists().All(),
 	}
@@ -25,6 +32,7 @@ func (s *Server) getPlaylistsHandler(res http.ResponseWriter, req *http.Request)
 		return
 	}
 
+	setRevisionInResponse(stateRevision, res)
 	res.WriteHeader(200)
 	res.Write(response)
 }

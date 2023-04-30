@@ -26,6 +26,13 @@ type getDirectoriesRespone struct {
 }
 
 func (s *Server) getDirectoriesHandler(res http.ResponseWriter, req *http.Request) {
+	stateRevision := s.statesRepository.Directories().Revision()
+	if checkRevisionIsSame(stateRevision, req) {
+		res.WriteHeader(304)
+		res.Write(nil)
+		return
+	}
+
 	directoriesResponse := getDirectoriesRespone{
 		Directories: s.statesRepository.Directories().All(),
 	}
@@ -38,6 +45,7 @@ func (s *Server) getDirectoriesHandler(res http.ResponseWriter, req *http.Reques
 		return
 	}
 
+	setRevisionInResponse(stateRevision, res)
 	res.WriteHeader(200)
 	res.Write(response)
 }

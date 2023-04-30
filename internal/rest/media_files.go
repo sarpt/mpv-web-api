@@ -13,6 +13,13 @@ type getMediaFilesRespone struct {
 }
 
 func (s *Server) getMediaFilesHandler(res http.ResponseWriter, req *http.Request) {
+	stateRevision := s.statesRepository.MediaFiles().Revision()
+	if checkRevisionIsSame(stateRevision, req) {
+		res.WriteHeader(304)
+		res.Write(nil)
+		return
+	}
+
 	mediaFilesResponse := getMediaFilesRespone{
 		MediaFiles: s.statesRepository.MediaFiles().All(),
 	}
@@ -25,6 +32,7 @@ func (s *Server) getMediaFilesHandler(res http.ResponseWriter, req *http.Request
 		return
 	}
 
+	setRevisionInResponse(stateRevision, res)
 	res.WriteHeader(200)
 	res.Write(response)
 }
