@@ -47,6 +47,13 @@ type (
 )
 
 func (s *Server) getPlaybackHandler(res http.ResponseWriter, req *http.Request) {
+	stateRevision := s.statesRepository.Playback().Revision()
+	if checkRevisionIsSame(stateRevision, req) {
+		res.WriteHeader(304)
+		res.Write(nil)
+		return
+	}
+
 	json, err := json.Marshal(s.statesRepository.Playback())
 	if err != nil {
 		res.WriteHeader(500)
@@ -55,6 +62,7 @@ func (s *Server) getPlaybackHandler(res http.ResponseWriter, req *http.Request) 
 		return
 	}
 
+	setRevisionInResponse(stateRevision, res)
 	res.WriteHeader(200)
 	res.Write(json)
 }
