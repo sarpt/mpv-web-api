@@ -14,13 +14,15 @@ const (
 	multiPartFormMaxMemory   = 32 << 20
 	multiPartFormContentType = "multipart/form-data"
 
-	accessControlAllowOriginHeader  = "Access-Control-Allow-Origin"
-	accessControlAllowMethodsHeader = "Access-Control-Allow-Methods"
-	accessControlAllowHeadersHeader = "Access-Control-Allow-Headers"
-	contentTypeHeader               = "Content-Type"
+	accessControlAllowOriginHeader   = "Access-Control-Allow-Origin"
+	accessControlAllowMethodsHeader  = "Access-Control-Allow-Methods"
+	accessControlAllowHeadersHeader  = "Access-Control-Allow-Headers"
+	accessControlExposeHeadersHeader = "Access-Control-Expose-Headers"
+	contentTypeHeader                = "Content-Type"
+	revisionHeader                   = "Etag"
 
 	allowedOrigins = "*"
-	allowedHeaders = "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, Method"
+	allowedHeaders = "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, Method, Etag"
 )
 
 type FormArgumentHandler func(http.ResponseWriter, *http.Request) error
@@ -56,6 +58,7 @@ func PathHandler(cfg PathHandlerConfig) http.HandlerFunc {
 	return func(res http.ResponseWriter, req *http.Request) {
 		if cfg.AllowCORS {
 			res.Header().Set(accessControlAllowOriginHeader, allowedOrigins)
+			res.Header().Set(accessControlExposeHeadersHeader, fmt.Sprintf("%s", revisionHeader))
 		}
 
 		method := req.Method
