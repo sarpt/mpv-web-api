@@ -22,7 +22,7 @@ const (
 	revisionHeader                   = "Etag"
 
 	allowedOrigins = "*"
-	allowedHeaders = "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, Method, Etag"
+	allowedHeaders = "Accept, Content-Type, Content-Length, Cache-Control, Accept-Encoding, X-CSRF-Token, Authorization, Method, Etag"
 )
 
 type FormArgumentHandler func(http.ResponseWriter, *http.Request) error
