@@ -20,7 +20,7 @@ It's main use is to be a backend for [mpv-web-front](https://github.com/sarpt/mp
 - `allow-cors` - bool - (default: `false`) whether Cross Origin Requests should be allowed
 - `addr` - string - (default: `localhost:3001`) address used to host the server
 - `dir` - []string - (default: current working directory) directories that should be scanned for media files. To specify more than one directory to be handled, multiple `--dir=<path>` arguments can be specified eg. `--dir=/path1 --dir=/path2`. The server will only handle paths provided by clients that start with one of the paths provided to `dir`. When not provided, current working directory for the process will be used to scan for media files. Recursive scan can be enabled with `--dir-recursive`. Watching for the changes to the provided directories can be enabled with `--watch-dir`.
-- `dir-recursive` - bool - directories provided to `--dir` (or working directory when `--dir` is not provided) will checked recursively.
+- `dir-recursive` - bool - directories provided to `--dir` (or working directory when `--dir` is not provided) will be checked recursively.
 - `mpv-socket-path` - string - (default: `/tmp/mpvsocket`) path to socket file used by MPV instance
 - `playlist-prefix` - []string - list of prefixes for playlist JSON files located in directories being handled by the server instance. For more informations on playlists please check related section.
 - `socket-timeout` - int - (defualt: `15`) maximum allowed time in seconds for retrying connection to MPV socket
@@ -29,13 +29,28 @@ It's main use is to be a backend for [mpv-web-front](https://github.com/sarpt/mp
 
 ### Building & Execution
 
-<sub>Don't.</sub>
-
-But seriously: to build and install the application, in terminal navigate to `<repo-root>/cmd/mpv-web-api` and run `go build && go install`. 
+To build and install the application, in terminal navigate to `<repo-root>/cmd/mpv-web-api` and run `go build && go install`. 
 
 After building the the binary `mpv-web-api` simply run it. To check if it's working: `curl --data "path=/path/to/file.ext" http://localhost:3001/playback` - the invocation should return current state of the playback (if anything's playing).
 
 In case the server is ran to serve as a backend to `mpv-web-front` on a local machine it is recommended to pass `--allow-cors` argument, otherwise the communication might be blocked.
+
+### Builind & Execution with Docker
+
+Running a server in docker container can be achieved by starting `mpv` on a host machine with specified socket path and mounting that socket path inside a running container. That way server will communicate with `mpv` running on a host.
+
+From root repostiory dir run `docker build -t mpv-web-api:latest -f ./build/package/Dockerfile .` to build the application.
+
+The resulting image will automatically apply `--start-mpv-instance=false`, since in most (all?) cases the `mpv` should be running on a host machine, not inside a container. That however requires passing `mpv-socket-path`.
+
+// part about starting mpv with socket and no automatic process closure
+
+Having started `mpv` process, next step is to run `mpv-web-api:latest` image created earlier with necessary mountpoints and arguments. Few thing that need to be taken into consideration when running the image:
+- port (by default `3001`) has to be mapped from the container into a host
+- directory with media files has to be mapped from host to a container and the appropriate dir argument has to be provied that points to the mapped point inside the container
+- socket on which `mpv` listens has to be mapped from host to a continer and the appropriate `mpv-socket-path` argument must be provided that points to the mapped socket inside the container
+
+The image does not assume any defaults as to where directories and socket are mapped inside the container so those have to be taken care of when providing a `docker run` command.
 
 ### REST endpoints
 
