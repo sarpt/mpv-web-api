@@ -23,7 +23,7 @@ const (
 )
 
 const (
-	defaultAddress           = "localhost:3001"
+	defaultAddress           = ":3001"
 	defaultSocketTimeoutSec  = 15
 	defaultMpvSocketFilename = "mpvsocket"
 
