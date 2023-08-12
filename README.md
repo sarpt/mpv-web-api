@@ -13,7 +13,7 @@ It's main use is to be a backend for [mpv-web-front](https://github.com/sarpt/mp
 
 ### Dependencies for builidng
 
-- `go` (tested on `1.14`, might build on earlier versions, recommended `1.16.5` and up because of the bomb-ass improvements to the arguments help display)
+- `go` (tested on `1.14`, might build on earlier versions, recommended `1.16.5` and up because of the bomb-ass improvements to the arguments help display. the image docker is built with `1.20.7`)
 
 ### Arguments
 
@@ -35,22 +35,29 @@ After building the the binary `mpv-web-api` simply run it. To check if it's work
 
 In case the server is ran to serve as a backend to `mpv-web-front` on a local machine it is recommended to pass `--allow-cors` argument, otherwise the communication might be blocked.
 
-### Builind & Execution with Docker
+### Building & execution with Docker
 
-Running a server in docker container can be achieved by starting `mpv` on a host machine with specified socket path and mounting that socket path inside a running container. That way server will communicate with `mpv` running on a host.
+Running a server instance in a docker container can be achieved by starting `mpv` on a host machine with specified socket path and mounting that socket path inside a running container - this way image will satisfy all build-time and runtime dependencies like `go` and `ffprobe`, except `mpv` which should be ran on the host.
 
-From root repostiory dir run `docker build -t mpv-web-api:latest -f ./build/package/Dockerfile .` to build the application.
+From root repostiory dir run `docker build -t mpv-web-api:latest -f ./build/package/Dockerfile .` to build the application image.
 
-The resulting image will automatically apply `--start-mpv-instance=false`, since in most (all?) cases the `mpv` should be running on a host machine, not inside a container. That however requires passing `mpv-socket-path`.
+The resulting image will automatically apply `--start-mpv-instance=false`, since in most (all?) cases the `mpv` should be running on a host machine, not inside a container. That however requires passing `mpv-socket-path` if the socket is mapped to a different path inside a running container than the path mpv checks by default (`/tmp/mpvsocket`).
 
-// part about starting mpv with socket and no automatic process closure
+Minimal `mpv` instance prepared for communication with the server can be spawned with a following command:
 
-Having started `mpv` process, next step is to run `mpv-web-api:latest` image created earlier with necessary mountpoints and arguments. Few thing that need to be taken into consideration when running the image:
+`mpv --input-ipc-server=/tmp/mpvsocket --idle=yes`
+
+Having started `mpv` process, the next step is to run `mpv-web-api:latest` image created earlier with necessary mountpoints and arguments. Few things that need to be taken into consideration when running the image:
 - port (by default `3001`) has to be mapped from the container into a host
 - directory with media files has to be mapped from host to a container and the appropriate dir argument has to be provied that points to the mapped point inside the container
-- socket on which `mpv` listens has to be mapped from host to a continer and the appropriate `mpv-socket-path` argument must be provided that points to the mapped socket inside the container
+- socket on which `mpv` listens has to be mapped from host to a continer and the appropriate `mpv-socket-path` argument must be provided that points to the mapped socket inside the container, if it was mapped to a different path than the one the server check by default (`/tmp/mpvsocket`)
+- all cors rules apply in the same way as for the process running on host machine, which means when connecting from locally served frontend (`localhost`) it's preferable to pass `--allow-cors` 
 
-The image does not assume any defaults as to where directories and socket are mapped inside the container so those have to be taken care of when providing a `docker run` command.
+The image itself does not assume any defaults as to where directories and socket are mapped inside the container (in contrast to defaults of the server itself) so those have to be taken care of when providing a `docker run` command.
+
+`docker run -it --rm -v <host path to socket>:/tmp/mpvsocket -v <host path to mediafiles>:/mnt/videos -p <host port>:3001 mpv-web-api:latest --allow-cors --dir /mnt/videos --watch-dir`
+e.g:
+`docker run -it --rm -v /tmp/mpvsocket:/tmp/mpvsocket -v /home/user/videos:/mnt/videos -p 3001:3001 mpv-web-api:latest --allow-cors --dir /mnt/videos --watch-dir`
 
 ### REST endpoints
 
