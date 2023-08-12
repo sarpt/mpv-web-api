@@ -269,14 +269,16 @@ func (m *Manager) Serve() error {
 	defer func() { m.shutdown = nil }()
 
 	serveCtx, serveCancel := context.WithCancel(context.Background())
-	go cil.ControlledInfiniteLoop(
-		serveCtx,
-		cil.Cfg{
-			AfterLoopCb: func() { m.outLog.Println("restarting mpv process...") },
-			Cb:          m.manageOwnMpvProcess,
-			Result:      mpvErrors,
-		},
-	)
+	if m.startMpvInstance {
+		go cil.ControlledInfiniteLoop(
+			serveCtx,
+			cil.Cfg{
+				AfterLoopCb: func() { m.outLog.Println("restarting mpv process...") },
+				Cb:          m.manageOwnMpvProcess,
+				Result:      mpvErrors,
+			},
+		)
+	}
 	go cil.ControlledInfiniteLoop(
 		serveCtx,
 		cil.Cfg{
