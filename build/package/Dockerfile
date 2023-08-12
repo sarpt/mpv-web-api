@@ -1,4 +1,4 @@
-FROM golang:1.20.7 AS build
+FROM golang:1.21.0-alpine3.18 AS build
 
 WORKDIR /app
 COPY go.mod go.sum ./
@@ -17,8 +17,7 @@ RUN apk update
 RUN apk upgrade
 RUN apk add --no-cache ffmpeg
 
-WORKDIR /app
-COPY --from=build /build/mpv-web-api /app
+COPY --from=build /build/mpv-web-api /usr/local/bin
 
 EXPOSE 3001
 ENTRYPOINT [ "mpv-web-api", "--start-mpv-instance=false" ]
