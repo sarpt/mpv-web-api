@@ -110,7 +110,7 @@ func (s *Server) ChangeSubtitle(subtitleID string) error {
 }
 
 func (s *Server) LoadFile(filePath string, append bool) error {
-	return s.mpvManager.LoadFile(filePath, append)
+	return s.mpvManager.LoadFile(s.preparePathForMpv(filePath), append)
 }
 
 func (s *Server) LoadFileByUuid(uuid string, append bool) error {
@@ -119,7 +119,7 @@ func (s *Server) LoadFileByUuid(uuid string, append bool) error {
 		return err
 	}
 
-	filePath := mediaFile.Path()
+	filePath := s.preparePathForMpv(mediaFile.Path())
 
 	return s.mpvManager.LoadFile(filePath, append)
 }

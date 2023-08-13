@@ -13,7 +13,7 @@ It's main use is to be a backend for [mpv-web-front](https://github.com/sarpt/mp
 
 ### Dependencies for builidng
 
-- `go` (tested on `1.14`, might build on earlier versions, recommended `1.16.5` and up because of the bomb-ass improvements to the arguments help display. the image docker is built with `1.20.7`)
+- `go` (tested on `1.21.0`. the docker image is built with `1.21.0`)
 
 ### Arguments
 
@@ -22,6 +22,7 @@ It's main use is to be a backend for [mpv-web-front](https://github.com/sarpt/mp
 - `dir` - []string - (default: current working directory) directories that should be scanned for media files. To specify more than one directory to be handled, multiple `--dir=<path>` arguments can be specified eg. `--dir=/path1 --dir=/path2`. The server will only handle paths provided by clients that start with one of the paths provided to `dir`. When not provided, current working directory for the process will be used to scan for media files. Recursive scan can be enabled with `--dir-recursive`. Watching for the changes to the provided directories can be enabled with `--watch-dir`.
 - `dir-recursive` - bool - directories provided to `--dir` (or working directory when `--dir` is not provided) will be checked recursively.
 - `mpv-socket-path` - string - (default: `/tmp/mpvsocket`) path to socket file used by MPV instance
+- `path-replacements` - []string - list of path replacements mappings that will be used when communicating with mpv process. The mapping entry takes form of a `<from>:<to>` string, eg. `/some/path:/replacement/path`. When provided multiple times, the order of specified arguments will be the order in which server applies replacements to the paths. When path matches multiple (or even all) replacements, then all of matching replacements will be applied.
 - `playlist-prefix` - []string - list of prefixes for playlist JSON files located in directories being handled by the server instance. For more informations on playlists please check related section.
 - `socket-timeout` - int - (defualt: `15`) maximum allowed time in seconds for retrying connection to MPV socket
 - `start-mpv-instance` - bool - (default: `true`) when set to true, `mpv-web-api` will create it's own MPV process. When set to false, `mpv-web-api` will only try to connect to MPV using file at `mpv-socket-path`. Particularly useful when trying to run `mpv-web-api` in docker and connecting to a local MPV instance
@@ -50,14 +51,15 @@ Minimal `mpv` instance prepared for communication with the server can be spawned
 Having started `mpv` process, the next step is to run `mpv-web-api:latest` image created earlier with necessary mountpoints and arguments. Few things that need to be taken into consideration when running the image:
 - port (by default `3001`) has to be mapped from the container into a host
 - directory with media files has to be mapped from host to a container and the appropriate dir argument has to be provied that points to the mapped point inside the container
-- socket on which `mpv` listens has to be mapped from host to a continer and the appropriate `mpv-socket-path` argument must be provided that points to the mapped socket inside the container, if it was mapped to a different path than the one the server check by default (`/tmp/mpvsocket`)
-- all cors rules apply in the same way as for the process running on host machine, which means when connecting from locally served frontend (`localhost`) it's preferable to pass `--allow-cors` 
+- unless the mapped mountpoints mentioned in the previous point result in the same absolute paths in the container as they are on the host, the `path-replacements` argument should be used to translate paths from a mountpoint path to a host path, otherwise `mpv` running on the host will be fed with mapped mountpoints which might result in file loading errors due to incorrect paths
+- socket on which `mpv` listens has to be mapped from host to a continer and the appropriate `mpv-socket-path` argument must be provided that points to the mapped socket inside the container, if it was mapped to a different path than the one the server checks by default (`/tmp/mpvsocket`)
+- all cors rules apply in the same way as for the process running on host machine, which means when connecting from locally served frontend (`localhost`) it might be neccessary to pass `--allow-cors` 
 
 The image itself does not assume any defaults as to where directories and socket are mapped inside the container (in contrast to defaults of the server itself) so those have to be taken care of when providing a `docker run` command.
 
-`docker run -it --rm -v <host path to socket>:/tmp/mpvsocket -v <host path to mediafiles>:/mnt/videos -p <host port>:3001 mpv-web-api:latest --allow-cors --dir /mnt/videos --watch-dir`
+`docker run -it --rm -v <host path to socket>:/tmp/mpvsocket -v <host path to mediafiles>:/mnt/videos -p <host port>:3001 mpv-web-api:latest --allow-cors --dir=/mnt/videos --path-replacements=/mnt/videos:<host path to mediafiles> --watch-dir`
 e.g:
-`docker run -it --rm -v /tmp/mpvsocket:/tmp/mpvsocket -v /home/user/videos:/mnt/videos -p 3001:3001 mpv-web-api:latest --allow-cors --dir /mnt/videos --watch-dir`
+`docker run -it --rm -v /tmp/mpvsocket:/tmp/mpvsocket -v /home/user/videos:/mnt/videos -p 3001:3001 mpv-web-api:latest --allow-cors --dir=/mnt/videos --path-replacements=/mnt/videos:/home/user/videos --watch-dir`
 
 ### REST endpoints
 

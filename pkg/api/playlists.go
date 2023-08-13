@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -77,7 +76,7 @@ func (s *Server) createTempPlaylistFile(filename string, entries []playlists.Ent
 		fileData = append(fileData, []byte(fmt.Sprintln(entry.Path))...)
 	}
 
-	return ioutil.WriteFile(filename, fileData, os.ModePerm)
+	return os.WriteFile(filename, fileData, os.ModePerm)
 }
 
 func (s *Server) createDefaultPlaylist() (string, error) {
