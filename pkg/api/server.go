@@ -8,6 +8,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -33,6 +35,7 @@ type Server struct {
 	mpvManager            *mpv.Manager
 	outLog                *log.Logger
 	statesRepository      state.Repository
+	pathReplacements      []PathReplacement
 	playlistFilesPrefixes []string
 	pluginServers         map[string]PluginServer
 }
@@ -64,12 +67,18 @@ type PluginServer interface {
 	Shutdown()
 }
 
+type PathReplacement struct {
+	From string
+	To   string
+}
+
 // Config controls behaviour of the api server.
 type Config struct {
 	Address                 string
 	AllowCORS               bool
 	ErrWriter               io.Writer
 	MpvSocketPath           string
+	PathReplacements        []PathReplacement
 	PlaylistFilesPrefixes   []string
 	OutWriter               io.Writer
 	SocketConnectionTimeout time.Duration
@@ -108,6 +117,7 @@ func NewServer(cfg Config) (*Server, error) {
 		mpvManager:            mpv.NewManager(mpvManagerCfg),
 		outLog:                log.New(cfg.OutWriter, logPrefix, log.LstdFlags),
 		statesRepository:      cfg.StatesRepository,
+		pathReplacements:      cfg.PathReplacements,
 		playlistFilesPrefixes: cfg.PlaylistFilesPrefixes,
 		pluginServers:         cfg.PluginServers,
 	}
@@ -273,4 +283,32 @@ func (s Server) subscribeToMpvProperties(observeResponses chan mpv.ObserveProper
 	}
 
 	return nil
+}
+
+func (s Server) preparePathForMpv(path string) string {
+	if len(s.pathReplacements) == 0 {
+		return path
+	}
+
+	mpvPath := path
+	for _, replacement := range s.pathReplacements {
+		mpvPath = strings.ReplaceAll(mpvPath, replacement.From, replacement.To)
+	}
+
+	return mpvPath
+}
+
+func (s Server) getPathFromMpvPath(mpvPath string) string {
+	if len(s.pathReplacements) == 0 {
+		return mpvPath
+	}
+
+	preparedPath := mpvPath
+	replacementsToApply := slices.Clone(s.pathReplacements)
+	slices.Reverse(replacementsToApply)
+	for _, replacement := range replacementsToApply {
+		preparedPath = strings.ReplaceAll(preparedPath, replacement.To, replacement.From)
+	}
+
+	return preparedPath
 }

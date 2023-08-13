@@ -146,11 +146,12 @@ func (s *Server) handlePathEvent(res mpv.ObservePropertyResponse) error {
 		return nil
 	}
 
-	path, ok := res.Data.(string)
+	mpvPath, ok := res.Data.(string)
 	if !ok {
 		return ErrResponseDataNotString
 	}
 
+	path := s.getPathFromMpvPath(mpvPath)
 	mediaFile, err := s.statesRepository.MediaFiles().ByPath(path)
 	if err != nil {
 		return fmt.Errorf("%w:%s", ErrPlaybackPathNotServed, path)
