@@ -33,7 +33,7 @@ const (
 	dirFlag              = "dir"
 	dirRecursiveFlag     = "dir-recursive"
 	mpvSocketPathFlag    = "mpv-socket-path"
-	pathReplacementsFlag = "path-replacements"
+	pathMappingsFlag     = "path-mappings"
 	playlistPrefixFlag   = "playlist-prefix"
 	socketTimeoutSecFlag = "socket-timeout"
 	startMpvInstanceFlag = "start-mpv-instance"
@@ -48,7 +48,7 @@ var (
 	dir              *listflag.StringList
 	dirRecursive     *bool
 	mpvSocketPath    *string
-	pathReplacements *listflag.StringList
+	pathMappings     *listflag.StringList
 	playlistPrefix   *listflag.StringList
 	socketTimeoutSec *int64
 	startMpvInstance *bool
@@ -57,7 +57,7 @@ var (
 
 func init() {
 	dir = listflag.NewStringList([]string{})
-	pathReplacements = listflag.NewStringList([]string{})
+	pathMappings = listflag.NewStringList([]string{})
 	playlistPrefix = listflag.NewStringList([]string{})
 
 	flag.Var(dir, dirFlag, "directory containing media files. When not provided current working directory for the process is being used")
@@ -65,7 +65,7 @@ func init() {
 	address = flag.String(addressFlag, defaultAddress, "address on which server should listen on")
 	allowCORS = flag.Bool(allowCorsFlag, false, "when not provided, Cross Origin Site Requests will be rejected")
 	mpvSocketPath = flag.String(mpvSocketPathFlag, defaultMpvSocketPath, "path to a socket file used by a MPV instance to listen for commands")
-	flag.Var(pathReplacements, pathReplacementsFlag, "path parts to be replaced when providing them to mpv process. The mapping is in a form of <path-to-be-replaced>:<replacement-path>. Each path is matched against every replacement provided, even when previous replacements matched")
+	flag.Var(pathMappings, pathMappingsFlag, "path parts to be replaced when providing them to mpv process. The mapping is in a form of <path-to-be-replaced>:<replacement-path>. Each path is matched against every replacement provided, even when previous replacements matched")
 	flag.Var(playlistPrefix, playlistPrefixFlag, "prefix for JSON files to be treated as playlists. The JSON file itself has to have in the root object property 'MpvWebApiPlaylist' set to true to be treated as a playlist")
 	socketTimeoutSec = flag.Int64(socketTimeoutSecFlag, defaultSocketTimeoutSec, "maximum allowed time in seconds for retrying connection to MPV instance")
 	startMpvInstance = flag.Bool(startMpvInstanceFlag, true, "controls whether the application should create and manage its own MPV instance")
@@ -99,17 +99,17 @@ func main() {
 
 	socketConnectionTimeout := time.Duration(time.Duration(*socketTimeoutSec) * time.Second)
 
-	pathReplacementsList := []api.PathReplacement{}
-	for _, replacement := range pathReplacements.Values() {
+	pathMappingsList := []api.PathMapping{}
+	for _, replacement := range pathMappings.Values() {
 		split := strings.Split(replacement, ":")
-		pathReplacementsList = append(pathReplacementsList, api.PathReplacement{To: split[1], From: split[0]})
+		pathMappingsList = append(pathMappingsList, api.PathMapping{To: split[1], From: split[0]})
 	}
 
 	cfg := api.Config{
 		Address:               *address,
 		AllowCORS:             *allowCORS,
 		MpvSocketPath:         *mpvSocketPath,
-		PathReplacements:      pathReplacementsList,
+		PathMappings:          pathMappingsList,
 		PlaylistFilesPrefixes: playlistPrefix.Values(),
 		PluginServers: map[string]api.PluginServer{
 			sseServer.Name():  sseServer,
