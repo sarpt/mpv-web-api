@@ -32,7 +32,7 @@ It's main use is to be a backend for [mpv-web-front](https://github.com/sarpt/mp
 
 To build and install the application, in terminal navigate to `<repo-root>/cmd/mpv-web-api` and run `go build && go install`. 
 
-After building the the binary `mpv-web-api` simply run it. To check if it's working: `curl --data "path=/path/to/file.ext" http://localhost:3001/playback` - the invocation should return current state of the playback (if anything's playing).
+After building the `mpv-web-api` binary simply run it. To check if it's working: `curl --data "path=/path/to/file.ext" http://localhost:3001/playback` - the invocation should return current state of the playback (if anything's playing).
 
 In case the server is ran to serve as a backend to `mpv-web-front` on a local machine it is recommended to pass `--allow-cors` argument, otherwise the communication might be blocked.
 
@@ -40,7 +40,7 @@ In case the server is ran to serve as a backend to `mpv-web-front` on a local ma
 
 Running a server instance in a docker container can be achieved by starting `mpv` on a host machine with specified socket path and mounting that socket path inside a running container - this way image will satisfy all build-time and runtime dependencies like `go` and `ffprobe`, except `mpv` which should be ran on the host.
 
-From root repostiory dir run `docker build -t mpv-web-api:latest -f ./build/package/Dockerfile .` to build the application image.
+From root repository dir run `docker build -t mpv-web-api:latest -f ./build/package/Dockerfile .` to build the application image.
 
 The resulting image will automatically apply `--start-mpv-instance=false`, since in most (all?) cases the `mpv` should be running on a host machine, not inside a container. That however requires passing `mpv-socket-path` if the socket is mapped to a different path inside a running container than the path mpv checks by default (`/tmp/mpvsocket`).
 
@@ -50,15 +50,17 @@ Minimal `mpv` instance prepared for communication with the server can be spawned
 
 Having started `mpv` process, the next step is to run `mpv-web-api:latest` image created earlier with necessary mountpoints and arguments. Few things that need to be taken into consideration when running the image:
 - port (by default `3001`) has to be mapped from the container into a host
-- directory with media files has to be mapped from host to a container and the appropriate dir argument has to be provied that points to the mapped point inside the container
-- unless the mapped mountpoints mentioned in the previous point result in the same absolute paths in the container as they are on the host, the `path-mappings` argument should be used to translate paths from a mountpoint path to a host path, otherwise `mpv` running on the host will be fed with mapped mountpoints which might result in file loading errors due to incorrect paths
-- socket on which `mpv` listens has to be mapped from host to a continer and the appropriate `mpv-socket-path` argument must be provided that points to the mapped socket inside the container, if it was mapped to a different path than the one the server checks by default (`/tmp/mpvsocket`)
-- all cors rules apply in the same way as for the process running on host machine, which means when connecting from locally served frontend (`localhost`) it might be neccessary to pass `--allow-cors` 
+- directory with media files has to be mapped from host to a container and the appropriate `dir` argument has to be provided that points to the mapped point inside the container
+- unless mapped mountpoints mentioned in the previous point result in the same absolute paths in the container as they are on the host, the `path-mappings` argument should be used to translate paths from a mountpoint path to a host path, otherwise `mpv` running on the host will be fed with mapped mountpoints which might result in file loading errors due to incorrect paths
+- socket on which `mpv` listens has to be mapped from host to a container and the appropriate `mpv-socket-path` argument must be provided that points to the mapped socket inside the container, if it was mapped to a different path than the one the server checks by default (`/tmp/mpvsocket`)
+- all cors rules apply in the same way as for the process running on a host machine, which means when connecting from locally served frontend (`localhost`) it might be neccessary to pass `--allow-cors` 
 
 The image itself does not assume any defaults as to where directories and socket are mapped inside the container (in contrast to defaults of the server itself) so those have to be taken care of when providing a `docker run` command.
 
 `docker run -it --rm -v <host path to socket>:/tmp/mpvsocket -v <host path to mediafiles>:/mnt/videos -p <host port>:3001 mpv-web-api:latest --allow-cors --dir=/mnt/videos --path-mappings=/mnt/videos:<host path to mediafiles> --watch-dir`
+
 e.g:
+
 `docker run -it --rm -v /tmp/mpvsocket:/tmp/mpvsocket -v /home/user/videos:/mnt/videos -p 3001:3001 mpv-web-api:latest --allow-cors --dir=/mnt/videos --path-mappings=/mnt/videos:/home/user/videos --watch-dir`
 
 ### REST endpoints
@@ -76,7 +78,7 @@ Many REST endpoints are not implemented yet, since `mpv-web-front` mostly uses S
   - `append` - bool (default: `false`) - when set to `true` with `path`, it append path as a next entry in currently played playlist (whether named/saved or not). When set to `false`, file under `path` will be played immediately, basically creating a new unnamed/empty playlist with only one item in it.
   - `audioID` - string - selects audio stream with the provided id. Although a string, mpv indexes its audio streams, so it will have numerical form.
   - `chapter` - int - selects chapter.
-  - `chapters` - int[] - controls order of chapters playback. The argument takes form of a chapter indexes list (0-based) separated by `,` eg. `2,3,5`. When file is being looped, the chapters order will be enforced through every loop of the file, until next media file starts. The list accepts repetitions (eg. `2,2,4,5,5`). At the moment list enforces sorting of the indexes (eg. `1,4,5` is correct but `5,4,1` is not), but a target functionality of this features plans for sorting to be irrelevant. By default, the argument is not applied immediately, as such it will be enabled with the first chapter change in the file, so the current chapter can be finished without initial jump, but compound argument `force` can be used to force chapters order restrictions immediately (currently played chapter will be changed if neccessary).
+  - `chapters` - int[] - controls order of chapters playback. The argument takes form of a chapter indexes list (0-based) separated by `,` eg. `2,3,5`. When file is being looped, the chapters order will be enforced through every loop of the file, until next media file starts. The list accepts repetitions (eg. `2,2,4,5,5`). At the moment list enforces sorting of the indexes (eg. `1,4,5` is correct but `5,4,1` is not), but a target functionality of this features plans for sorting to be irrelevant. By default, the argument is not applied immediately - it will be enabled with the first chapter change in the file, so the current chapter can be finished without initial jump, but compound argument `force` can be used to force chapters order restrictions immediately (currently playing chapter will be changed if neccessary).
   - `force` - bool (default: `false`) - forces changes for applicable arguments: `chapters`
   - `fullscreen` - bool (default: `false`) - selects fullscreen state to enabled/disabled.
   - `loopFile` - bool (default: `false`) - selects looping of currently played file to enabled/disabled.
@@ -101,7 +103,7 @@ In order to subsrcibe to channel(s), `/sse` REST endpoint should be used - how t
 
 Some notes about weird/unexpected behavior that will at some point be changed/solved/cleared:
 - `replay` event is a special one, which is used to replay the whole state. It will be changed to `all` or something else - it's a legacy name that outlived it's temporary meaning and it's temporary solution implementation. It's used by `mpv-web-front` to "get a replay" of all data when connecting fresh or after a reconnect, instead of getting only chunks of data (get all media files to have possibility to handle added media files or updated media files additively). Since most of the events provide whole state anyway, it's usefullness and name are highly debatable. Although redundant, it's mentioned in all channels below (because why not).
-- some events provide diferential state changes, while some always emit the whole state. Target behavior will be to have differential changes sent in all cases except for the currently ill-named `replay` events. That however will require a rewrite which I'm more willing to take when generics land in go (even if that means being dependent on the beta `go` release, like expected `go1.18 beta`). While generics clearly aren't "necessary" for rewrite, my intuition is telling me that resulting code will be easier on the eyes and soul rather than whatever form it will take without them (future will tell whether my intuition is right, exciting!).
+- some events provide diferential state changes, while some always emit the whole state. Target behavior will be to have differential changes sent in all cases except for the currently ill-named `replay` events.
 - events that have ~~strikethrough~~ are to be implemented "soon-ish" - as soon as I find ~~interest~~ ~~energy~~ ~~faith~~ use for them...
 - overall, server's implementation of SSEs is a chaotic mess right now and there's no guarantee for their behavior and contents. This section will be updated (hopefully) as soon as they are more "stable" ~~(or I find another cool way of providing updates to clients - I'm looking at you GraphQL)~~
 
