@@ -20,7 +20,8 @@ import (
 )
 
 const (
-	logPrefix = "cmd.main#"
+	logPrefix         = "cmd.main#"
+	pathMappingSymbol = ":"
 )
 
 const (
@@ -101,7 +102,7 @@ func main() {
 
 	pathMappingsList := []api.PathMapping{}
 	for _, replacement := range pathMappings.Values() {
-		split := strings.Split(replacement, ":")
+		split := strings.Split(replacement, pathMappingSymbol)
 		pathMappingsList = append(pathMappingsList, api.PathMapping{To: split[1], From: split[0]})
 	}
 
