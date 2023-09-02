@@ -28,6 +28,7 @@ type observePropertyHandler = func(res mpv.ObservePropertyResponse) error
 // Server is used to serve API and hold state accessible to the API.
 type Server struct {
 	address               string
+	appDir                string
 	stopServing           chan string
 	defaultPlaylistUUID   string
 	errLog                *log.Logger
@@ -76,6 +77,7 @@ type PathMapping struct {
 type Config struct {
 	Address                 string
 	AllowCORS               bool
+	AppDir                  string
 	ErrWriter               io.Writer
 	MpvSocketPath           string
 	PathMappings            []PathMapping
@@ -111,6 +113,7 @@ func NewServer(cfg Config) (*Server, error) {
 
 	server := &Server{
 		address:               cfg.Address,
+		appDir:                cfg.AppDir,
 		defaultPlaylistUUID:   defaultPlaylistUUID,
 		errLog:                log.New(cfg.ErrWriter, logPrefix, log.LstdFlags),
 		fsWatcher:             watcher,
