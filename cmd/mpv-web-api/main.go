@@ -28,6 +28,7 @@ const (
 	defaultAddress           = ":3001"
 	defaultSocketTimeoutSec  = 15
 	defaultMpvSocketFilename = "mpvsocket"
+	defaultAppDirName        = "mwa"
 
 	addressFlag          = "addr"
 	allowCorsFlag        = "allow-cors"
@@ -38,6 +39,7 @@ const (
 	playlistPrefixFlag   = "playlist-prefix"
 	socketTimeoutSecFlag = "socket-timeout"
 	startMpvInstanceFlag = "start-mpv-instance"
+	appDirFlag           = "app-dir"
 	watchDirFlag         = "watch-dir"
 )
 
@@ -53,6 +55,7 @@ var (
 	playlistPrefix   *listflag.StringList
 	socketTimeoutSec *int64
 	startMpvInstance *bool
+	appDir           *string
 	watchDir         *bool
 )
 
@@ -61,6 +64,7 @@ func init() {
 	pathMappings = listflag.NewStringList([]string{})
 	playlistPrefix = listflag.NewStringList([]string{})
 
+	appDir = flag.String(appDirFlag, "", "path which should be used for persistence storage by the server for saving unnamed playlists, configs, caches, etc.")
 	flag.Var(dir, dirFlag, "directory containing media files. When not provided current working directory for the process is being used")
 	dirRecursive = flag.Bool(dirRecursiveFlag, true, "when not provided, directories provided to --dir (or working directory when --dir is absent) will only be checked on the first level and any directories within will be ignored")
 	address = flag.String(addressFlag, defaultAddress, "address on which server should listen on")
@@ -81,6 +85,14 @@ func main() {
 
 	errLog := log.New(errWriter, logPrefix, log.LstdFlags)
 	outLog := log.New(outWriter, logPrefix, log.LstdFlags)
+
+	parsedAppDir, err := handleAppDir(*appDir)
+	if err != nil {
+		errLog.Printf("could not use \"%s\" as an application directory - reason: %s", parsedAppDir, err)
+		os.Exit(1)
+	}
+
+	outLog.Printf("server uses as \"%s\" as an application directory", parsedAppDir)
 
 	statesRepository := state.NewRepository()
 	sseCfg := sse.Config{
@@ -108,6 +120,7 @@ func main() {
 
 	cfg := api.Config{
 		Address:               *address,
+		AppDir:                parsedAppDir,
 		AllowCORS:             *allowCORS,
 		MpvSocketPath:         *mpvSocketPath,
 		PathMappings:          pathMappingsList,
@@ -176,4 +189,24 @@ func main() {
 	} else {
 		outLog.Println("API server finished successfully")
 	}
+}
+
+func handleAppDir(appDir string) (string, error) {
+	if appDir == "" {
+		appDir = getDefaultAppDir()
+	}
+
+	return appDir, nil
+}
+
+func getDefaultAppDir() string {
+	var appPathDefaultBase string
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		appPathDefaultBase = os.TempDir()
+	} else {
+		appPathDefaultBase = homeDir
+	}
+
+	return fmt.Sprintf("%s%c%s", appPathDefaultBase, os.PathSeparator, defaultAppDirName)
 }
