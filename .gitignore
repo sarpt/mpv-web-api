@@ -17,9 +17,5 @@
 # vscode
 .vscode/*
 
-# Cmd builds
-cmd/*/**
-!cmd/*/*.go
-
 # misc
 *.tmp

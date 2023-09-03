@@ -2,16 +2,17 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/sarpt/goutils/pkg/listflag"
 
+	"github.com/sarpt/mpv-web-api/cmd/mpv-web-api/internal/utils"
 	"github.com/sarpt/mpv-web-api/internal/rest"
 	"github.com/sarpt/mpv-web-api/internal/sse"
 	"github.com/sarpt/mpv-web-api/pkg/api"
@@ -28,7 +29,6 @@ const (
 	defaultAddress           = ":3001"
 	defaultSocketTimeoutSec  = 15
 	defaultMpvSocketFilename = "mpvsocket"
-	defaultAppDirName        = "mwa"
 
 	addressFlag          = "addr"
 	allowCorsFlag        = "allow-cors"
@@ -44,7 +44,7 @@ const (
 )
 
 var (
-	defaultMpvSocketPath = fmt.Sprintf("%s%c%s", os.TempDir(), os.PathSeparator, defaultMpvSocketFilename)
+	defaultMpvSocketPath = filepath.Join(os.TempDir(), defaultMpvSocketFilename)
 
 	address          *string
 	allowCORS        *bool
@@ -86,13 +86,13 @@ func main() {
 	errLog := log.New(errWriter, logPrefix, log.LstdFlags)
 	outLog := log.New(outWriter, logPrefix, log.LstdFlags)
 
-	parsedAppDir, err := handleAppDir(*appDir)
+	parsedAppDir, err := utils.HandleAppDir(*appDir)
 	if err != nil {
 		errLog.Printf("could not use \"%s\" as an application directory - reason: %s", parsedAppDir, err)
 		os.Exit(1)
 	}
 
-	outLog.Printf("server uses as \"%s\" as an application directory", parsedAppDir)
+	outLog.Printf("server uses \"%s\" as an application directory", parsedAppDir)
 
 	statesRepository := state.NewRepository()
 	sseCfg := sse.Config{
@@ -189,24 +189,4 @@ func main() {
 	} else {
 		outLog.Println("API server finished successfully")
 	}
-}
-
-func handleAppDir(appDir string) (string, error) {
-	if appDir == "" {
-		appDir = getDefaultAppDir()
-	}
-
-	return appDir, nil
-}
-
-func getDefaultAppDir() string {
-	var appPathDefaultBase string
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		appPathDefaultBase = os.TempDir()
-	} else {
-		appPathDefaultBase = homeDir
-	}
-
-	return fmt.Sprintf("%s%c%s", appPathDefaultBase, os.PathSeparator, defaultAppDirName)
 }
