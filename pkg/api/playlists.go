@@ -46,6 +46,8 @@ func (s *Server) LoadPlaylist(uuid string, append bool) error {
 		return err
 	}
 
+	// TODO: if default playlist selected and conditions for default playlist saving met, save the current playist into a file before modyfing
+
 	filename := fmt.Sprintf("%s%cmwa_playlist_%s", os.TempDir(), os.PathSeparator, uuid)
 	err = s.createTempPlaylistFile(filename, playlist.All())
 	if err != nil {
