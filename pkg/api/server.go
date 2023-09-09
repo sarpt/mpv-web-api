@@ -125,7 +125,7 @@ func NewServer(cfg Config) (*Server, error) {
 		pluginServers:         cfg.PluginServers,
 	}
 
-	defaultPlaylistUUID, err := server.createDefaultPlaylist()
+	defaultPlaylistUUID, err := server.createTempPlaylist()
 	if err != nil {
 		return server, err
 	}

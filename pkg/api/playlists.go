@@ -13,11 +13,12 @@ import (
 )
 
 var (
-	ErrJSONFileNotAPlaylistFile = errors.New("a JSON file is not a valid playlist file - 'mpvWebApiPlaylist' either not specified or false")
+	ErrJSONFileNotAPlaylistFile = errors.New("a JSON file is not a valid playlist file - 'MpvWebApiPlaylist' either not specified or false")
 )
 
 const (
-	defaultPlaylistName string = "default"
+	defaultPlaylistName  string = "default"
+	tempPlaylistFilename string = "mwa_playlist"
 )
 
 type PlaylistFile struct {
@@ -48,8 +49,9 @@ func (s *Server) LoadPlaylist(uuid string, append bool) error {
 
 	// TODO: if default playlist selected and conditions for default playlist saving met, save the current playist into a file before modyfing
 
-	filename := fmt.Sprintf("%s%cmwa_playlist_%s", os.TempDir(), os.PathSeparator, uuid)
-	err = s.createTempPlaylistFile(filename, playlist.All())
+	filename := fmt.Sprintf("%s_%s", tempPlaylistFilename, uuid)
+	filepath := filepath.Join(os.TempDir(), filename)
+	err = s.createTempPlaylistFile(filepath, playlist.All())
 	if err != nil {
 		return err
 	}
@@ -60,7 +62,7 @@ func (s *Server) LoadPlaylist(uuid string, append bool) error {
 		s.statesRepository.Playback().SelectPlaylist(uuid)
 	}
 
-	err = s.mpvManager.LoadList(filename, append)
+	err = s.mpvManager.LoadList(filepath, append)
 	if err != nil {
 		return err
 	}
@@ -81,9 +83,10 @@ func (s *Server) createTempPlaylistFile(filename string, entries []playlists.Ent
 	return os.WriteFile(filename, fileData, os.ModePerm)
 }
 
-func (s *Server) createDefaultPlaylist() (string, error) {
+func (s *Server) createTempPlaylist() (string, error) {
 	defaultPlaylistCfg := playlists.Config{
-		Name: defaultPlaylistName,
+		Name:   defaultPlaylistName,
+		Origin: playlists.TempOrigin,
 	}
 
 	return s.statesRepository.Playlists().AddPlaylist(playlists.NewPlaylist(defaultPlaylistCfg))
@@ -113,6 +116,7 @@ func (s *Server) handlePlaylistFile(path string) (string, error) {
 		DirectoryContentsAsEntries: playlistFile.DirectoryContentsAsEntries,
 		Entries:                    playlistFile.Entries,
 		Name:                       playlistFile.Name,
+		Origin:                     playlists.ExternalOrigin,
 		Path:                       path,
 	}
 
