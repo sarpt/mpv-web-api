@@ -7,6 +7,14 @@ import (
 	"github.com/google/uuid"
 )
 
+type PlaylistOrigin string
+
+const (
+	ExternalOrigin PlaylistOrigin = "externalOrigin"
+	CachedOrigin   PlaylistOrigin = "cachedOrigin"
+	TempOrigin     PlaylistOrigin = "tempOrigin"
+)
+
 // Playlist holds state about currently playing playlist.
 type Playlist struct {
 	entryIdx                   int
@@ -16,6 +24,7 @@ type Playlist struct {
 	name                       string
 	lock                       *sync.RWMutex
 	path                       string
+	origin                     PlaylistOrigin
 	uuid                       string
 }
 
@@ -35,6 +44,7 @@ type Config struct {
 	DirectoryContentsAsEntries bool
 	Entries                    []Entry
 	Name                       string
+	Origin                     PlaylistOrigin
 	Path                       string
 }
 
@@ -48,6 +58,7 @@ func NewPlaylist(cfg Config) *Playlist {
 		name:                       cfg.Name,
 		lock:                       &sync.RWMutex{},
 		path:                       cfg.Path,
+		origin:                     cfg.Origin,
 		uuid:                       uuid.NewString(),
 	}
 }
@@ -143,4 +154,8 @@ func (p *Playlist) setEntries(entries []Entry) {
 
 func (p *Playlist) UUID() string {
 	return p.uuid
+}
+
+func (p *Playlist) Origin() PlaylistOrigin {
+	return p.origin
 }
