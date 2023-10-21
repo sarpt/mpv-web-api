@@ -30,7 +30,6 @@ type Server struct {
 	address               string
 	appDir                string
 	stopServing           chan string
-	defaultPlaylistUUID   string
 	errLog                *log.Logger
 	fsWatcher             *fsnotify.Watcher
 	mpvManager            *mpv.Manager
@@ -114,7 +113,6 @@ func NewServer(cfg Config) (*Server, error) {
 	server := &Server{
 		address:               cfg.Address,
 		appDir:                cfg.AppDir,
-		defaultPlaylistUUID:   defaultPlaylistUUID,
 		errLog:                log.New(cfg.ErrWriter, logPrefix, log.LstdFlags),
 		fsWatcher:             watcher,
 		mpvManager:            mpv.NewManager(mpvManagerCfg),
@@ -130,7 +128,6 @@ func NewServer(cfg Config) (*Server, error) {
 		return server, err
 	}
 
-	server.defaultPlaylistUUID = defaultPlaylistUUID
 	server.statesRepository.Playback().SelectPlaylist(defaultPlaylistUUID)
 
 	return server, nil
