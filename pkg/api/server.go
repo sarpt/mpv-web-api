@@ -28,14 +28,14 @@ type observePropertyHandler = func(res mpv.ObservePropertyResponse) error
 // Server is used to serve API and hold state accessible to the API.
 type Server struct {
 	address               string
+	appDir                string
 	stopServing           chan string
-	defaultPlaylistUUID   string
 	errLog                *log.Logger
 	fsWatcher             *fsnotify.Watcher
 	mpvManager            *mpv.Manager
 	outLog                *log.Logger
 	statesRepository      state.Repository
-	pathReplacements      []PathReplacement
+	pathMappings          []PathMapping
 	playlistFilesPrefixes []string
 	pluginServers         map[string]PluginServer
 }
@@ -67,7 +67,7 @@ type PluginServer interface {
 	Shutdown()
 }
 
-type PathReplacement struct {
+type PathMapping struct {
 	From string
 	To   string
 }
@@ -76,9 +76,10 @@ type PathReplacement struct {
 type Config struct {
 	Address                 string
 	AllowCORS               bool
+	AppDir                  string
 	ErrWriter               io.Writer
 	MpvSocketPath           string
-	PathReplacements        []PathReplacement
+	PathMappings            []PathMapping
 	PlaylistFilesPrefixes   []string
 	OutWriter               io.Writer
 	SocketConnectionTimeout time.Duration
@@ -111,23 +112,22 @@ func NewServer(cfg Config) (*Server, error) {
 
 	server := &Server{
 		address:               cfg.Address,
-		defaultPlaylistUUID:   defaultPlaylistUUID,
+		appDir:                cfg.AppDir,
 		errLog:                log.New(cfg.ErrWriter, logPrefix, log.LstdFlags),
 		fsWatcher:             watcher,
 		mpvManager:            mpv.NewManager(mpvManagerCfg),
 		outLog:                log.New(cfg.OutWriter, logPrefix, log.LstdFlags),
 		statesRepository:      cfg.StatesRepository,
-		pathReplacements:      cfg.PathReplacements,
+		pathMappings:          cfg.PathMappings,
 		playlistFilesPrefixes: cfg.PlaylistFilesPrefixes,
 		pluginServers:         cfg.PluginServers,
 	}
 
-	defaultPlaylistUUID, err := server.createDefaultPlaylist()
+	defaultPlaylistUUID, err := server.createTempPlaylist()
 	if err != nil {
 		return server, err
 	}
 
-	server.defaultPlaylistUUID = defaultPlaylistUUID
 	server.statesRepository.Playback().SelectPlaylist(defaultPlaylistUUID)
 
 	return server, nil
@@ -286,12 +286,12 @@ func (s Server) subscribeToMpvProperties(observeResponses chan mpv.ObserveProper
 }
 
 func (s Server) preparePathForMpv(path string) string {
-	if len(s.pathReplacements) == 0 {
+	if len(s.pathMappings) == 0 {
 		return path
 	}
 
 	mpvPath := path
-	for _, replacement := range s.pathReplacements {
+	for _, replacement := range s.pathMappings {
 		mpvPath = strings.ReplaceAll(mpvPath, replacement.From, replacement.To)
 	}
 
@@ -299,12 +299,12 @@ func (s Server) preparePathForMpv(path string) string {
 }
 
 func (s Server) getPathFromMpvPath(mpvPath string) string {
-	if len(s.pathReplacements) == 0 {
+	if len(s.pathMappings) == 0 {
 		return mpvPath
 	}
 
 	preparedPath := mpvPath
-	replacementsToApply := slices.Clone(s.pathReplacements)
+	replacementsToApply := slices.Clone(s.pathMappings)
 	slices.Reverse(replacementsToApply)
 	for _, replacement := range replacementsToApply {
 		preparedPath = strings.ReplaceAll(preparedPath, replacement.To, replacement.From)

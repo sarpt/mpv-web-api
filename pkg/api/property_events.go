@@ -88,12 +88,17 @@ func (s *Server) handlePlaylistProperty(res mpv.ObservePropertyResponse) error {
 		return nil
 	}
 
-	if !s.DefaultPlaylistSelected() {
+	if currentPlaylist.Origin() != playlists.TempOrigin {
 		// To prevent unwanted changes to a named playlist when entries don't match, a default playlist
 		// should be selected and modified. Mismatched entries for a named playlist suggest
 		// changes introduced from outside the server.
-		s.outLog.Printf("entries do not match for a named, not-default playlist (uuid: %s) - switching to a default playlist", s.statesRepository.Playback().PlaylistUUID())
-		s.statesRepository.Playback().SelectPlaylist(s.defaultPlaylistUUID)
+		s.outLog.Printf("entries do not match for a named, not-temp playlist (uuid: %s) - switching to a temp playlist", s.statesRepository.Playback().PlaylistUUID())
+		tempPlaylistUUID, err := s.createTempPlaylist()
+		if err != nil {
+			return err
+		}
+
+		s.statesRepository.Playback().SelectPlaylist(tempPlaylistUUID)
 	}
 
 	return s.statesRepository.Playlists().SetPlaylistEntries(s.statesRepository.Playback().PlaylistUUID(), entries)

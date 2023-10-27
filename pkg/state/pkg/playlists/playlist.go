@@ -2,9 +2,18 @@ package playlists
 
 import (
 	"encoding/json"
+	"slices"
 	"sync"
 
 	"github.com/google/uuid"
+)
+
+type PlaylistOrigin string
+
+const (
+	ExternalOrigin PlaylistOrigin = "externalOrigin"
+	CachedOrigin   PlaylistOrigin = "cachedOrigin"
+	TempOrigin     PlaylistOrigin = "tempOrigin"
 )
 
 // Playlist holds state about currently playing playlist.
@@ -16,6 +25,7 @@ type Playlist struct {
 	name                       string
 	lock                       *sync.RWMutex
 	path                       string
+	origin                     PlaylistOrigin
 	uuid                       string
 }
 
@@ -35,6 +45,7 @@ type Config struct {
 	DirectoryContentsAsEntries bool
 	Entries                    []Entry
 	Name                       string
+	Origin                     PlaylistOrigin
 	Path                       string
 }
 
@@ -48,18 +59,17 @@ func NewPlaylist(cfg Config) *Playlist {
 		name:                       cfg.Name,
 		lock:                       &sync.RWMutex{},
 		path:                       cfg.Path,
+		origin:                     cfg.Origin,
 		uuid:                       uuid.NewString(),
 	}
 }
 
 // All returns a copy of all PlaylistEntries being served by the instance of the server.
 func (p *Playlist) All() []Entry {
-	entries := []Entry{}
-
 	p.lock.RLock()
 	defer p.lock.RUnlock()
 
-	return append(entries, p.entries...)
+	return slices.Clone(p.entries)
 }
 
 func (p *Playlist) DirectoryContentsAsEntries() bool {
@@ -98,11 +108,13 @@ func (p *Playlist) EntriesDiffer(entries []Entry) bool {
 func (p *Playlist) MarshalJSON() ([]byte, error) {
 	p.lock.Lock()
 	pJSON := playlistJSON{
+		CurrentEntryIdx:            p.entryIdx,
 		DirectoryContentsAsEntries: p.directoryContentsAsEntries,
 		Description:                p.description,
 		Entries:                    p.entries,
 		Name:                       p.name,
 		UUID:                       p.uuid,
+		Path:                       p.path,
 	}
 	p.lock.Unlock()
 
@@ -143,4 +155,8 @@ func (p *Playlist) setEntries(entries []Entry) {
 
 func (p *Playlist) UUID() string {
 	return p.uuid
+}
+
+func (p *Playlist) Origin() PlaylistOrigin {
+	return p.origin
 }

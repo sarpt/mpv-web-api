@@ -5,19 +5,23 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/sarpt/mpv-web-api/pkg/state/pkg/playback"
 	"github.com/sarpt/mpv-web-api/pkg/state/pkg/playlists"
 )
 
 var (
-	ErrJSONFileNotAPlaylistFile = errors.New("a JSON file is not a valid playlist file - 'mpvWebApiPlaylist' either not specified or false")
+	ErrJSONFileNotAPlaylistFile = errors.New("a JSON file is not a valid playlist file - 'MpvWebApiPlaylist' argument either not specified or false")
 )
 
 const (
-	defaultPlaylistName string = "default"
+	defaultPlaylistName  string = "default"
+	playlistLoadFilename string = "mwa_playlist"
+	tempPlaylistsDirname string = "playlists"
 )
 
 type PlaylistFile struct {
@@ -27,10 +31,6 @@ type PlaylistFile struct {
 	MpvWebApiPlaylist          bool              `json:"MpvWebApiPlaylist"`
 	Name                       string            `json:"Name"`
 	Description                string            `json:"Description"`
-}
-
-func (s *Server) DefaultPlaylistSelected() bool {
-	return s.statesRepository.Playback().PlaylistUUID() == s.defaultPlaylistUUID
 }
 
 // LoadPlaylist instructs mpv to add entries of a playlist to the mpv internal playlist.
@@ -46,19 +46,19 @@ func (s *Server) LoadPlaylist(uuid string, append bool) error {
 		return err
 	}
 
-	filename := fmt.Sprintf("%s%cmwa_playlist_%s", os.TempDir(), os.PathSeparator, uuid)
-	err = s.createTempPlaylistFile(filename, playlist.All())
+	pathname, err := s.createPlaylistFileToLoad(uuid, playlist.All())
 	if err != nil {
 		return err
 	}
 
 	if append {
-		s.statesRepository.Playback().SelectPlaylist(s.defaultPlaylistUUID)
+		// if append then create a new temp playlist and save the previous one? but only if the current playlist is not already a temp one
+		// s.statesRepository.Playback().SelectPlaylist(s.defaultPlaylistUUID)
 	} else {
 		s.statesRepository.Playback().SelectPlaylist(uuid)
 	}
 
-	err = s.mpvManager.LoadList(filename, append)
+	err = s.mpvManager.LoadList(pathname, append)
 	if err != nil {
 		return err
 	}
@@ -70,18 +70,23 @@ func (s *Server) LoadPlaylist(uuid string, append bool) error {
 	return nil
 }
 
-func (s *Server) createTempPlaylistFile(filename string, entries []playlists.Entry) error {
+func (s *Server) createPlaylistFileToLoad(uuid string, entries []playlists.Entry) (string, error) {
+	filename := fmt.Sprintf("%s_%s", playlistLoadFilename, uuid)
+	pathname := filepath.Join(os.TempDir(), filename)
 	fileData := []byte{}
 	for _, entry := range entries {
 		fileData = append(fileData, []byte(fmt.Sprintln(entry.Path))...)
 	}
 
-	return os.WriteFile(filename, fileData, os.ModePerm)
+	return pathname, os.WriteFile(pathname, fileData, os.ModePerm)
 }
 
-func (s *Server) createDefaultPlaylist() (string, error) {
+func (s *Server) createTempPlaylist() (string, error) {
+	filename := fmt.Sprintf("%d.json", time.Now().Nanosecond())
 	defaultPlaylistCfg := playlists.Config{
-		Name: defaultPlaylistName,
+		Name:   defaultPlaylistName,
+		Origin: playlists.TempOrigin,
+		Path:   path.Join(s.appDir, tempPlaylistsDirname, filename),
 	}
 
 	return s.statesRepository.Playlists().AddPlaylist(playlists.NewPlaylist(defaultPlaylistCfg))
@@ -111,6 +116,7 @@ func (s *Server) handlePlaylistFile(path string) (string, error) {
 		DirectoryContentsAsEntries: playlistFile.DirectoryContentsAsEntries,
 		Entries:                    playlistFile.Entries,
 		Name:                       playlistFile.Name,
+		Origin:                     playlists.ExternalOrigin,
 		Path:                       path,
 	}
 
@@ -149,9 +155,6 @@ func (s *Server) handlePlaylistRelatedPlaybackChanges(change playback.Change) {
 
 	if change.ChangeVariant == playback.PlaylistCurrentIdxChange {
 		uuid := s.statesRepository.Playback().PlaylistUUID()
-		if uuid == s.defaultPlaylistUUID {
-			return
-		}
 
 		err := s.statesRepository.Playlists().SetPlaylistCurrentEntryIdx(uuid, s.statesRepository.Playback().PlaylistCurrentIdx())
 		if err != nil {
@@ -159,7 +162,11 @@ func (s *Server) handlePlaylistRelatedPlaybackChanges(change playback.Change) {
 		}
 	} else if change.ChangeVariant == playback.PlaylistUnloadChange {
 		uuid, ok := change.Value.(string)
-		if !ok || uuid == s.defaultPlaylistUUID {
+		if !ok {
+			return
+		}
+
+		if !s.shouldSavePlaylist(uuid) {
 			return
 		}
 
@@ -172,8 +179,8 @@ func (s *Server) handlePlaylistRelatedPlaybackChanges(change playback.Change) {
 
 func (s *Server) saveCurrentPlaylist() error {
 	uuid := s.statesRepository.Playback().PlaylistUUID()
-	if s.DefaultPlaylistSelected() { // TODO: default/unnamed playlist could be saved to a home directory to be restored when mpv-web-api is ran again, to be considered
-		return fmt.Errorf("save of current playlist unsuccessful - cannot save current playlist")
+	if !s.shouldSavePlaylist(uuid) {
+		return nil
 	}
 
 	return s.savePlaylist(uuid)
@@ -186,7 +193,7 @@ func (s *Server) savePlaylist(uuid string) error {
 	}
 
 	playlistFile := &PlaylistFile{
-		CurrentEntryIdx:            s.statesRepository.Playback().PlaylistCurrentIdx(),
+		CurrentEntryIdx:            playlist.CurrentEntryIdx(),
 		DirectoryContentsAsEntries: playlist.DirectoryContentsAsEntries(),
 		Entries:                    playlist.All(),
 		MpvWebApiPlaylist:          true,
@@ -200,4 +207,17 @@ func (s *Server) savePlaylist(uuid string) error {
 	}
 
 	return os.WriteFile(playlist.Path(), filePayload, 0)
+}
+
+func (s *Server) shouldSavePlaylist(uuid string) bool {
+	playlist, err := s.statesRepository.Playlists().ByUUID(uuid)
+	if err != nil {
+		return false
+	}
+
+	if playlist.Origin() == playlists.TempOrigin {
+		return len(playlist.All()) > 1
+	}
+
+	return true
 }
