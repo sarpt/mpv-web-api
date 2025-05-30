@@ -28,10 +28,6 @@ type Storage struct {
 	revision    *revision.Storage
 }
 
-type storageJSON struct {
-	Items map[string]*Playlist `json:"Items"`
-}
-
 const (
 	// PlaylistsAdded notifies of a new playlist being served.
 	PlaylistsAdded common.ChangeVariant = "added"
@@ -104,10 +100,7 @@ func (p *Storage) MarshalJSON() ([]byte, error) {
 	p.lock.RLock()
 	defer p.lock.RUnlock()
 
-	pJSON := storageJSON{
-		Items: p.items,
-	}
-	return json.Marshal(pJSON)
+	return json.Marshal(p.items)
 }
 
 func (p *Storage) Revision() revision.Identifier {
