@@ -75,7 +75,7 @@ func (s *Server) createPlaylistFileToLoad(uuid string, entries []playlists.Entry
 	pathname := filepath.Join(os.TempDir(), filename)
 	fileData := []byte{}
 	for _, entry := range entries {
-		fileData = append(fileData, []byte(fmt.Sprintln(entry.Path))...)
+		fileData = append(fileData, fmt.Appendln(nil, entry.Path)...)
 	}
 
 	return pathname, os.WriteFile(pathname, fileData, os.ModePerm)
@@ -104,10 +104,10 @@ func (s *Server) hasPlaylistFilePrefix(path string) bool {
 	return false
 }
 
-func (s *Server) handlePlaylistFile(path string) (string, error) {
+func (s *Server) handlePlaylistFile(path string) (*playlists.Playlist, error) {
 	playlistFile, err := s.readPlaylistFile(path)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	playlistCfg := playlists.Config{
@@ -120,12 +120,13 @@ func (s *Server) handlePlaylistFile(path string) (string, error) {
 		Path:                       path,
 	}
 
-	uuid, err := s.statesRepository.Playlists().AddPlaylist(playlists.NewPlaylist(playlistCfg))
+	playlist := playlists.NewPlaylist(playlistCfg)
+	_, err = s.statesRepository.Playlists().AddPlaylist(playlist)
 	if err == nil {
 		s.outLog.Printf("added playlist '%s' at path '%s'", playlistFile.Name, path)
 	}
 
-	return uuid, err
+	return playlist, err
 }
 
 func (s *Server) readPlaylistFile(path string) (PlaylistFile, error) {

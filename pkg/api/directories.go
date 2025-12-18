@@ -1,11 +1,14 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/sarpt/mpv-web-api/pkg/probe"
 	"github.com/sarpt/mpv-web-api/pkg/state/pkg/directories"
@@ -15,7 +18,7 @@ import (
 
 // readDirectory tries to read and probe directory,
 // adding found media files inside the directory.
-func (s *Server) readDirectory(path string) error {
+func (s *Server) readDirectory(path string, cacheEntry *CacheDirEntry) error {
 	pathFs := os.DirFS(path)
 	dirEntries, err := fs.ReadDir(pathFs, ".")
 	if err != nil {
@@ -33,9 +36,19 @@ func (s *Server) readDirectory(path string) error {
 		entryPath := filepath.Join(path, entry.Name())
 
 		if s.hasPlaylistFilePrefix(entryPath) {
-			uuid, err := s.handlePlaylistFile(entryPath)
+			playlist, err := s.handlePlaylistFile(entryPath)
 			if err == nil {
-				playlistUUIDs = append(playlistUUIDs, uuid)
+				info, err := entry.Info()
+				if err == nil {
+					cacheEntry.Playlists[entryPath] = CachePlaylistEntry{
+						Mtime:    info.ModTime(),
+						Playlist: *playlist,
+					}
+				} else {
+					s.errLog.Printf("could not add playlist entry to cache - unable to read file info: %s", err)
+				}
+
+				playlistUUIDs = append(playlistUUIDs, playlist.UUID())
 
 				continue // successfuly handled playlist files don't need to be probed or handled in any other way
 			}
@@ -49,6 +62,15 @@ func (s *Server) readDirectory(path string) error {
 		}
 
 		mediaFile := media_files.MapProbeResultToMediaFile(result)
+		info, err := entry.Info()
+		if err == nil {
+			cacheEntry.MediaFiles[entryPath] = CacheMediaFileEntry{
+				Mtime: info.ModTime(),
+				Entry: mediaFile,
+			}
+		} else {
+			s.errLog.Printf("could not add media file entry to cache - unable to read file info: %s", err)
+		}
 		s.statesRepository.MediaFiles().Add(mediaFile)
 
 		entry := playlists.Entry{
@@ -57,6 +79,7 @@ func (s *Server) readDirectory(path string) error {
 		playlistEntries = append(playlistEntries, entry)
 	}
 
+	// Update playlists content in with freshly read directory contents
 	for _, uuid := range playlistUUIDs {
 		playlist, err := s.statesRepository.Playlists().ByUUID(uuid)
 		if err != nil {
@@ -75,6 +98,19 @@ func (s *Server) readDirectory(path string) error {
 	return err
 }
 
+func (s *Server) restoreDirectoryFromCache(cacheEntry *CacheDirEntry) {
+	for _, cacheEntry := range cacheEntry.MediaFiles {
+		s.statesRepository.MediaFiles().Add(cacheEntry.Entry)
+	}
+
+	for _, cacheEntry := range cacheEntry.Playlists {
+		_, err := s.statesRepository.Playlists().AddPlaylist(&cacheEntry.Playlist)
+		if err != nil {
+			s.errLog.Printf("could not restore playlist '%s'", cacheEntry.Name())
+		}
+	}
+}
+
 // AddRootDirectories adds root directories with media files to be handled by the server.
 // If the Directory entries are already present, they are overwritten along with their properties
 // (watched, recursive, etc.).
@@ -82,6 +118,17 @@ func (s *Server) readDirectory(path string) error {
 // however some information about unsuccessful attempts should be returned
 // in addition to just printing it in server (for example for REST responses).
 func (s *Server) AddRootDirectories(rootDirectories []directories.Entry) {
+	cache, err := loadDirectoriesCache()
+	if err != nil {
+		s.errLog.Printf("could not get cache for directory entries, using empty cache: %s\n", err)
+	}
+	defer func() {
+		err := saveDirectoriesCache(cache)
+		if err != nil {
+			s.errLog.Printf("could not save cache for directories: %s\n", err)
+		}
+	}()
+
 	for _, rootDir := range rootDirectories {
 		rootPath := directories.EnsureDirectoryPath(rootDir.Path)
 
@@ -100,13 +147,29 @@ func (s *Server) AddRootDirectories(rootDirectories []directories.Entry) {
 				return fs.SkipDir
 			}
 
+			cacheEntry, ok := cache.Directories[path]
+			if !ok {
+				cacheEntry = &CacheDirEntry{}
+				cache.Directories[path] = cacheEntry
+			}
+
+			dirInfo, err := dirEntry.Info()
+			var restoreFromCache bool
+			if err != nil {
+				restoreFromCache = false
+				s.errLog.Printf("could not read directory \"%s\" information for modification time comparision, cache entry ignored", path)
+			} else {
+				restoreFromCache = dirInfo.ModTime().After(cacheEntry.Mtime)
+			}
+
 			subDir := directories.Entry{
 				Path:      path,
 				Recursive: rootDir.Recursive,
 				Watched:   rootDir.Watched,
 			}
-			addDirErr := s.AddDirectory(subDir)
-			if err != nil {
+
+			addDirErr := s.AddDirectory(subDir, cacheEntry, restoreFromCache)
+			if addDirErr != nil {
 				s.errLog.Printf("could not add directory '%s': %s\n", path, addDirErr)
 			} else {
 				s.outLog.Printf("directory added %s\n", path)
@@ -121,7 +184,7 @@ func (s *Server) AddRootDirectories(rootDirectories []directories.Entry) {
 	}
 }
 
-func (s *Server) AddDirectory(dir directories.Entry) error {
+func (s *Server) AddDirectory(dir directories.Entry, cacheEntry *CacheDirEntry, restore bool) error {
 	prevDir, err := s.statesRepository.Directories().ByPath(dir.Path)
 	if err == nil && prevDir.Watched {
 		err := s.fsWatcher.Remove(prevDir.Path)
@@ -137,9 +200,14 @@ func (s *Server) AddDirectory(dir directories.Entry) error {
 		}
 	}
 
-	err = s.readDirectory(dir.Path)
-	if err != nil {
-		return err
+	// TODO: restore is weird, should refactor or split this somehow
+	if restore && cacheEntry != nil {
+		s.restoreDirectoryFromCache(cacheEntry)
+	} else {
+		err = s.readDirectory(dir.Path, cacheEntry)
+		if err != nil {
+			return err
+		}
 	}
 
 	s.statesRepository.Directories().Add(dir)
@@ -173,4 +241,59 @@ func (s *Server) TakeDirectory(path string) (directories.Entry, error) {
 	s.outLog.Printf("deleted directory '%s' and %d children media files\n", path, len(removedFiles))
 
 	return dir, err
+}
+
+type DirectoriesCache struct {
+	Directories map[string]*CacheDirEntry `json:"Directories"`
+}
+
+type CacheDirEntry struct {
+	Mtime      time.Time                      `json:"Mtime"`
+	MediaFiles map[string]CacheMediaFileEntry `json:"MediaFiles"`
+	Playlists  map[string]CachePlaylistEntry  `json:"Playlists"`
+}
+
+type CacheMediaFileEntry struct {
+	Mtime time.Time `json:"Mtime"`
+	media_files.Entry
+}
+
+type CachePlaylistEntry struct {
+	Mtime time.Time `json:"Mtime"`
+	playlists.Playlist
+}
+
+func saveDirectoriesCache(cache *DirectoriesCache) error {
+	cacheDirPath, err := os.UserCacheDir()
+	if err != nil {
+		return fmt.Errorf("could not open cache file: %w\n", err)
+	}
+
+	directoriesCachePath := path.Join(cacheDirPath, "mwa", "directories")
+
+	directoriesCacheJson, err := json.Marshal(&cache)
+	if err != nil {
+		return fmt.Errorf("could not marshall cache as a JSON: %w\n", err)
+	}
+
+	err = os.WriteFile(directoriesCachePath, directoriesCacheJson, os.ModePerm)
+	return fmt.Errorf("could not write directories cache contents to a file \"%s\", %w", directoriesCachePath, err)
+}
+
+func loadDirectoriesCache() (*DirectoriesCache, error) {
+	directoriesCache := DirectoriesCache{}
+	cacheDirPath, err := os.UserCacheDir()
+
+	if err != nil {
+		return &directoriesCache, fmt.Errorf("could not open cache file: %w\n", err)
+	}
+
+	directoriesCachePath := path.Join(cacheDirPath, "mwa", "directories")
+	directoriesCacheJson, err := os.ReadFile(directoriesCachePath)
+	if err != nil {
+		return &directoriesCache, fmt.Errorf("could not open cache file: %w\n", err)
+	}
+
+	err = json.Unmarshal(directoriesCacheJson, &directoriesCache)
+	return &directoriesCache, fmt.Errorf("parsing cache entry failed: %w", err)
 }
