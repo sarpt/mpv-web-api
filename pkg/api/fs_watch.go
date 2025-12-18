@@ -40,7 +40,13 @@ func (s *Server) addFsEventTarget(path string) error {
 		Watched:   true,
 	}
 
-	return s.AddDirectory(dir)
+	// Directories added in runtime should be stored to on-disk cache
+	// on process close and preferably done only once, tbd
+	// Usually every added new file/directory is supposed to be a new entry
+	// (modifying mtime), hence it should not be in a cache.
+	// To be analyzed if there is a case where an actual new entry on FS might already
+	// be in cache (stale, old cache?)
+	return s.AddDirectory(dir, nil, false)
 }
 
 func (s *Server) removeFsEventTarget(path string) error {
