@@ -38,6 +38,7 @@ type Server struct {
 	pathMappings          []PathMapping
 	playlistFilesPrefixes []string
 	pluginServers         map[string]PluginServer
+	useCache              bool
 }
 
 type PluginApi interface {
@@ -86,6 +87,7 @@ type Config struct {
 	StartMpvInstance        bool
 	StatesRepository        state.Repository
 	PluginServers           map[string]PluginServer
+	UseCache                bool
 }
 
 // NewServer prepares and returns a server that can be used to handle API calls.
@@ -121,6 +123,7 @@ func NewServer(cfg Config) (*Server, error) {
 		pathMappings:          cfg.PathMappings,
 		playlistFilesPrefixes: cfg.PlaylistFilesPrefixes,
 		pluginServers:         cfg.PluginServers,
+		useCache:              cfg.UseCache,
 	}
 
 	defaultPlaylistUUID, err := server.createTempPlaylist()

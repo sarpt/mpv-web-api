@@ -122,20 +122,27 @@ func (s *Server) restoreDirectoryFromCache(cacheEntry *CacheDirEntry) {
 // however some information about unsuccessful attempts should be returned
 // in addition to just printing it in server (for example for REST responses).
 func (s *Server) AddRootDirectories(rootDirectories []directories.Entry) {
-	cache, err := loadDirectoriesCache()
-	if err != nil {
-		s.errLog.Printf("could not get cache for directory entries, using empty cache: %s", err)
-		cache = &DirectoriesCache{
-			Directories: map[string]*CacheDirEntry{},
+	var (
+		cache    *DirectoriesCache
+		cacheErr error
+	)
+
+	if s.useCache {
+		cache, cacheErr = loadDirectoriesCache()
+		if cacheErr != nil {
+			s.errLog.Printf("could not get cache for directory entries, using empty cache: %s", cacheErr)
+			cache = &DirectoriesCache{
+				Directories: map[string]*CacheDirEntry{},
+			}
 		}
+		defer func() {
+			s.outLog.Printf("saving directories entries cache to disk")
+			err := saveDirectoriesCache(cache)
+			if err != nil {
+				s.errLog.Printf("could not save cache for directories: %s\n", err)
+			}
+		}()
 	}
-	defer func() {
-		s.outLog.Printf("saving directories entries cache to disk")
-		err := saveDirectoriesCache(cache)
-		if err != nil {
-			s.errLog.Printf("could not save cache for directories: %s\n", err)
-		}
-	}()
 
 	for _, rootDir := range rootDirectories {
 		rootPath := directories.EnsureDirectoryPath(rootDir.Path)
@@ -194,11 +201,14 @@ func (s *Server) AddDirectory(dir directories.Entry, cacheEntry *CacheDirEntry) 
 		}
 	}
 
-	if cacheEntry != nil && !cacheEntry.stale {
+	if s.useCache && cacheEntry != nil && !cacheEntry.stale {
 		s.outLog.Printf("restoring \"%s\" from cache", dir.Path)
 		s.restoreDirectoryFromCache(cacheEntry)
 	} else {
-		s.outLog.Printf("cache unavailable or stale for entry \"%s\"", dir.Path)
+		if s.useCache {
+			s.outLog.Printf("cache unavailable or stale for entry \"%s\"", dir.Path)
+		}
+
 		err = s.readDirectory(dir.Path, cacheEntry)
 		if err != nil {
 			return err
@@ -308,6 +318,10 @@ func loadDirectoriesCache() (*DirectoriesCache, error) {
 }
 
 func (s *Server) processCacheEntry(cache *DirectoriesCache, path string, dirEntry fs.DirEntry) *CacheDirEntry {
+	if cache == nil {
+		return nil
+	}
+
 	var cacheEntry *CacheDirEntry
 	dirInfo, err := dirEntry.Info()
 	if err != nil {
