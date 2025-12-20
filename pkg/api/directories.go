@@ -45,7 +45,7 @@ func (s *Server) readDirectory(path string, cacheEntry *CacheDirEntry) error {
 					}
 
 					cacheEntry.Playlists[entryPath] = CachePlaylistEntry{
-						Mtime:    info.ModTime(),
+						Mtime:    info.ModTime(), // TODO: currently ignored
 						Playlist: *playlist,
 					}
 				}
@@ -72,7 +72,7 @@ func (s *Server) readDirectory(path string, cacheEntry *CacheDirEntry) error {
 			}
 
 			cacheEntry.MediaFiles[entryPath] = CacheMediaFileEntry{
-				Mtime: info.ModTime(),
+				Mtime: info.ModTime(), // TODO: currently ignored
 				Entry: mediaFile,
 			}
 		}
