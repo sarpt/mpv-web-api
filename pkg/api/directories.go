@@ -272,15 +272,24 @@ func saveDirectoriesCache(cache *DirectoriesCache) error {
 		return fmt.Errorf("could not open cache file: %w\n", err)
 	}
 
-	directoriesCachePath := path.Join(cacheDirPath, "mwa", "directories")
+	directoriesCacheDir := path.Join(cacheDirPath, "mwa")
+	err = os.MkdirAll(directoriesCacheDir, os.ModePerm)
+	if err != nil {
+		return fmt.Errorf("could not create cache dir at path \"%s\": %w\n", directoriesCacheDir, err)
+	}
 
+	directoriesCachePath := path.Join(directoriesCacheDir, "directories")
 	directoriesCacheJson, err := json.Marshal(&cache)
 	if err != nil {
 		return fmt.Errorf("could not marshall cache as a JSON: %w\n", err)
 	}
 
 	err = os.WriteFile(directoriesCachePath, directoriesCacheJson, os.ModePerm)
-	return fmt.Errorf("could not write directories cache contents to a file \"%s\", %w", directoriesCachePath, err)
+	if err != nil {
+		return fmt.Errorf("could not write directories cache contents to a file \"%s\", %w", directoriesCachePath, err)
+	}
+
+	return nil
 }
 
 func loadDirectoriesCache() (*DirectoriesCache, error) {
