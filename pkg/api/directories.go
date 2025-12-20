@@ -122,7 +122,7 @@ func (s *Server) AddRootDirectories(rootDirectories []directories.Entry) {
 	if err != nil {
 		s.errLog.Printf("could not get cache for directory entries, using empty cache: %s\n", err)
 		cache = &DirectoriesCache{
-			Directories: make(map[string]*CacheDirEntry),
+			Directories: map[string]*CacheDirEntry{},
 		}
 	}
 	defer func() {
@@ -150,19 +150,26 @@ func (s *Server) AddRootDirectories(rootDirectories []directories.Entry) {
 				return fs.SkipDir
 			}
 
-			cacheEntry, ok := cache.Directories[path]
-			if !ok {
-				cacheEntry = &CacheDirEntry{}
-				cache.Directories[path] = cacheEntry
-			}
-
-			dirInfo, err := dirEntry.Info()
 			var restoreFromCache bool
+			var cacheEntry *CacheDirEntry
+			dirInfo, err := dirEntry.Info()
 			if err != nil {
 				restoreFromCache = false
 				s.errLog.Printf("could not read directory \"%s\" information for modification time comparision, cache entry ignored", path)
 			} else {
-				restoreFromCache = dirInfo.ModTime().After(cacheEntry.Mtime)
+				entryMtime := dirInfo.ModTime()
+				cacheEntry = cache.Directories[path]
+				if cacheEntry == nil {
+					cache.Directories[path] = &CacheDirEntry{
+						Mtime:      entryMtime,
+						MediaFiles: map[string]CacheMediaFileEntry{},
+						Playlists:  map[string]CachePlaylistEntry{},
+					}
+					cacheEntry = cache.Directories[path]
+					restoreFromCache = false
+				} else {
+					restoreFromCache = !entryMtime.After(cacheEntry.Mtime)
+				}
 			}
 
 			subDir := directories.Entry{
@@ -205,8 +212,10 @@ func (s *Server) AddDirectory(dir directories.Entry, cacheEntry *CacheDirEntry, 
 
 	// TODO: restore is weird, should refactor or split this somehow
 	if restore && cacheEntry != nil {
+		s.outLog.Printf("restoring \"%s\" from cache", dir.Path)
 		s.restoreDirectoryFromCache(cacheEntry)
 	} else {
+		s.outLog.Printf("cache unavailable or stale for entry \"%s\"", dir.Path)
 		err = s.readDirectory(dir.Path, cacheEntry)
 		if err != nil {
 			return err
@@ -307,5 +316,9 @@ func loadDirectoriesCache() (*DirectoriesCache, error) {
 	}
 
 	err = json.Unmarshal(directoriesCacheJson, &directoriesCache)
-	return &directoriesCache, fmt.Errorf("parsing cache entry failed: %w", err)
+	if err != nil {
+		return &directoriesCache, fmt.Errorf("parsing cache entry failed: %w", err)
+	}
+
+	return &directoriesCache, nil
 }
