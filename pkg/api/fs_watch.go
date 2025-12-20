@@ -46,7 +46,7 @@ func (s *Server) addFsEventTarget(path string) error {
 	// (modifying mtime), hence it should not be in a cache.
 	// To be analyzed if there is a case where an actual new entry on FS might already
 	// be in cache (stale, old cache?)
-	return s.AddDirectory(dir, nil, false)
+	return s.AddDirectory(dir, nil)
 }
 
 func (s *Server) removeFsEventTarget(path string) error {
