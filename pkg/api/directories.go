@@ -120,12 +120,13 @@ func (s *Server) restoreDirectoryFromCache(cacheEntry *CacheDirEntry) {
 func (s *Server) AddRootDirectories(rootDirectories []directories.Entry) {
 	cache, err := loadDirectoriesCache()
 	if err != nil {
-		s.errLog.Printf("could not get cache for directory entries, using empty cache: %s\n", err)
+		s.errLog.Printf("could not get cache for directory entries, using empty cache: %s", err)
 		cache = &DirectoriesCache{
 			Directories: map[string]*CacheDirEntry{},
 		}
 	}
 	defer func() {
+		s.outLog.Printf("saving directories entries cache to disk")
 		err := saveDirectoriesCache(cache)
 		if err != nil {
 			s.errLog.Printf("could not save cache for directories: %s\n", err)
@@ -169,6 +170,9 @@ func (s *Server) AddRootDirectories(rootDirectories []directories.Entry) {
 					restoreFromCache = false
 				} else {
 					restoreFromCache = !entryMtime.After(cacheEntry.Mtime)
+					if !restoreFromCache {
+						cacheEntry.Mtime = entryMtime
+					}
 				}
 			}
 
