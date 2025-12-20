@@ -32,6 +32,7 @@ const (
 
 	addressFlag          = "addr"
 	allowCorsFlag        = "allow-cors"
+	cacheFlag            = "cache"
 	dirFlag              = "dir"
 	dirRecursiveFlag     = "dir-recursive"
 	mpvSocketPathFlag    = "mpv-socket-path"
@@ -48,6 +49,7 @@ var (
 
 	address          *string
 	allowCORS        *bool
+	cache            *bool
 	dir              *listflag.StringList
 	dirRecursive     *bool
 	mpvSocketPath    *string
@@ -65,6 +67,7 @@ func init() {
 	playlistPrefix = listflag.NewStringList([]string{})
 
 	appDir = flag.String(appDirFlag, "", "path which should be used for persistence storage by the server for saving unnamed playlists, configs, caches, etc.")
+	cache = flag.Bool(cacheFlag, false, "when provided, directories handled by the application are checked against cache (if it exsits). Matched cache entries will be restored without reading file system. If the cache does not exist, it will be created.")
 	flag.Var(dir, dirFlag, "directory containing media files. When not provided current working directory for the process is being used")
 	dirRecursive = flag.Bool(dirRecursiveFlag, true, "when not provided, directories provided to --dir (or working directory when --dir is absent) will only be checked on the first level and any directories within will be ignored")
 	address = flag.String(addressFlag, defaultAddress, "address on which server should listen on")
@@ -132,6 +135,7 @@ func main() {
 		StartMpvInstance:        *startMpvInstance,
 		StatesRepository:        statesRepository,
 		SocketConnectionTimeout: socketConnectionTimeout,
+		UseCache:                *cache,
 	}
 
 	server, err := api.NewServer(cfg)
