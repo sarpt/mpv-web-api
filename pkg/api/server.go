@@ -210,7 +210,13 @@ func (s *Server) Serve() error {
 		s.outLog.Printf("shutting down the server due to http server error: %s", err)
 	}
 
-	err = s.saveCurrentPlaylist()
+	s.teardown(&serv)
+
+	return nil
+}
+
+func (s *Server) teardown(serv *http.Server) {
+	err := s.saveCurrentPlaylist()
 	if err != nil {
 		s.errLog.Printf("saving of current playlist unsuccessful: %s\n", err)
 	}
@@ -233,8 +239,6 @@ func (s *Server) Serve() error {
 	} else {
 		s.outLog.Println("http server closed successfully")
 	}
-
-	return nil
 }
 
 func (s *Server) initWatchers() error {
