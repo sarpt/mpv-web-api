@@ -34,6 +34,7 @@ const (
 	allowCorsFlag        = "allow-cors"
 	cacheFlag            = "cache"
 	clearCacheFlag       = "clear-cache"
+	cacheDirFlag         = "cache-dir"
 	dirFlag              = "dir"
 	dirRecursiveFlag     = "dir-recursive"
 	mpvSocketPathFlag    = "mpv-socket-path"
@@ -52,6 +53,7 @@ var (
 	allowCORS        *bool
 	cache            *bool
 	clearCache       *bool
+	cacheDir         *string
 	dir              *listflag.StringList
 	dirRecursive     *bool
 	mpvSocketPath    *string
@@ -70,6 +72,7 @@ func init() {
 
 	appDir = flag.String(appDirFlag, "", "path which should be used for persistence storage by the server for saving unnamed playlists, configs, caches, etc.")
 	cache = flag.Bool(cacheFlag, false, "when provided, directories handled by the application are checked against cache (if it exsits). Matched cache entries will be restored without reading file system. If the cache does not exist, it will be created.")
+	cacheDir = flag.String(cacheDirFlag, "", "directory used for cache lookup. When not provided a default user cache directory will be used")
 	clearCache = flag.Bool(clearCacheFlag, false, "clear previously saved cache (if it exists). Only takes effect when provided alongside --cache. Does nothing otherwise.")
 	flag.Var(dir, dirFlag, "directory containing media files. When not provided current working directory for the process is being used")
 	dirRecursive = flag.Bool(dirRecursiveFlag, true, "when not provided, directories provided to --dir (or working directory when --dir is absent) will only be checked on the first level and any directories within will be ignored")
@@ -100,6 +103,17 @@ func main() {
 
 	outLog.Printf("server uses \"%s\" as an application directory", parsedAppDir)
 
+	var appCachePath string
+	if *cache {
+		appCachePath, err = utils.GetCachePath(*cacheDir)
+		if err != nil {
+			errLog.Printf("could not resolve application cache directory: %s", err)
+			os.Exit(1)
+		} else {
+			outLog.Printf("using \"%s\" as application cache directory", appCachePath)
+		}
+	}
+
 	statesRepository := state.NewRepository()
 	sseCfg := sse.Config{
 		ErrWriter:        errWriter,
@@ -128,6 +142,7 @@ func main() {
 		Address:               *address,
 		AppDir:                parsedAppDir,
 		AllowCORS:             *allowCORS,
+		CacheDir:              appCachePath,
 		ClearCache:            *clearCache,
 		MpvSocketPath:         *mpvSocketPath,
 		PathMappings:          pathMappingsList,

@@ -33,14 +33,8 @@ type CachePlaylistEntry struct {
 	playlists.Playlist
 }
 
-func saveDirectoriesCache(cache *DirectoriesCache) error {
-	cacheDirPath, err := os.UserCacheDir()
-	if err != nil {
-		return fmt.Errorf("could not open cache file: %w\n", err)
-	}
-
-	directoriesCacheDir := path.Join(cacheDirPath, "mwa")
-	err = os.MkdirAll(directoriesCacheDir, os.ModePerm)
+func saveDirectoriesCache(cache *DirectoriesCache, directoriesCacheDir string) error {
+	err := os.MkdirAll(directoriesCacheDir, os.ModePerm)
 	if err != nil {
 		return fmt.Errorf("could not create cache dir at path \"%s\": %w\n", directoriesCacheDir, err)
 	}
@@ -59,15 +53,9 @@ func saveDirectoriesCache(cache *DirectoriesCache) error {
 	return nil
 }
 
-func loadDirectoriesCache() (*DirectoriesCache, error) {
+func loadDirectoriesCache(cacheDir string) (*DirectoriesCache, error) {
 	directoriesCache := DirectoriesCache{}
-	cacheDirPath, err := os.UserCacheDir()
-
-	if err != nil {
-		return &directoriesCache, fmt.Errorf("could not open cache file: %w\n", err)
-	}
-
-	directoriesCachePath := path.Join(cacheDirPath, "mwa", "directories")
+	directoriesCachePath := path.Join(cacheDir, "directories")
 	directoriesCacheJson, err := os.ReadFile(directoriesCachePath)
 	if err != nil {
 		return &directoriesCache, fmt.Errorf("could not open cache file: %w\n", err)

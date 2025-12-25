@@ -130,7 +130,7 @@ func (s *Server) AddRootDirectories(rootDirectories []directories.Entry) {
 		}
 
 		if !s.clearCache {
-			cache, cacheErr = loadDirectoriesCache()
+			cache, cacheErr = loadDirectoriesCache(s.cacheDir)
 			if cacheErr != nil {
 				s.errLog.Printf("could not get cache for directory entries, using empty cache: %s", cacheErr)
 			}
@@ -140,7 +140,7 @@ func (s *Server) AddRootDirectories(rootDirectories []directories.Entry) {
 
 		defer func() {
 			s.outLog.Printf("saving directories entries cache to disk")
-			err := saveDirectoriesCache(cache)
+			err := saveDirectoriesCache(cache, s.cacheDir)
 			if err != nil {
 				s.errLog.Printf("could not save cache for directories: %s\n", err)
 			}
