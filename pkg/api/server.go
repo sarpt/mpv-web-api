@@ -29,6 +29,7 @@ type observePropertyHandler = func(res mpv.ObservePropertyResponse) error
 type Server struct {
 	address               string
 	appDir                string
+	clearCache            bool
 	stopServing           chan string
 	errLog                *log.Logger
 	fsWatcher             *fsnotify.Watcher
@@ -78,6 +79,7 @@ type Config struct {
 	Address                 string
 	AllowCORS               bool
 	AppDir                  string
+	ClearCache              bool
 	ErrWriter               io.Writer
 	MpvSocketPath           string
 	PathMappings            []PathMapping
@@ -115,6 +117,7 @@ func NewServer(cfg Config) (*Server, error) {
 	server := &Server{
 		address:               cfg.Address,
 		appDir:                cfg.AppDir,
+		clearCache:            cfg.ClearCache,
 		errLog:                log.New(cfg.ErrWriter, logPrefix, log.LstdFlags),
 		fsWatcher:             watcher,
 		mpvManager:            mpv.NewManager(mpvManagerCfg),

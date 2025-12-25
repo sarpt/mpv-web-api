@@ -125,13 +125,19 @@ func (s *Server) AddRootDirectories(rootDirectories []directories.Entry) {
 	)
 
 	if s.useCache {
-		cache, cacheErr = loadDirectoriesCache()
-		if cacheErr != nil {
-			s.errLog.Printf("could not get cache for directory entries, using empty cache: %s", cacheErr)
-			cache = &DirectoriesCache{
-				Directories: map[string]*CacheDirEntry{},
-			}
+		cache = &DirectoriesCache{
+			Directories: map[string]*CacheDirEntry{},
 		}
+
+		if !s.clearCache {
+			cache, cacheErr = loadDirectoriesCache()
+			if cacheErr != nil {
+				s.errLog.Printf("could not get cache for directory entries, using empty cache: %s", cacheErr)
+			}
+		} else {
+			s.outLog.Println("using empty cache due to request to clear cache")
+		}
+
 		defer func() {
 			s.outLog.Printf("saving directories entries cache to disk")
 			err := saveDirectoriesCache(cache)
