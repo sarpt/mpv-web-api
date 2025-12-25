@@ -1,12 +1,15 @@
 package utils
 
 import (
+	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 )
 
 var (
-	defaultAppDirName = ".mwa"
+	appDirId          = "mwa"
+	defaultAppDirName = fmt.Sprintf(".%s", appDirId)
 	subdirs           = []string{
 		"playlists",
 	}
@@ -43,4 +46,17 @@ func getDefaultAppDir() string {
 	}
 
 	return filepath.Join(appPathDefaultBase, defaultAppDirName)
+}
+
+func GetCachePath(dir string) (string, error) {
+	if len(dir) > 0 {
+		return dir, nil
+	}
+
+	cacheDirPath, err := os.UserCacheDir()
+	if err != nil {
+		return "", fmt.Errorf("could not open user cache dir: %w\n", err)
+	}
+
+	return path.Join(cacheDirPath, appDirId), nil
 }
