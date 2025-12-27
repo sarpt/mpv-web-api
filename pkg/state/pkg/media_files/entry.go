@@ -58,6 +58,28 @@ func (m Entry) MarshalJSON() ([]byte, error) {
 	return json.Marshal(mJSON)
 }
 
+// UnmarshalJSON satisifes json.Unmarshaller.
+func (m *Entry) UnmarshalJSON(entry []byte) error {
+	var unEntry entryJSON
+	err := json.Unmarshal(entry, &unEntry)
+	if err != nil {
+		return err
+	}
+
+	m.title = unEntry.Title
+	m.formatName = unEntry.FormatName
+	m.formatLongName = unEntry.FormatLongName
+	m.chapters = unEntry.Chapters
+	m.audioStreams = unEntry.AudioStreams
+	m.duration = unEntry.Duration
+	m.path = unEntry.Path
+	m.subtitleStreams = unEntry.SubtitleStreams
+	m.uuid = unEntry.UUID
+	m.videoStreams = unEntry.VideoStreams
+
+	return nil
+}
+
 // Path returns mediaFile path.
 func (m *Entry) Path() string {
 	return m.path
