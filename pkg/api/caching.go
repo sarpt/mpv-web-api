@@ -1,8 +1,10 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path"
@@ -10,6 +12,7 @@ import (
 
 	"github.com/sarpt/mpv-web-api/pkg/state/pkg/media_files"
 	"github.com/sarpt/mpv-web-api/pkg/state/pkg/playlists"
+	"github.com/ulikunitz/xz"
 )
 
 type DirectoriesCache struct {
@@ -40,12 +43,12 @@ func saveDirectoriesCache(cache *DirectoriesCache, directoriesCacheDir string) e
 	}
 
 	directoriesCachePath := path.Join(directoriesCacheDir, "directories")
-	directoriesCacheJson, err := json.Marshal(&cache)
+	directoriesCacheContent, err := json.Marshal(&cache)
 	if err != nil {
 		return fmt.Errorf("could not marshall cache as a JSON: %w\n", err)
 	}
 
-	err = os.WriteFile(directoriesCachePath, directoriesCacheJson, os.ModePerm)
+	err = os.WriteFile(directoriesCachePath, directoriesCacheContent, os.ModePerm)
 	if err != nil {
 		return fmt.Errorf("could not write directories cache contents to a file \"%s\", %w", directoriesCachePath, err)
 	}
@@ -53,15 +56,54 @@ func saveDirectoriesCache(cache *DirectoriesCache, directoriesCacheDir string) e
 	return nil
 }
 
+const xzMagicSize = 6
+
+var xzMagic = []byte{0xfd, 0x37, 0x7A, 0x58, 0x5a, 0x00}
+
 func loadDirectoriesCache(cacheDir string) (*DirectoriesCache, error) {
-	directoriesCache := DirectoriesCache{}
+	directoriesCache := DirectoriesCache{
+		Directories: map[string]*CacheDirEntry{},
+	}
 	directoriesCachePath := path.Join(cacheDir, "directories")
-	directoriesCacheJson, err := os.ReadFile(directoriesCachePath)
+	directoriesCacheFile, err := os.Open(directoriesCachePath)
 	if err != nil {
-		return &directoriesCache, fmt.Errorf("could not open cache file: %w\n", err)
+		return &directoriesCache, fmt.Errorf("could not open cache directoriesCacheFile: %w\n", err)
 	}
 
-	err = json.Unmarshal(directoriesCacheJson, &directoriesCache)
+	fileMagic := make([]byte, xzMagicSize)
+	readN, err := directoriesCacheFile.Read(fileMagic)
+	if err != nil || readN != xzMagicSize {
+		return &directoriesCache, fmt.Errorf("could not check magic of cache file: %w\n", err)
+	}
+
+	_, err = directoriesCacheFile.Seek(0, 0)
+	if err != nil {
+		return &directoriesCache, fmt.Errorf("seeking to beggining of cache buffer failed: %w\n", err)
+	}
+
+	var directoriesCacheReader io.Reader = directoriesCacheFile
+	// directoriesCacheJson := &bytes.Buffer{}
+	if bytes.Equal(fileMagic, xzMagic) {
+		xzReader, err := xz.NewReader(directoriesCacheFile)
+		if err != nil {
+			return nil, fmt.Errorf("reading xz cache content failed: %w", err)
+		}
+
+		directoriesCacheReader = xzReader
+		// _, err = io.Copy(directoriesCacheJson, xzReader)
+		// if err != nil {
+		// 	return &directoriesCache, fmt.Errorf("decoding of xz content failed: %w", err)
+		// }
+	}
+	// } else {
+	// 	// support older cache files not compressed with xz
+	// 	_, err = io.Copy(directoriesCacheJson, directoriesCacheFile)
+	// 	if err != nil {
+	// 		return &directoriesCache, fmt.Errorf("copy of json content failed: %w", err)
+	// 	}
+	// }
+
+	err = json.NewDecoder(directoriesCacheReader).Decode(&directoriesCache)
 	if err != nil {
 		return &directoriesCache, fmt.Errorf("parsing cache entry failed: %w", err)
 	}

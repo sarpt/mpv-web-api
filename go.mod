@@ -9,4 +9,7 @@ require (
 	github.com/sarpt/goutils v0.0.4
 )
 
-require golang.org/x/sys v0.1.0 // indirect
+require (
+	github.com/ulikunitz/xz v0.5.15
+	golang.org/x/sys v0.1.0 // indirect
+)
