@@ -121,6 +121,28 @@ func (p *Playlist) MarshalJSON() ([]byte, error) {
 	return json.Marshal(pJSON)
 }
 
+// UnmarshalJSON satisifes json.Marshaller.
+func (p *Playlist) UnmarshalJSON(entry []byte) error {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
+	var unEntry playlistJSON
+	err := json.Unmarshal(entry, &unEntry)
+	if err != nil {
+		return err
+	}
+
+	p.entryIdx = unEntry.CurrentEntryIdx
+	p.directoryContentsAsEntries = unEntry.DirectoryContentsAsEntries
+	p.description = unEntry.Description
+	p.entries = unEntry.Entries
+	p.name = unEntry.Name
+	p.uuid = unEntry.UUID
+	p.path = unEntry.Path
+
+	return nil
+}
+
 func (p *Playlist) Description() string {
 	p.lock.Lock()
 	defer p.lock.Unlock()
