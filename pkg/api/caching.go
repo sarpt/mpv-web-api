@@ -43,14 +43,28 @@ func saveDirectoriesCache(cache *DirectoriesCache, directoriesCacheDir string) e
 	}
 
 	directoriesCachePath := path.Join(directoriesCacheDir, "directories")
-	directoriesCacheContent, err := json.Marshal(&cache)
+	directoriesCacheFile, err := os.Create(directoriesCachePath)
 	if err != nil {
-		return fmt.Errorf("could not marshall cache as a JSON: %w\n", err)
+		return fmt.Errorf("could not open cache directoriesCacheFile: %w\n", err)
 	}
 
-	err = os.WriteFile(directoriesCachePath, directoriesCacheContent, os.ModePerm)
+	defer func() {
+		_ = directoriesCacheFile.Sync()
+		_ = directoriesCacheFile.Close()
+	}()
+
+	xzWriter, err := xz.NewWriter(directoriesCacheFile)
 	if err != nil {
-		return fmt.Errorf("could not write directories cache contents to a file \"%s\", %w", directoriesCachePath, err)
+		return fmt.Errorf("writing xz cache content failed: %w", err)
+	}
+
+	defer func() {
+		_ = xzWriter.Close()
+	}()
+
+	err = json.NewEncoder(xzWriter).Encode(&cache)
+	if err != nil {
+		return fmt.Errorf("could not marshall cache as a JSON: %w\n", err)
 	}
 
 	return nil
@@ -82,7 +96,6 @@ func loadDirectoriesCache(cacheDir string) (*DirectoriesCache, error) {
 	}
 
 	var directoriesCacheReader io.Reader = directoriesCacheFile
-	// directoriesCacheJson := &bytes.Buffer{}
 	if bytes.Equal(fileMagic, xzMagic) {
 		xzReader, err := xz.NewReader(directoriesCacheFile)
 		if err != nil {
@@ -90,18 +103,7 @@ func loadDirectoriesCache(cacheDir string) (*DirectoriesCache, error) {
 		}
 
 		directoriesCacheReader = xzReader
-		// _, err = io.Copy(directoriesCacheJson, xzReader)
-		// if err != nil {
-		// 	return &directoriesCache, fmt.Errorf("decoding of xz content failed: %w", err)
-		// }
 	}
-	// } else {
-	// 	// support older cache files not compressed with xz
-	// 	_, err = io.Copy(directoriesCacheJson, directoriesCacheFile)
-	// 	if err != nil {
-	// 		return &directoriesCache, fmt.Errorf("copy of json content failed: %w", err)
-	// 	}
-	// }
 
 	err = json.NewDecoder(directoriesCacheReader).Decode(&directoriesCache)
 	if err != nil {
